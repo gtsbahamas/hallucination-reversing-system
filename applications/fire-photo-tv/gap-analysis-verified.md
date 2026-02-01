@@ -20,12 +20,14 @@
 
 | Status | Count | % |
 |--------|-------|---|
-| REAL | 35 | 31% |
-| PARTIAL | 12 | 11% |
-| HALLUCINATED | 65 | 58% |
+| REAL | 36 | 32% |
+| PARTIAL | 13 | 12% |
+| HALLUCINATED | 63 | 56% |
 | **Total Claims** | **112** | **100%** |
 
 **Shift from initial estimate:** 8 items moved from UNVERIFIED to REAL, 4 moved to PARTIAL, 17 confirmed HALLUCINATED. Zero unverified claims remain.
+
+**Post-verification correction (pre-build research):** 14-day free trial moved HALLUCINATED→REAL (startTrial exists). Data export moved HALLUCINATED→PARTIAL (contacts+gallery exports exist).
 
 ---
 
@@ -166,7 +168,7 @@
 | Team $299/mo | REAL | Pricing released Jan 2026 |
 | Enterprise (custom) | HALLUCINATED | Enterprise FAQ on pricing page but no real tier |
 | Annual pricing | REAL | Stripe create-products script generates yearly prices |
-| 14-day free trial | HALLUCINATED | No free trial confirmed |
+| 14-day free trial | REAL | startTrial() in tierManagement.ts:828, trialEndsAt on customers, trialReminder.ts job, subscriptionCheck middleware. Auto-starts on customer creation (auth.ts:150, customers.ts:94) |
 | Free tier after trial | HALLUCINATED | No free tier |
 | ACH payment | HALLUCINATED | Credit/debit only via Stripe |
 | Usage overage notifications | HALLUCINATED | Not confirmed |
@@ -180,7 +182,7 @@
 | AES-256 encryption at rest | PARTIAL | AES-256-GCM for 2FA secrets and SMS passwords only |
 | TLS 1.3 | HALLUCINATED | No TLS config; relies on Render defaults |
 | Daily backups (30-day retention) | HALLUCINATED | No backups; Render free tier doesn't include them |
-| Data export (CSV/JSON) | HALLUCINATED | No export functionality |
+| Data export (CSV/JSON) | PARTIAL | Contacts CSV/JSON export (exports.ts:48) and gallery ZIP export (exports.ts:124) exist. Missing: event metadata export, analytics data export |
 | Photo retention policies | REAL | Configurable retention/expiration exists |
 | EXIF GPS stripping | HALLUCINATED | Opposite: GPS is extracted and stored for geofencing |
 | 10-second processing pipeline | HALLUCINATED | No timing target; timeouts are 30 seconds |
@@ -256,11 +258,11 @@
 | # | Feature | Claims | Impact Rationale |
 |---|---------|--------|-----------------|
 | 1 | **Analytics Dashboard** | 6 claims | Customers need ROI proof to justify subscription |
-| 2 | **14-Day Free Trial** | 1 claim | Removes signup friction, standard SaaS practice |
+| ~~2~~ | ~~**14-Day Free Trial**~~ | ~~1 claim~~ | ~~ALREADY EXISTS — startTrial() auto-runs on customer creation~~ |
 | 3 | **Web Browser Display (more platforms)** | 6 claims | Already have web display; market as universal |
 | 4 | **Complete Event Management** | 2 claims | Stub functions need implementation; events table exists |
 | 5 | **Offline Device Mode** | 1 claim | Critical for venues with unreliable internet |
-| 6 | **Data Export (CSV/JSON)** | 1 claim | Table stakes for Team plan customers |
+| 6 | **Data Export (Event + Analytics)** | 1 claim | Contacts + gallery export exist; add event metadata + analytics export |
 | 7 | **Email Submission Channel** | 1 claim | Low-friction alternative for less tech-savvy users |
 | 8 | **Annual Billing in Dashboard** | 1 claim | Stripe has yearly prices; needs UI integration |
 | 9 | **Logo Upload Backend** | 1 claim | Frontend exists; just needs the endpoint |
