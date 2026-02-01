@@ -7,6 +7,7 @@ import { extractCommand } from './commands/extract.js';
 import { describeCommand } from './commands/describe.js';
 import { verifyCommand } from './commands/verify.js';
 import { reportCommand } from './commands/report.js';
+import { regenerateCommand } from './commands/regenerate.js';
 
 const program = new Command();
 
@@ -51,5 +52,11 @@ program
   .description('Generate a gap report from verification results')
   .option('-i, --iteration <number>', 'Iteration number (defaults to latest)')
   .action(reportCommand);
+
+program
+  .command('regenerate')
+  .description('Regenerate a hallucinated spec from prior verification results (Phase 6)')
+  .option('-i, --iteration <number>', 'Source iteration to regenerate from (defaults to latest)')
+  .action(regenerateCommand);
 
 program.parse();

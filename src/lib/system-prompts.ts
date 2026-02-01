@@ -1,4 +1,4 @@
-import type { LucidConfig, HallucinationType } from '../types.js';
+import type { LucidConfig, HallucinationType, VerificationReport, ExtractionResult } from '../types.js';
 
 export function getSystemPrompt(type: HallucinationType, config: LucidConfig): string {
   switch (type) {
@@ -155,4 +155,118 @@ MANDATORY SECTIONS:
 
 Write 400-600 lines of dense, specific user documentation.
 Do not include any meta-commentary outside the document itself.`;
+}
+
+export interface RegenerationContext {
+  config: LucidConfig;
+  type: HallucinationType;
+  priorDocument: string;
+  extraction: ExtractionResult;
+  verification: VerificationReport;
+}
+
+export function getRegenerationSystemPrompt(ctx: RegenerationContext): string {
+  const { config, type } = ctx;
+  const { verdicts } = ctx.verification;
+  const total = ctx.verification.verifications.length;
+  const assessed = total - verdicts.na;
+  const score = assessed > 0
+    ? ((verdicts.pass + verdicts.partial * 0.5) / assessed) * 100
+    : 0;
+
+  const docLabel = type === 'tos'
+    ? 'Terms of Service'
+    : type === 'api-docs'
+    ? 'API documentation'
+    : 'user manual';
+
+  return `You are the legal and product team for a technology company. You are writing an UPDATED ${docLabel} for a production application.
+
+APPLICATION CONTEXT:
+- Name: ${config.projectName}
+- Description: ${config.description}
+- Tech Stack: ${config.techStack}
+- Target Audience: ${config.targetAudience}
+
+SITUATION:
+A prior version of this ${docLabel} was audited against the actual codebase. The audit found:
+- ${verdicts.pass} claims FULLY IMPLEMENTED (verified in code)
+- ${verdicts.partial} claims PARTIALLY IMPLEMENTED
+- ${verdicts.fail} claims NOT IMPLEMENTED (code doesn't support them)
+- ${verdicts.na} claims NOT APPLICABLE (can't be verified from code)
+- Overall compliance: ${score.toFixed(1)}%
+
+YOUR TASK:
+Write an updated ${docLabel} that reflects the CURRENT state of the application while also pushing it forward. Follow these rules:
+
+RULES FOR EACH CLAIM CATEGORY:
+
+1. PASS claims (verified in code): Keep these. They are REAL. Write them accurately — they describe what the application actually does. You may refine the language but do not change the substance.
+
+2. PARTIAL claims (partially implemented): Keep these but revise them to more accurately describe what's actually there. If the partial implementation suggests a direction, you may expand on it.
+
+3. FAIL claims (not in code): You have three options per claim:
+   - DROP it if it was implausible or doesn't fit the application's direction
+   - KEEP it if it represents a reasonable aspirational feature
+   - REVISE it into something more achievable that serves the same purpose
+
+4. N/A claims (legal boilerplate, process claims): Keep reasonable ones. Drop or revise any that feel off.
+
+5. NEW HALLUCINATIONS: Based on the verified capabilities, hallucinate NEW features and commitments that extend the application naturally. The app has grown — what does the next version look like?
+
+CRITICAL INSTRUCTIONS:
+- Write as if this application EXISTS and is LIVE in production
+- Use declarative, authoritative language — no hedging
+- Include specific numbers, technologies, timeframes
+- The document should be 400-600 lines of dense, specific text
+- Aim for 80-150 extractable, testable claims
+- Do NOT include any meta-commentary, change logs, or notes about what changed
+- Write the complete document fresh — do not mark changes or reference the prior version
+
+Write the complete updated ${docLabel} now.`;
+}
+
+export function getRegenerationUserPrompt(ctx: RegenerationContext): string {
+  const { type, priorDocument, extraction, verification } = ctx;
+
+  const docLabel = type === 'tos'
+    ? 'Terms of Service'
+    : type === 'api-docs'
+    ? 'API documentation'
+    : 'user manual';
+
+  // Build a summary of verification results grouped by verdict
+  const passed: string[] = [];
+  const partial: string[] = [];
+  const failed: string[] = [];
+
+  const claimMap = new Map(extraction.claims.map((c) => [c.id, c]));
+
+  for (const v of verification.verifications) {
+    const claim = claimMap.get(v.claimId);
+    if (!claim) continue;
+    const line = `${v.claimId} [${claim.severity}]: ${claim.text}`;
+    if (v.verdict === 'PASS') passed.push(line);
+    else if (v.verdict === 'PARTIAL') partial.push(`${line}\n  Reason: ${v.reasoning}`);
+    else if (v.verdict === 'FAIL') failed.push(`${line}\n  Reason: ${v.reasoning}`);
+  }
+
+  return `Here is the prior ${docLabel} that was audited:
+
+---BEGIN PRIOR DOCUMENT---
+${priorDocument}
+---END PRIOR DOCUMENT---
+
+Here are the audit results:
+
+VERIFIED (${passed.length} claims — these are REAL, keep them):
+${passed.join('\n')}
+
+PARTIAL (${partial.length} claims — refine these):
+${partial.join('\n')}
+
+FAILED (${failed.length} claims — drop, keep, or revise each):
+${failed.join('\n')}
+
+Write the complete updated ${docLabel} now. It should reflect the real application while pushing forward with new hallucinated capabilities.`;
 }

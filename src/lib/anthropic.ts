@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { HallucinationType } from '../types.js';
 import type { LucidConfig } from '../types.js';
-import { getSystemPrompt, getUserPrompt } from './system-prompts.js';
+import { getSystemPrompt, getUserPrompt, getRegenerationSystemPrompt, getRegenerationUserPrompt } from './system-prompts.js';
+import type { RegenerationContext } from './system-prompts.js';
 
 export const MODEL = 'claude-sonnet-4-5-20250929';
 const MAX_TOKENS = 12_000;
@@ -53,6 +54,39 @@ export async function streamHallucination(
   outputTokens = finalMessage.usage.output_tokens;
 
   // Newline after streamed content
+  console.log();
+
+  return { content, inputTokens, outputTokens };
+}
+
+export async function streamRegeneration(
+  ctx: RegenerationContext,
+): Promise<StreamResult> {
+  const client = getClient();
+
+  const systemPrompt = getRegenerationSystemPrompt(ctx);
+  const userPrompt = getRegenerationUserPrompt(ctx);
+
+  let content = '';
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  const stream = client.messages.stream({
+    model: MODEL,
+    max_tokens: MAX_TOKENS,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+
+  stream.on('text', (text) => {
+    process.stdout.write(text);
+    content += text;
+  });
+
+  const finalMessage = await stream.finalMessage();
+  inputTokens = finalMessage.usage.input_tokens;
+  outputTokens = finalMessage.usage.output_tokens;
+
   console.log();
 
   return { content, inputTokens, outputTokens };
