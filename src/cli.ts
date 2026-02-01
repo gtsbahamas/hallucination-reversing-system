@@ -8,6 +8,7 @@ import { describeCommand } from './commands/describe.js';
 import { verifyCommand } from './commands/verify.js';
 import { reportCommand } from './commands/report.js';
 import { regenerateCommand } from './commands/regenerate.js';
+import { remediateCommand } from './commands/remediate.js';
 
 const program = new Command();
 
@@ -58,5 +59,13 @@ program
   .description('Regenerate a hallucinated spec from prior verification results (Phase 6)')
   .option('-i, --iteration <number>', 'Source iteration to regenerate from (defaults to latest)')
   .action(regenerateCommand);
+
+program
+  .command('remediate')
+  .description('Generate code-level fix tasks from verification results (converge code toward spec)')
+  .option('-i, --iteration <number>', 'Iteration number (defaults to latest)')
+  .option('-r, --repo <path>', 'Path to the codebase to remediate', '.')
+  .option('-t, --threshold <number>', 'Compliance threshold (default: 95)', '95')
+  .action(remediateCommand);
 
 program.parse();

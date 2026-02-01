@@ -75,3 +75,36 @@ export interface VerificationReport {
   verifications: ClaimVerification[];
   generatedAt: string;
 }
+
+// --- Remediation types ---
+
+export type RemediationAction = 'add' | 'modify' | 'remove' | 'configure';
+
+export interface RemediationTask {
+  id: string;
+  claimId: string;
+  verdict: 'FAIL' | 'PARTIAL';
+  severity: ClaimSeverity;
+  category: ClaimCategory;
+  title: string;
+  description: string;
+  action: RemediationAction;
+  targetFiles: string[];
+  estimatedEffort: 'trivial' | 'small' | 'medium' | 'large';
+  codeGuidance: string;
+}
+
+export interface RemediationPlan {
+  iteration: number;
+  codebasePath: string;
+  currentScore: number;
+  targetScore: number;
+  totalTasks: number;
+  tasksByVerdict: { fail: number; partial: number };
+  tasksBySeverity: { critical: number; high: number; medium: number; low: number };
+  tasks: RemediationTask[];
+  generatedAt: string;
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+}
