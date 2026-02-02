@@ -1,4 +1,3 @@
-import type Anthropic from '@anthropic-ai/sdk';
 import { getClient, MODEL } from './anthropic.js';
 import type { Claim, ClaimCategory, ClaimSeverity } from '../types.js';
 
@@ -91,9 +90,9 @@ export async function extractClaims(
 ): Promise<{ claims: Claim[]; inputTokens: number; outputTokens: number }> {
   const client = getClient();
 
-  onProgress?.('Sending document to Claude for claim extraction...');
+  onProgress?.('Sending document to Claude for claim extraction (streaming)...');
 
-  const response = await client.messages.create({
+  const stream = client.messages.stream({
     model: MODEL,
     max_tokens: 32_000,
     system: EXTRACTION_SYSTEM_PROMPT,
@@ -105,10 +104,12 @@ export async function extractClaims(
     ],
   });
 
-  const rawText = response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map((block) => block.text)
-    .join('');
+  let rawText = '';
+  stream.on('text', (text) => {
+    rawText += text;
+  });
+
+  const finalMessage = await stream.finalMessage();
 
   onProgress?.('Parsing extraction results...');
 
@@ -165,8 +166,8 @@ export async function extractClaims(
 
   return {
     claims,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
+    inputTokens: finalMessage.usage.input_tokens,
+    outputTokens: finalMessage.usage.output_tokens,
   };
 }
 
