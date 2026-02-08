@@ -15,7 +15,7 @@ export function getClient(): Anthropic {
       'Export it before running: export ANTHROPIC_API_KEY=sk-ant-...'
     );
   }
-  return new Anthropic({ apiKey });
+  return new Anthropic({ apiKey, timeout: 15 * 60 * 1000 });
 }
 
 export interface StreamResult {
