@@ -141,6 +141,6 @@ LUCID adds the constraint.
 
 The code is on GitHub: [github.com/gtsbahamas/hallucination-reversing-system](https://github.com/gtsbahamas/hallucination-reversing-system)
 
-A full academic paper covering the theoretical foundations, neuroscience grounding, and empirical results is available in the repository (DOI forthcoming).
+A full academic paper covering the theoretical foundations, neuroscience grounding, and empirical results is available: [DOI: 10.5281/zenodo.18522644](https://doi.org/10.5281/zenodo.18522644).
 
 If you have a codebase and an Anthropic API key, you can run it right now. I'd be curious what compliance score your app gets on the first pass -- it tells you more about your codebase than you might expect.

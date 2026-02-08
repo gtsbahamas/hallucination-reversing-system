@@ -2,7 +2,7 @@
 
 *Created: 2026-02-07*
 *Target: Acquisition-ready positioning within 6 months*
-*Current Status: 5%*
+*Current Status: 12%*
 
 ---
 
@@ -51,8 +51,8 @@
 
 | Phase | Status | Completion |
 |-------|--------|------------|
-| Phase 1: Publication & IP | NOT STARTED | 0/7 |
-| Phase 2: Distribution Blitz | NOT STARTED | 0/6 |
+| Phase 1: Publication & IP | IN PROGRESS | 1/7 |
+| Phase 2: Distribution Blitz | IN PROGRESS | 1/6 |
 | Phase 3: SaaS MVP | NOT STARTED | 0/8 |
 | Phase 4: Conference Pipeline | NOT STARTED | 0/5 |
 | Phase 5: Acquirer Visibility | NOT STARTED | 0/5 |
@@ -61,15 +61,17 @@
 
 ## Phase 1: Publication & Defensive IP (0% → 20%)
 
-### 1.1 Zenodo Publication — IMMEDIATE
-- [ ] Create Zenodo account
-- [ ] Upload PDF (arxiv-submission/main.pdf)
-- [ ] Fill metadata (title, abstract, keywords, license CC-BY-4.0)
-- [ ] Publish and obtain DOI
-- [ ] Record DOI in this plan
+### 1.1 Zenodo Publication — COMPLETE
+- [x] Create Zenodo account (tyclaude@snapperland.com, username: tywells)
+- [x] Upload PDF (arxiv-submission/main.pdf)
+- [x] Fill metadata (title, abstract, keywords, license CC-BY-4.0)
+- [x] Publish and obtain DOI
+- [x] Record DOI: **10.5281/zenodo.18522644**
 
+**DOI URL:** https://doi.org/10.5281/zenodo.18522644
+**Record:** https://zenodo.org/records/18522644
 **Completion Criteria:** DOI minted, paper publicly accessible and citable
-**Timeline:** Today (< 1 hour)
+**Status:** COMPLETE (2026-02-08)
 
 ### 1.2 TechRxiv Publication — This Week
 - [ ] Create TechRxiv account
@@ -110,16 +112,16 @@
 
 ## Phase 2: Distribution Blitz (20% → 40%)
 
-### 2.1 Blog Post — Narrative Version
-- [ ] Write blog post: "I Built a Tool That Treats AI Hallucination as a Feature — Here's Why It Works"
-- [ ] Include convergence chart (57.3% → 90.8%)
-- [ ] Include neuroscience parallel (accessible version)
-- [ ] Include protein hallucination / Nobel Prize connection
-- [ ] Link to paper (Zenodo DOI) and GitHub repo
+### 2.1 Blog Post — Narrative Version — COMPLETE (draft)
+- [x] Write blog post: "I Built a Tool That Treats AI Hallucination as a Feature — Here's Why It Works"
+- [x] Include convergence chart (57.3% → 90.8%)
+- [x] Include neuroscience parallel (accessible version)
+- [x] Include protein hallucination / Nobel Prize connection
+- [x] Link to paper (Zenodo DOI) and GitHub repo
 - [ ] Publish on personal site or Medium
 
+**Status:** Draft at `docs/blog-post.md` with DOI link. Needs publishing to platform.
 **Completion Criteria:** Published blog post with links to paper and tool
-**Timeline:** Week 2
 
 ### 2.2 Hacker News — Show HN
 - [ ] Submit blog post to HN (Wednesday ~8am EST)
