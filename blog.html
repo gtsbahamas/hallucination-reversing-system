@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I Built a Tool That Treats AI Hallucination as a Feature - LUCID</title>
+  <meta name="description" content="Everyone working with LLMs has the same goal: make them stop making stuff up. I went the other direction. I built a tool that deliberately triggers hallucination, harvests the output, and uses it to generate comprehensive software specifications.">
+  <meta name="keywords" content="LLM hallucination, AI software verification, specification generation, LUCID, protein hallucination, neuroscience AI">
+  <meta name="author" content="Ty Wells">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="I Built a Tool That Treats AI Hallucination as a Feature -- Here's Why It Works">
+  <meta property="og:description" content="Everyone working with LLMs has the same goal: make them stop making stuff up. I went the other direction. I built LUCID -- a tool that deliberately triggers hallucination and uses it to generate verified software specifications.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://gtsbahamas.github.io/hallucination-reversing-system/blog.html">
+  <meta property="og:site_name" content="LUCID">
+  <meta property="article:published_time" content="2026-02-08">
+  <meta property="article:author" content="Ty Wells">
+  <meta property="article:tag" content="AI">
+  <meta property="article:tag" content="LLM">
+  <meta property="article:tag" content="hallucination">
+  <meta property="article:tag" content="software engineering">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="I Built a Tool That Treats AI Hallucination as a Feature">
+  <meta name="twitter:description" content="Everyone working with LLMs has the same goal: make them stop making stuff up. I went the other direction. I built LUCID -- a tool that deliberately triggers hallucination and uses it to generate verified software specifications.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       RESET & BASE (shared with index.html)
+       ============================================================ */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0a0a0b;
+      --bg-secondary: #111113;
+      --bg-tertiary: #18181b;
+      --bg-card: #16161a;
+      --bg-card-hover: #1c1c21;
+      --border: #27272a;
+      --border-subtle: #1e1e22;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-tertiary: #71717a;
+      --accent: #818cf8;
+      --accent-hover: #6366f1;
+      --accent-dim: rgba(129, 140, 248, 0.12);
+      --accent-glow: rgba(129, 140, 248, 0.06);
+      --green: #4ade80;
+      --green-dim: rgba(74, 222, 128, 0.12);
+      --yellow: #facc15;
+      --yellow-dim: rgba(250, 204, 21, 0.12);
+      --red: #f87171;
+      --red-dim: rgba(248, 113, 113, 0.12);
+      --cyan: #22d3ee;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ============================================================
+       NAV (identical to index.html)
+       ============================================================ */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 10, 11, 0.8);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+
+    .nav-logo {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-logo span {
+      color: var(--accent);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text-primary);
+    }
+
+    .nav-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--accent-dim);
+      color: var(--accent) !important;
+      border: 1px solid rgba(129, 140, 248, 0.2);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .nav-cta:hover {
+      background: rgba(129, 140, 248, 0.18);
+      border-color: rgba(129, 140, 248, 0.35);
+    }
+
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+    }
+
+    /* ============================================================
+       LAYOUT
+       ============================================================ */
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ============================================================
+       ARTICLE LAYOUT
+       ============================================================ */
+    .article-header {
+      padding-top: 140px;
+      padding-bottom: 48px;
+      text-align: center;
+      position: relative;
+    }
+
+    .article-header::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 500px;
+      background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .article-meta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .article-meta-item {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    .article-meta-divider {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+
+    .article-header h1 {
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      max-width: 860px;
+      margin: 0 auto 24px;
+    }
+
+    .article-header h1 .gradient {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--cyan) 50%, var(--accent) 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .article-lede {
+      font-size: clamp(17px, 2vw, 20px);
+      color: var(--text-secondary);
+      max-width: 680px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    .article-divider {
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+    }
+
+    /* ============================================================
+       ARTICLE BODY
+       ============================================================ */
+    .article-body {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 48px 24px 100px;
+    }
+
+    .article-body h2 {
+      font-size: clamp(24px, 3.5vw, 32px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      margin-top: 56px;
+      margin-bottom: 20px;
+      color: var(--text-primary);
+    }
+
+    .article-body h3 {
+      font-size: clamp(18px, 2.5vw, 22px);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.3;
+      margin-top: 40px;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+
+    .article-body p {
+      font-size: 17px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+
+    .article-body p strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .article-body p em {
+      color: var(--accent);
+      font-style: italic;
+    }
+
+    .article-body a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-decoration-color: rgba(129, 140, 248, 0.3);
+      text-underline-offset: 3px;
+      transition: text-decoration-color 0.2s;
+    }
+
+    .article-body a:hover {
+      text-decoration-color: var(--accent);
+    }
+
+    /* ============================================================
+       CODE BLOCKS
+       ============================================================ */
+    .article-body .code-block {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin: 28px 0;
+    }
+
+    .code-block-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .code-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .code-dot.red { background: #ff5f57; }
+    .code-dot.yellow { background: #ffbd2e; }
+    .code-dot.green { background: #28c840; }
+
+    .code-block-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-right: 28px;
+    }
+
+    .code-block pre {
+      padding: 20px 24px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      overflow-x: auto;
+    }
+
+    .code-block pre .comment {
+      color: var(--text-tertiary);
+    }
+
+    .code-block pre .cmd {
+      color: var(--green);
+    }
+
+    /* ============================================================
+       CONVERGENCE TABLE
+       ============================================================ */
+    .article-table-wrapper {
+      margin: 28px 0;
+      overflow-x: auto;
+    }
+
+    .article-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .article-table th {
+      text-align: left;
+      padding: 12px 20px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .article-table td {
+      padding: 12px 20px;
+      font-size: 15px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      font-family: var(--font-mono);
+      font-size: 14px;
+    }
+
+    .article-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .article-table td:first-child {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .article-table .val-pass { color: var(--green); }
+    .article-table .val-partial { color: var(--yellow); }
+    .article-table .val-fail { color: var(--red); }
+    .article-table .val-score { color: var(--accent); font-weight: 600; }
+
+    /* ============================================================
+       BLOCKQUOTE
+       ============================================================ */
+    .article-body blockquote {
+      padding: 24px 28px;
+      border-left: 3px solid var(--accent);
+      background: var(--accent-dim);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      margin: 32px 0;
+    }
+
+    .article-body blockquote p {
+      font-size: 17px;
+      color: var(--text-primary);
+      font-style: italic;
+      line-height: 1.7;
+      margin-bottom: 0;
+    }
+
+    .article-body blockquote cite {
+      display: block;
+      font-size: 13px;
+      color: var(--text-tertiary);
+      font-style: normal;
+      margin-top: 8px;
+    }
+
+    /* ============================================================
+       HORIZONTAL RULE
+       ============================================================ */
+    .article-body hr {
+      border: none;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+      margin: 56px 0;
+    }
+
+    /* ============================================================
+       BACK LINK
+       ============================================================ */
+    .article-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--text-tertiary);
+      text-decoration: none;
+      transition: color 0.2s;
+      margin-bottom: 48px;
+    }
+
+    .article-back:hover {
+      color: var(--accent);
+    }
+
+    .article-back svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* ============================================================
+       ARTICLE FOOTER LINKS
+       ============================================================ */
+    .article-footer-links {
+      margin-top: 48px;
+      padding: 32px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      position: relative;
+    }
+
+    .article-footer-links::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: var(--radius-lg);
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(129, 140, 248, 0.2), transparent, rgba(34, 211, 238, 0.15));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .article-footer-links h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      margin-top: 0;
+      color: var(--text-primary);
+    }
+
+    .article-footer-links ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .article-footer-links ul li a {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      color: var(--accent);
+      text-decoration: none;
+      transition: gap 0.2s;
+    }
+
+    .article-footer-links ul li a:hover {
+      gap: 12px;
+    }
+
+    .article-footer-links ul li a svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    /* ============================================================
+       FOOTER (identical to index.html)
+       ============================================================ */
+    footer {
+      padding: 48px 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .footer-logo {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .footer-logo span {
+      color: var(--accent);
+    }
+
+    .footer-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .footer-links a {
+      font-size: 14px;
+      color: var(--text-tertiary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--text-secondary);
+    }
+
+    .footer-copy {
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    @media (max-width: 640px) {
+      .footer-content {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .footer-left {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="container">
+      <a href="index.html" class="nav-logo"><span>LUCID</span></a>
+      <ul class="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="index.html#problem">Problem</a></li>
+        <li><a href="index.html#solution">Solution</a></li>
+        <li><a href="index.html#results">Results</a></li>
+        <li><a href="index.html#academic">Research</a></li>
+        <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system" class="nav-cta" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- ARTICLE HEADER -->
+  <header class="article-header">
+    <div class="container">
+      <div class="article-meta">
+        <span class="article-meta-item">Ty Wells</span>
+        <span class="article-meta-divider"></span>
+        <span class="article-meta-item">February 2026</span>
+        <span class="article-meta-divider"></span>
+        <span class="article-meta-item">12 min read</span>
+      </div>
+      <h1>
+        I Built a Tool That Treats AI <span class="gradient">Hallucination as a Feature</span> &mdash; Here's Why It Works
+      </h1>
+      <p class="article-lede">
+        Everyone working with LLMs has the same goal: make them stop making stuff up. I went the other direction.
+      </p>
+    </div>
+  </header>
+
+  <div class="article-divider"></div>
+
+  <!-- ARTICLE BODY -->
+  <article class="article-body">
+
+    <a href="index.html" class="article-back">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 8H3M7 4L3 8l4 4"/></svg>
+      Back to LUCID
+    </a>
+
+    <p>
+      RAG. Chain-of-thought. Guardrails. Constitutional AI. Fine-tuning on curated datasets. Billions of dollars in research, all aimed at one objective: suppress hallucination.
+    </p>
+    <p>
+      I went the other direction. I built a tool that deliberately triggers hallucination, harvests the output, and uses it to generate comprehensive software specifications. It works disturbingly well. And the neuroscience explains why.
+    </p>
+
+    <h2>The trick that started it</h2>
+
+    <p>
+      Ask an LLM to write a Terms of Service for an application that doesn't exist.
+    </p>
+    <p>
+      Don't tell it the app doesn't exist. Just say: "Write a Terms of Service and Acceptable Use Policy for [app description], as if it's live in production with paying customers. Write as the company's legal team."
+    </p>
+    <p>
+      The model doesn't blink. It confabulates. It invents specific capabilities, data handling procedures, user rights, performance guarantees, rate limits, encryption standards, data retention policies, SLA commitments, and account lifecycle rules -- all in the precise, declarative language that legal documents demand.
+    </p>
+    <p>
+      Here's the thing: legal language can't be vague. "The Service may do things" is not a valid legal clause. So the format forces the model to hallucinate <em>precisely</em>. You get 400-600 lines of dense, specific, testable claims about an application that does not yet exist.
+    </p>
+    <p>
+      Every one of those claims is a requirement.
+    </p>
+
+    <h2>Why this isn't as crazy as it sounds</h2>
+
+    <p>
+      Three independent formal proofs establish that hallucination is mathematically inevitable in LLMs. Xu et al. (2024) proved it via learning theory. Banerjee et al. (2024) reached the same conclusion through G&ouml;del's Incompleteness Theorem. And Karpowicz (2025) proved a quadrilemma: no LLM can simultaneously achieve truthful knowledge representation, semantic conservation, complete revelation, and knowledge-constrained optimality -- using mechanism design, scoring rules, and transformer architecture analysis. Not "hard to fix." Impossible.
+    </p>
+    <p>
+      If hallucination can't be eliminated, maybe we should stop trying to eliminate it and start figuring out how to use it.
+    </p>
+    <p>
+      This isn't a new idea. It's exactly what David Baker's lab did with proteins.
+    </p>
+
+    <h2>The protein hallucination parallel</h2>
+
+    <p>
+      In 2021, Baker's lab at the University of Washington published a paper in Nature describing how they used a neural network called trRosetta to "hallucinate" novel protein structures. They started with random amino acid sequences, ran them through the network's gradient-based optimization, and generated structures that don't exist in nature -- proteins the network "dreamed up."
+    </p>
+    <p>
+      Then they synthesized them in bacteria. The hallucinated structures matched predictions closely. The proteins were real and functional.
+    </p>
+    <p>
+      This methodology -- neural network dreams as engineering blueprints -- produced roughly 100 patents, spawned 20+ biotech companies, and won the 2024 Nobel Prize in Chemistry.
+    </p>
+    <p>
+      LUCID applies the same principle to software. The LLM dreams up a specification. Verification against the real codebase filters fantasy from reality. Iteration converges the dream toward something you can ship.
+    </p>
+
+    <h2>"We're all hallucinating all the time"</h2>
+
+    <blockquote>
+      <p>"We're all hallucinating all the time; when we agree about our hallucinations, we call it reality."</p>
+      <cite>Anil Seth, Professor of Cognitive and Computational Neuroscience, University of Sussex</cite>
+    </blockquote>
+
+    <p>
+      His point, grounded in the predictive processing framework (Friston, Clark, Hohwy), is that perception itself is a controlled hallucination. Your brain doesn't passively receive reality. It generates top-down predictions about what it expects to perceive and only propagates the <em>error signal</em> -- the surprise, the part it got wrong.
+    </p>
+    <p>
+      When those predictions are well-constrained by sensory data, you call it perception. When they're unconstrained, you call it hallucination. Same machinery, different amount of constraint.
+    </p>
+    <p>
+      Ramsauer et al. (2020) proved that transformer self-attention is mathematically equivalent to the update rule of Hopfield networks -- associative memory systems that retrieve stored patterns from partial cues. This is pattern completion: the same computation the hippocampus performs when reconstructing a memory from a fragment. Some of what it reconstructs is accurate. Some is gap-filling confabulation.
+    </p>
+    <p>
+      When an LLM generates a Terms of Service for a nonexistent app, it's pattern-completing from partial cues (your prompt) against representations (training data from millions of real ToS documents, codebases, and documentation). The output isn't random. It's informed extrapolation -- what a plausible application in this domain <em>tends</em> to look like, based on the statistical regularities the model has encoded.
+    </p>
+    <p>
+      That's useful. Extremely useful. If you verify it.
+    </p>
+
+    <h2>The tool: LUCID</h2>
+
+    <p>
+      LUCID stands for <strong>Leveraging Unverified Claims Into Deliverables</strong>. It's a CLI built in TypeScript that implements a six-phase loop:
+    </p>
+    <p>
+      <strong>Describe</strong> -- Give it a loose description of your app. Don't over-specify. The gaps are where the model does its best work.
+    </p>
+    <p>
+      <strong>Hallucinate</strong> -- The model writes a ToS as if the app is live. This produces 80-150 extractable claims.
+    </p>
+    <p>
+      <strong>Extract</strong> -- Each declarative statement becomes a structured claim with an ID, category (security, functionality, data-privacy, operational, legal), severity level, and testability flag.
+    </p>
+    <p>
+      <strong>Build</strong> -- Implement code. Use whatever methodology you want. The extracted claims are your acceptance criteria.
+    </p>
+    <p>
+      <strong>Converge</strong> -- Verify every claim against the actual codebase. Each gets a verdict: PASS, PARTIAL, FAIL, or N/A.
+    </p>
+    <p>
+      <strong>Regenerate</strong> -- Feed verified reality back to the model. It writes an updated ToS that retains what's real, revises what's partial, and hallucinates new capabilities grounded in what actually exists now.
+    </p>
+    <p>
+      Then loop.
+    </p>
+
+    <h3>Using it</h3>
+
+    <div class="code-block">
+      <div class="code-block-header">
+        <div class="code-dot red"></div>
+        <div class="code-dot yellow"></div>
+        <div class="code-dot green"></div>
+        <div class="code-block-title">Terminal</div>
+      </div>
+      <pre><span class="comment"># Install</span>
+<span class="cmd">git clone https://github.com/gtsbahamas/hallucination-reversing-system</span>
+<span class="cmd">cd hallucination-reversing-system</span>
+<span class="cmd">npm install && npm run build</span>
+
+<span class="comment"># Initialize in your project</span>
+<span class="cmd">lucid init</span>
+
+<span class="comment"># Generate hallucinated Terms of Service</span>
+<span class="cmd">lucid hallucinate</span>
+
+<span class="comment"># Extract testable claims</span>
+<span class="cmd">lucid extract</span>
+
+<span class="comment"># Verify claims against your codebase</span>
+<span class="cmd">lucid verify</span>
+
+<span class="comment"># See what's real and what's not</span>
+<span class="cmd">lucid report</span>
+
+<span class="comment"># Generate fix tasks for gaps</span>
+<span class="cmd">lucid remediate</span>
+
+<span class="comment"># Feed reality back, get updated spec</span>
+<span class="cmd">lucid regenerate</span></pre>
+    </div>
+
+    <p>
+      Each iteration's artifacts go into <code style="font-family: var(--font-mono); color: var(--accent); font-size: 15px; background: var(--accent-dim); padding: 2px 6px; border-radius: 4px;">.lucid/iterations/{N}/</code>, so you have a full audit trail of how the specification evolved.
+    </p>
+
+    <h2>The convergence data</h2>
+
+    <p>
+      I ran LUCID against a production Next.js application -- roughly 30,000 lines of TypeScript across 200+ files. Career platform with AI coaching, financial planning, goal tracking, document management.
+    </p>
+
+    <div class="article-table-wrapper">
+      <table class="article-table">
+        <thead>
+          <tr>
+            <th>Iteration</th>
+            <th>Compliance Score</th>
+            <th>Pass</th>
+            <th>Partial</th>
+            <th>Fail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>3</td>
+            <td class="val-score">57.3%</td>
+            <td class="val-pass">38</td>
+            <td class="val-partial">15</td>
+            <td class="val-fail">32</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td class="val-score">69.8%</td>
+            <td class="val-pass">47</td>
+            <td class="val-partial">18</td>
+            <td class="val-fail">20</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td class="val-score">83.2%</td>
+            <td class="val-pass">61</td>
+            <td class="val-partial">15</td>
+            <td class="val-fail">9</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td class="val-score">90.8%</td>
+            <td class="val-pass">68</td>
+            <td class="val-partial">12</td>
+            <td class="val-fail">5</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      57.3% to 90.8% across six iterations. Total API cost: approximately $17.
+    </p>
+    <p>
+      The five remaining failures at iteration 6 were all legitimate gaps: no weekly job data refresh, no subscription downgrade retention logic, no malware scanning on file uploads, no server-side rate limiting, and wrong account lockout parameters. Every one of them is a real thing the app should have. The hallucinated spec correctly identified requirements that a human product manager might have missed entirely.
+    </p>
+    <p>
+      The gap between hallucination and reality <em>is</em> the backlog. And it's a surprisingly good one.
+    </p>
+
+    <h2>The lucid dreaming connection</h2>
+
+    <p>
+      The name isn't just a backronym. Lucid dreaming is when you become aware you're dreaming without waking up. You gain metacognitive control -- you can steer the dream, reality-test within it, harvest creative content -- while staying in the generative state.
+    </p>
+    <p>
+      That's exactly what LUCID does with LLM hallucination. It doesn't try to wake the model up. It doesn't try to suppress the dream. It gains awareness (the Extract phase turns claims into <em>hypotheses</em> rather than facts), reality-tests (verification against the codebase), and steers (regeneration constrains future hallucinations with verified reality).
+    </p>
+    <p>
+      The neuroscience research on lucid dreaming (Baird et al., 2019; Filevich et al., 2015) shows that the key event is reactivation of the dorsolateral prefrontal cortex -- the seat of executive function and reality monitoring. In ordinary dreaming, it's suppressed. In lucid dreaming, it comes back online.
+    </p>
+    <p>
+      LLMs are pure dreaming. They have no prefrontal cortex, no reality monitor, no executive function. LUCID provides one externally. The convergence loop <em>is</em> the deliberate, checking function that the model lacks.
+    </p>
+
+    <h2>The deeper point</h2>
+
+    <p>
+      LUCID isn't a hallucination reduction technique. It's a specification extraction technique that uses hallucination as its input signal.
+    </p>
+    <p>
+      No human requirements-gathering process produces 91 testable claims spanning functionality, security, data privacy, performance, operations, and legal compliance in 30 seconds. The hallucination does. The convergence loop then refines this raw material into something you can actually build against.
+    </p>
+    <p>
+      As models get better, the initial hallucination quality improves. If the first pass starts at 80% compliance instead of 35%, you converge faster. At the limit -- good enough model, fast enough verification -- this approaches single-iteration specification generation. The verification step never goes away, because that's what makes the output trustworthy. But the loop compresses.
+    </p>
+    <p>
+      The formal impossibility results tell us hallucination isn't going away. The Nobel Prize in protein design tells us hallucination-as-blueprint works across domains. The neuroscience tells us that the generative process underlying hallucination and perception is the same -- the only difference is how much reality constrains it.
+    </p>
+    <p>
+      LUCID adds the constraint.
+    </p>
+
+    <hr>
+
+    <div class="article-footer-links">
+      <h3>Continue exploring</h3>
+      <ul>
+        <li>
+          <a href="https://github.com/gtsbahamas/hallucination-reversing-system" target="_blank" rel="noopener">
+            Source code on GitHub
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </a>
+        </li>
+        <li>
+          <a href="https://doi.org/10.5281/zenodo.18522644" target="_blank" rel="noopener">
+            Academic paper (DOI: 10.5281/zenodo.18522644)
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </a>
+        </li>
+        <li>
+          <a href="index.html#waitlist">
+            Join the LUCID SaaS waitlist
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <p style="margin-top: 32px; font-size: 15px; color: var(--text-tertiary);">
+      If you have a codebase and an Anthropic API key, you can run it right now. I'd be curious what compliance score your app gets on the first pass -- it tells you more about your codebase than you might expect.
+    </p>
+
+  </article>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-left">
+          <a href="index.html" class="footer-logo"><span>LUCID</span></a>
+          <ul class="footer-links">
+            <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://doi.org/10.5281/zenodo.18522644" target="_blank" rel="noopener">DOI: 10.5281/zenodo.18522644</a></li>
+            <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system/blob/main/docs/paper.md" target="_blank" rel="noopener">Paper</a></li>
+            <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system/blob/main/docs/methodology.md" target="_blank" rel="noopener">Methodology</a></li>
+          </ul>
+        </div>
+        <div class="footer-copy">
+          MIT License &middot; Ty Wells &middot; 2026
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
