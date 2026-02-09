@@ -20,7 +20,7 @@ Every one of those claims is a requirement.
 
 ## Why this isn't as crazy as it sounds
 
-Two independent formal proofs published in 2024 (Xu et al. and Banerjee et al.) established that hallucination is mathematically inevitable in LLMs. Not "hard to fix." Inevitable. Any model that generalizes beyond its training data will sometimes generate outputs inconsistent with ground truth. Banerjee reached the same conclusion through Godel's Incompleteness Theorem.
+Three independent formal proofs establish that hallucination is mathematically inevitable in LLMs. Xu et al. (2024) proved it via learning theory. Banerjee et al. (2024) reached the same conclusion through Godel's Incompleteness Theorem. And Karpowicz (2025) proved a quadrilemma: no LLM can simultaneously achieve truthful knowledge representation, semantic conservation, complete revelation, and knowledge-constrained optimality -- using mechanism design, scoring rules, and transformer architecture analysis. Not "hard to fix." Impossible.
 
 If hallucination can't be eliminated, maybe we should stop trying to eliminate it and start figuring out how to use it.
 

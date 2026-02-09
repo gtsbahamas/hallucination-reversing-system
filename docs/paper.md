@@ -45,11 +45,13 @@ This paper makes four contributions:
 
 ### 2.1 The Impossibility of Eliminating Hallucination
 
-Two independent formal results establish that hallucination is intrinsic to LLMs:
+Three independent formal results establish that hallucination is intrinsic to LLMs:
 
 **Xu et al. (2024)** prove, using learning theory, that any LLM with a computable ground truth function will inevitably hallucinate when used as a general problem solver. The proof shows that LLMs cannot learn all computable functions, and therefore must sometimes generate outputs inconsistent with ground truth.
 
 **Banerjee et al. (2024)** reach the same conclusion via Godel's First Incompleteness Theorem, the Halting Problem, and the Emptiness Problem. They demonstrate that hallucination stems from the fundamental mathematical and logical structure of LLMs, and cannot be eliminated through architectural improvements, dataset enhancements, or fact-checking mechanisms.
+
+**Karpowicz (2025)** proves a fundamental impossibility theorem: no LLM performing non-trivial knowledge aggregation can simultaneously achieve truthful knowledge representation, semantic information conservation, complete revelation of relevant knowledge, and knowledge-constrained optimality. The proof draws on mechanism design (Green-Laffont theorem), proper scoring rules (Savage), and transformer architecture analysis (log-sum-exp convexity), establishing that the impossibility stems from the mathematical structure of information aggregation itself.
 
 A counterpoint by **Hallucinations are inevitable but can be made statistically negligible** (2025) accepts the computability result but proves hallucinations can be reduced to negligible rates with sufficient training data. This does not invalidate LUCID — it suggests that as models improve, LUCID's initial hallucination quality will also improve, accelerating convergence.
 

@@ -1,8 +1,9 @@
-# LUCID — Path 3: IP + Acquisition Execution Plan
+# LUCID — Production Plan (Revised 2026-02-08)
 
-*Created: 2026-02-07*
-*Target: Acquisition-ready positioning within 6 months*
-*Current Status: 12%*
+*Created: 2026-02-07, Revised: 2026-02-08*
+*Supersedes: IP + Acquisition plan (pure acquisition play replaced with revenue-first approach)*
+*Full strategy: `docs/plans/2026-02-08-monetization-plan.md`*
+*Current Status: 8%*
 
 ---
 
@@ -27,257 +28,163 @@
 
 ---
 
-## Strategic Context
+## Strategic Context (Revised)
 
-**Pivot Decision:** Fire Photo (0/50 customers, 51 days left) → LUCID (novel IP in $4.5B AI dev tools market, 24-30x revenue multiples)
+**Old strategy:** Pure IP + Acquisition play at $149/audit
+**New strategy:** Revenue-first with niche positioning + compliance angle
 
-**Why Path 3 (Acquisition):**
-- AI acquisitions: 782 deals in 2025 at 24x revenue multiples
-- Spec-driven dev validated by GitHub (Spec Kit) and AWS (Kiro) — both missing verification layer
-- Hallucination detection: $1.25B company (Goodfire) validates the market segment
-- LUCID occupies unoccupied intersection: hallucination exploitation + legal language forcing + codebase convergence
-- Potential acquirers: GitHub/Microsoft, AWS, Anthropic, Snyk, SonarSource
+**Core positioning:** "The only tool that verifies what AI-built software actually does versus what it claims to do"
 
-**What Makes This Acquirable:**
-1. Academic paper (credibility + defensive IP)
-2. Working open-source tool (proof it works)
-3. SaaS product with revenue (business signal)
-4. Conference presence (thought leadership)
-5. The narrative: "We own the methodology for turning AI hallucination into verified specifications"
+**Why the pivot:**
+- $149/audit commoditizes the value (comparable tools charge $7,500-35,000/year)
+- Pure acquisition without revenue/users is the longest shot
+- EU AI Act enforcement (Aug 2, 2026) creates compliance-driven demand
+- Consulting generates immediate revenue while SaaS builds
+- NSF SBIR could provide $305K non-dilutive funding
+
+**What we keep from old plan:** publications, distribution, conferences
+**What changes:** pricing (10-50x increase), add consulting, add compliance, users before acquisition
 
 ---
 
-## Current Status: 5% → Target: Acquisition-Ready
+## Current Status: 8% → Target: $10K MRR
 
 | Phase | Status | Completion |
 |-------|--------|------------|
-| Phase 1: Publication & IP | IN PROGRESS | 1/7 |
-| Phase 2: Distribution Blitz | IN PROGRESS | 1/6 |
-| Phase 3: SaaS MVP | NOT STARTED | 0/8 |
-| Phase 4: Conference Pipeline | NOT STARTED | 0/5 |
-| Phase 5: Acquirer Visibility | NOT STARTED | 0/5 |
+| Phase 0: Foundation (Weeks 1-2) | IN PROGRESS | 3/6 |
+| Phase 1: GitHub Action MVP (Weeks 3-6) | NOT STARTED | 0/6 |
+| Phase 2: SaaS Platform (Weeks 7-12) | NOT STARTED | 0/5 |
+| Phase 3: Consulting Pipeline (Weeks 3-12) | NOT STARTED | 0/6 |
+| Phase 4: NSF SBIR (Weeks 4-8) | NOT STARTED | 0/3 |
+| Phase 5: EU AI Act Compliance (Months 3-6) | NOT STARTED | 0/5 |
+| Phase 6: Growth + Data Moat (Months 6-12) | NOT STARTED | 0/6 |
 
 ---
 
-## Phase 1: Publication & Defensive IP (0% → 20%)
+## Phase 0: Foundation (Weeks 1-2, Feb 8-21)
 
-### 1.1 Zenodo Publication — COMPLETE
-- [x] Create Zenodo account (tyclaude@snapperland.com, username: tywells)
-- [x] Upload PDF (arxiv-submission/main.pdf)
-- [x] Fill metadata (title, abstract, keywords, license CC-BY-4.0)
-- [x] Publish and obtain DOI
-- [x] Record DOI: **10.5281/zenodo.18522644**
+**Goal:** Ship what we have, capture existing demand, update academic work
 
-**DOI URL:** https://doi.org/10.5281/zenodo.18522644
-**Record:** https://zenodo.org/records/18522644
-**Completion Criteria:** DOI minted, paper publicly accessible and citable
-**Status:** COMPLETE (2026-02-08)
+### 0.1 Publications — PARTIALLY COMPLETE
+- [x] Zenodo publication with DOI (10.5281/zenodo.18522644)
+- [x] CHI 2026 Tools for Thought workshop paper (4 pages, `chi-submission/`)
+- [ ] Submit CHI 2026 paper (deadline Feb 12 AoE) — needs Miro poster
+- [ ] Submit to arXiv
+- [x] Update paper: add Karpowicz 2025 citation (added to both CHI and arXiv papers)
+- [ ] Submit to TechRxiv, SSRN
 
-### 1.2 TechRxiv Publication — This Week
-- [ ] Create TechRxiv account
-- [ ] Upload PDF with metadata
-- [ ] Select category: Computer Science → Software Engineering / AI
-- [ ] Submit for moderation (~4 business days)
+### 0.2 Distribution — PARTIALLY COMPLETE
+- [x] HN Show HN posted
+- [x] LinkedIn posted
+- [x] Twitter/X posted
+- [x] Skool posted (4 AI communities)
+- [ ] Publish blog post (draft at `docs/blog-post.md`)
+- [ ] Post to Reddit r/MachineLearning + r/programming (drafts ready)
+- [ ] Post to Dev.to (draft ready)
 
-**Completion Criteria:** Paper accepted and published on TechRxiv with DOI
-**Timeline:** This week, ~4 day turnaround
+### 0.3 Landing Page + Email Capture
+- [ ] Create landing page with waitlist signup
+- [ ] Position: "Verify what AI-built software actually does"
+- [ ] Include convergence chart, paper citation, GitHub link
 
-### 1.3 arXiv Endorser — Parallel Effort
-- [ ] Identify endorser candidates from cited papers (use "Which authors are endorsers?" link)
-- [ ] Draft professional outreach email with paper abstract
-- [ ] Send to 3-5 candidates
-- [ ] Follow up if no response in 1 week
-- [ ] Submit to arXiv once endorsed
-
-**Completion Criteria:** Paper live on arXiv
-**Timeline:** 1-3 weeks (dependent on response)
-
-### 1.4 IP.com Defensive Publication
-- [ ] Create IP.com account
-- [ ] Purchase publishing voucher
-- [ ] Upload paper
-- [ ] Confirm publication in Prior Art Database
-
-**Completion Criteria:** Paper indexed in IP.com PAD, searchable by patent examiners
-**Timeline:** This week
-
-### 1.5 SSRN Publication
-- [ ] Upload to SSRN Computer Science Research Network
-- [ ] Confirm indexing
-
-**Completion Criteria:** Paper live on SSRN
-**Timeline:** 1-3 business days after upload
+**Completion criteria:** CHI submitted, blog live, Reddit posted, landing page capturing emails.
 
 ---
 
-## Phase 2: Distribution Blitz (20% → 40%)
+## Phase 1: GitHub Action MVP (Weeks 3-6, Feb 22 - Mar 21)
 
-### 2.1 Blog Post — Narrative Version — COMPLETE (draft)
-- [x] Write blog post: "I Built a Tool That Treats AI Hallucination as a Feature — Here's Why It Works"
-- [x] Include convergence chart (57.3% → 90.8%)
-- [x] Include neuroscience parallel (accessible version)
-- [x] Include protein hallucination / Nobel Prize connection
-- [x] Link to paper (Zenodo DOI) and GitHub repo
-- [ ] Publish on personal site or Medium
+**Goal:** First usable product developers can try in < 5 minutes
 
-**Status:** Draft at `docs/blog-post.md` with DOI link. Needs publishing to platform.
-**Completion Criteria:** Published blog post with links to paper and tool
+- [ ] Build GitHub Action that runs LUCID on any repo
+- [ ] Free tier: 5 scans/month, public repos only
+- [ ] Action comments on PRs with specification gap findings
+- [ ] "Powered by LUCID" badge with upgrade link
+- [ ] List on GitHub Marketplace (free)
+- [ ] Diff-based scanning (changed files only) to manage LLM costs
 
-### 2.2 Hacker News — Show HN
-- [ ] Submit blog post to HN (Wednesday ~8am EST)
-- [ ] Use title: contrarian angle about hallucination as feature
-- [ ] Monitor and engage with comments
-- [ ] Track upvotes and referral traffic
-
-**Completion Criteria:** Post submitted, engagement monitored
-**Timeline:** Week 2 (Wednesday)
-
-### 2.3 LinkedIn Article
-- [ ] Write business-framed summary (focus on market gap + acquirer value)
-- [ ] Publish as LinkedIn article
-- [ ] Tag relevant AI/dev tools leaders
-- [ ] Share in relevant LinkedIn groups
-
-**Completion Criteria:** Published, engagement tracked
-**Timeline:** Week 2
-
-### 2.4 Dev.to Developer Tutorial
-- [ ] Write practical tutorial: "How to Use AI Hallucination to Generate Your Software Spec"
-- [ ] Include code examples from CLI
-- [ ] Tag: #ai #machinelearning #softwareengineering #devtools
-- [ ] Publish
-
-**Completion Criteria:** Published on Dev.to
-**Timeline:** Week 2-3
-
-### 2.5 Twitter/X Thread
-- [ ] Create visual thread with convergence data
-- [ ] Tag relevant researchers (authors of cited papers)
-- [ ] Use hashtags: #AI #LLM #AIHallucination #SoftwareEngineering
-- [ ] Post at varied times for reach
-
-**Completion Criteria:** Thread posted, engagement tracked
-**Timeline:** Week 2
-
-### 2.6 Towards Data Science Submission
-- [ ] Write TDS-formatted article (practitioner-focused, NOT AI-generated)
-- [ ] Submit via TDS submission form
-- [ ] Wait for editorial response (~1 week)
-
-**Completion Criteria:** Accepted and published on TDS (or noted as rejected)
-**Timeline:** Week 2-3
+**Completion criteria:** Any developer adds LUCID to repo in < 5 min, sees results on PR.
 
 ---
 
-## Phase 3: SaaS MVP (40% → 65%)
+## Phase 2: SaaS Platform (Weeks 7-12, Mar 22 - May 2)
 
-### 3.1 Architecture & Design
-- [ ] Define tech stack (Next.js + Supabase + Inngest + Stripe)
-- [ ] Design database schema (users, orgs, repos, audits, claims, verdicts)
-- [ ] Design API routes
-- [ ] Type-first contract design
+**Goal:** Paid product with recurring revenue
 
-**Completion Criteria:** Types and schema approved before implementation
+- [ ] Web dashboard: connect repo, view history, track compliance
+- [ ] Stripe: Free → Team ($99/mo) → Org ($249/mo)
+- [ ] Team features: shared dashboard, scheduling, notifications
+- [ ] API endpoint for programmatic access
+- [ ] CI/CD integration docs (GitHub Actions, GitLab CI, CircleCI)
 
-### 3.2 Authentication & GitHub Integration
-- [ ] GitHub OAuth signup
-- [ ] GitHub App for repo access
-- [ ] Supabase Auth integration
-
-### 3.3 Audit Pipeline
-- [ ] Inngest pipeline: clone → extract → verify → report
-- [ ] Wrap existing CLI logic in serverless functions
-- [ ] Handle long-running operations (15+ min audits)
-
-### 3.4 Dashboard & Reports
-- [ ] Audit results dashboard (verdicts, evidence, compliance score)
-- [ ] Gap report viewer
-- [ ] PDF export
-
-### 3.5 Stripe Integration
-- [ ] Single audit product: $149
-- [ ] Checkout flow
-- [ ] Webhook handling for payment confirmation
-
-### 3.6 Landing Page
-- [ ] Hero: "Does your code actually do what your docs claim?"
-- [ ] Convergence chart as social proof
-- [ ] Paper citation as credibility
-- [ ] CTA to audit
-
-### 3.7 Deploy
-- [ ] Deploy to Vercel
-- [ ] Custom domain
-- [ ] Production environment variables
-
-### 3.8 First 10 Customers
-- [ ] Launch on Product Hunt
-- [ ] Offer free audits to open-source projects (builds case studies)
-- [ ] Collect testimonials
-
-**Completion Criteria:** SaaS live, accepting payments, 10+ customers
-**Timeline:** Weeks 3-8
+**Completion criteria:** Users can sign up, connect repos, pay, get ongoing verification.
 
 ---
 
-## Phase 4: Conference Pipeline (65% → 80%)
+## Phase 3: Consulting Pipeline (Parallel, Weeks 3-12)
 
-### 4.1 CHI 2026 Tools for Thought Workshop
-- [ ] Check if deadline (Feb 12) is still open
-- [ ] Adapt paper for HCI angle if submitting
-- [ ] Submit
+**Goal:** Generate revenue immediately while building SaaS
 
-### 4.2 ICML 2026 Workshops
-- [ ] Monitor accepted workshops (announced ~March 20)
-- [ ] Identify relevant workshops
-- [ ] Submit paper by April 24
+- [ ] Create "AI Software Specification Audit" service page
+- [ ] Reach out to interested Skool/LinkedIn contacts
+- [ ] Price: $2,000-5,000 per engagement
+- [ ] Deliver: LUCID run + expert analysis + remediation report
+- [ ] Position around EU AI Act (Aug 2026 deadline)
+- [ ] Target: 2-3 consulting engagements by end of Month 3
 
-### 4.3 ACL 2026 via Rolling Review
-- [ ] Submit to March ARR cycle
-- [ ] Commit to ACL 2026 (deadline March 14) or EMNLP 2026
-
-### 4.4 NeurIPS 2026
-- [ ] Monitor for call for papers (~March 2026)
-- [ ] Submit main paper or workshop paper
-
-### 4.5 ICSE 2027 (Software Engineering)
-- [ ] Watch for call for papers
-- [ ] Submit (LUCID is fundamentally a SE methodology)
-
-**Completion Criteria:** Accepted at 1+ conferences
-**Timeline:** Months 2-6
+**Completion criteria:** First paid consulting engagement completed.
 
 ---
 
-## Phase 5: Acquirer Visibility (80% → 100%)
+## Phase 4: NSF SBIR Application (Weeks 4-8)
 
-### 5.1 GitHub/Microsoft Outreach
-- [ ] Identify relevant people at GitHub (Spec Kit team, Copilot team)
-- [ ] Demonstrate LUCID as complement to Spec Kit
-- [ ] Share paper + tool
+**Goal:** $305K non-dilutive funding
 
-### 5.2 Anthropic Outreach
-- [ ] LUCID is built on Claude SDK — natural alignment
-- [ ] Frame: "reframes hallucination as a feature, not a bug"
-- [ ] Share paper + tool
+- [ ] Research NSF SBIR Phase I requirements and timeline
+- [ ] Draft application (published paper + DOI + working tool)
+- [ ] Submit Phase I application
 
-### 5.3 AWS/Kiro Team
-- [ ] Identify Kiro team contacts
-- [ ] Position LUCID as verification layer for Kiro
-- [ ] Share paper + tool
+**Completion criteria:** Application submitted.
 
-### 5.4 Snyk/SonarSource
-- [ ] Position as AI-native code quality
-- [ ] "Specification verification" angle
-- [ ] Share paper + tool
+---
 
-### 5.5 Investor/Acquirer Network
-- [ ] Attend relevant AI meetups/events
-- [ ] Build relationships with AI-focused VCs (for acquisition introductions)
-- [ ] Consider YC application (W2027 or S2026 if timing works)
+## Phase 5: EU AI Act Compliance (Months 3-6)
 
-**Completion Criteria:** Conversations initiated with 2+ potential acquirers
-**Timeline:** Months 3-6
+**Goal:** Capture compliance-driven demand before Aug 2026 enforcement
+
+- [ ] Add compliance reporting features to SaaS
+- [ ] Generate EU AI Act-formatted documentation from scans
+- [ ] Create "EU AI Act Compliance" landing page
+- [ ] Target compliance buyers (Legal, CISO, VP Eng)
+- [ ] Price: $5,000-15,000 per readiness assessment
+
+**Completion criteria:** First compliance engagement.
+
+---
+
+## Phase 6: Growth + Data Moat (Months 6-12)
+
+**Goal:** Build defensible position through data and community
+
+- [ ] 500+ free tier users, 1,000+ GitHub stars
+- [ ] Benchmarking data from 1,000+ scans
+- [ ] "Your spec coverage vs. industry" premium feature
+- [ ] Enterprise pilot with 1-2 companies
+- [ ] Present at 2+ conferences beyond CHI
+- [ ] Evaluate acquisition interest based on actual traction
+
+**Completion criteria:** $10K+ MRR, meaningful user base, data moat forming.
+
+---
+
+## Key Metrics
+
+| Metric | Month 3 | Month 6 | Month 12 |
+|--------|---------|---------|----------|
+| GitHub stars | 200+ | 500+ | 1,000+ |
+| Free users | 50+ | 200+ | 500+ |
+| Paying customers | 3-5 | 15-25 | 50-100 |
+| MRR | $500-1K | $3-5K | $10K+ |
+| Consulting revenue (cumulative) | $2-5K | $10-15K | $30K+ |
 
 ---
 
@@ -285,31 +192,16 @@
 
 | Date | Session | Work Done | New % |
 |------|---------|-----------|-------|
-| 2026-02-07 | Initial | Deep research, paper written, LaTeX compiled, plan created | 5% |
-
----
-
-## Key Assets
-
-| Asset | Location | Status |
-|-------|----------|--------|
-| Academic paper (markdown) | docs/paper.md | Complete |
-| Academic paper (LaTeX) | arxiv-submission/main.tex | Complete |
-| Academic paper (PDF) | arxiv-submission/main.pdf | Complete |
-| Submission archive | lucid-arxiv-submission.tar.gz | Complete |
-| Bibliography | arxiv-submission/references.bib | Complete |
-| CLI tool | src/ | Complete |
-| Prior art analysis | docs/prior-art.md | Complete |
-| Methodology guide | docs/methodology.md | Complete |
-| Product plan | docs/plans/ | Exists |
+| 2026-02-07 | Initial | Research, paper, LaTeX, old plan created | 5% |
+| 2026-02-08 | Research | Deep-dive research (3 agents), new plan created | 8% |
 
 ---
 
 ## Notes
 
-- **Pivot from Fire Photo confirmed** — 2026-02-07
-- arXiv requires endorser — pursuing alternative outlets first, endorser in parallel
-- CHI 2026 Tools for Thought workshop deadline: Feb 12 (5 days)
-- ICML 2026 workshop paper deadline: ~Apr 24
-- Paper has 35 references, 12 pages, 5 tables
-- Token cost per full LUCID cycle: ~$17
+- Old plan (IP + Acquisition) archived — approach was valid but acquisition without revenue is unrealistic
+- Old product plan ($149/audit, $49/month) archived — massively underpriced
+- CHI 2026 deadline: Feb 12 AoE (4 days)
+- EU AI Act enforcement: Aug 2, 2026 (6 months)
+- NSF SBIR Phase I: up to $305K, retain full IP
+- Tessl ($125M funded) is closest competitor but philosophically opposite (prevents hallucination vs. harnesses it)

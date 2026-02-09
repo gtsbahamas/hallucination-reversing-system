@@ -21,7 +21,7 @@ We built an open-source CLI that deliberately triggers LLM hallucination as a sp
 
 On a production Next.js app (30K lines), we went from 57.3% to 90.8% specification-reality alignment in 6 iterations. Total cost: $17 in API tokens. 91 testable claims extracted covering functionality, security, privacy, performance, and legal compliance.
 
-The theoretical grounding is the interesting part: transformer attention is mathematically equivalent to hippocampal pattern completion (Ramsauer et al., 2020). Hallucination and perception are the same computation under different constraint conditions (Clark, Friston, Seth). And two independent formal proofs (Xu et al., Banerjee et al., 2024) show hallucination is mathematically inevitable in LLMs. If you can't eliminate it, harness it.
+The theoretical grounding is the interesting part: transformer attention is mathematically equivalent to hippocampal pattern completion (Ramsauer et al., 2020). Hallucination and perception are the same computation under different constraint conditions (Clark, Friston, Seth). And three independent formal proofs (Xu et al. 2024, Banerjee et al. 2024, Karpowicz 2025) show hallucination is mathematically inevitable in LLMs. If you can't eliminate it, harness it.
 
 The closest precedent is protein hallucination (Baker Lab) -- neural network "dreams" used as blueprints for novel proteins, validated in the lab. That won the 2024 Nobel Prize in Chemistry. LUCID applies the same principle to software: hallucinate a spec, verify against code, converge.
 
@@ -41,7 +41,7 @@ TypeScript, MIT licensed, uses Anthropic Claude SDK.
 
 Every company building AI tooling is fighting the same battle: make models stop hallucinating. Billions of dollars in research. Retrieval-Augmented Generation. Constitutional AI. Chain-of-Thought. Chain-of-Verification. The entire industry has agreed: hallucination is the enemy.
 
-Two independent mathematical proofs published in 2024 say the industry is wrong. Xu et al. proved via learning theory that any LLM with a computable ground truth function will inevitably hallucinate. Banerjee et al. reached the same conclusion through Godel's Incompleteness Theorem. Hallucination is not a bug. It is an intrinsic, mathematically irreducible property of generative models.
+Three independent mathematical proofs say the industry is wrong. Xu et al. (2024) proved via learning theory that any LLM will inevitably hallucinate. Banerjee et al. (2024) reached the same conclusion through Godel's Incompleteness Theorem. And Karpowicz (2025) proved a quadrilemma: no LLM can simultaneously achieve truthfulness, semantic conservation, complete revelation, and optimality. Hallucination is not a bug. It is an intrinsic, mathematically irreducible property of generative models.
 
 If you cannot eliminate it, the question becomes: can you make it productive?
 
@@ -140,10 +140,11 @@ LUCID applies the same principle: neural network dreams as software blueprints.
 
 **Tweet 8 (The Impossibility)**
 
-Xu et al. (2024): Hallucination is inevitable via learning theory.
-Banerjee et al. (2024): Hallucination is inevitable via Godel's Incompleteness Theorem.
+Xu et al. (2024): Inevitable via learning theory.
+Banerjee et al. (2024): Inevitable via Godel's Incompleteness Theorem.
+Karpowicz (2025): Impossible via mechanism design quadrilemma.
 
-Two independent proofs, same conclusion: you cannot eliminate hallucination from LLMs.
+Three independent proofs, same conclusion: you cannot eliminate hallucination from LLMs.
 
 If it's inevitable, harness it.
 
@@ -455,7 +456,7 @@ We present LUCID (Leveraging Unverified Claims Into Deliverables), a framework t
 
 2. **Predictive processing.** The dominant cognitive neuroscience framework (Friston, 2010; Clark, 2013, 2023; Seth, 2021) holds that perception is "controlled hallucination" -- top-down predictions constrained by sensory data. Hallucination occurs when constraints are absent. LUCID deliberately removes constraints (hallucinate phase), then progressively reintroduces them (converge/regenerate), moving along the spectrum from hallucination toward perception. This connects to the REBUS model (Carhart-Harris & Friston, 2019) where precision weighting maps to temperature parameter.
 
-3. **Formal impossibility.** Xu et al. (2024) proved via learning theory that hallucination is inevitable in LLMs. Banerjee et al. (2024) reached the same conclusion via Godel's First Incompleteness Theorem and the Halting Problem. If elimination is impossible, productive exploitation is the rational response.
+3. **Formal impossibility.** Three independent proofs: Xu et al. (2024) via learning theory, Banerjee et al. (2024) via Godel's Incompleteness Theorem and the Halting Problem, and Karpowicz (2025) via a mechanism design quadrilemma showing LLMs cannot simultaneously achieve truthfulness, semantic conservation, complete revelation, and optimality. If elimination is impossible, productive exploitation is the rational response.
 
 **Structural analogy to protein hallucination.** Baker Lab (Anishchenko et al., Nature 2021) used neural network "hallucination" to generate novel protein structures validated via lab synthesis. LUCID applies the identical principle -- neural network dreams as engineering blueprints, validated against reality. Baker's work: ~100 patents, 20+ companies, 2024 Nobel Prize in Chemistry.
 

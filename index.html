@@ -1,0 +1,1589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LUCID - Leveraging Unverified Claims Into Deliverables</title>
+  <meta name="description" content="The only tool that verifies what AI-built software actually does versus what it claims to do. Turn LLM hallucination into verified software specifications.">
+  <meta name="keywords" content="LLM hallucination, AI software verification, specification generation, requirements engineering, LUCID">
+  <meta property="og:title" content="LUCID - Turn AI Hallucination Into Verified Specs">
+  <meta property="og:description" content="The only tool that verifies what AI-built software actually does versus what it claims to do.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://gtsbahamas.github.io/hallucination-reversing-system/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="LUCID - Turn AI Hallucination Into Verified Specs">
+  <meta name="twitter:description" content="The only tool that verifies what AI-built software actually does versus what it claims to do.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       RESET & BASE
+       ============================================================ */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0a0a0b;
+      --bg-secondary: #111113;
+      --bg-tertiary: #18181b;
+      --bg-card: #16161a;
+      --bg-card-hover: #1c1c21;
+      --border: #27272a;
+      --border-subtle: #1e1e22;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-tertiary: #71717a;
+      --accent: #818cf8;
+      --accent-hover: #6366f1;
+      --accent-dim: rgba(129, 140, 248, 0.12);
+      --accent-glow: rgba(129, 140, 248, 0.06);
+      --green: #4ade80;
+      --green-dim: rgba(74, 222, 128, 0.12);
+      --yellow: #facc15;
+      --yellow-dim: rgba(250, 204, 21, 0.12);
+      --red: #f87171;
+      --red-dim: rgba(248, 113, 113, 0.12);
+      --cyan: #22d3ee;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ============================================================
+       LAYOUT
+       ============================================================ */
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    section {
+      padding: 100px 0;
+    }
+
+    @media (max-width: 768px) {
+      section {
+        padding: 64px 0;
+      }
+    }
+
+    /* ============================================================
+       TYPOGRAPHY
+       ============================================================ */
+    h1, h2, h3 {
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+
+    .section-subtitle {
+      font-size: 18px;
+      color: var(--text-secondary);
+      max-width: 640px;
+      line-height: 1.7;
+    }
+
+    /* ============================================================
+       NAV
+       ============================================================ */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 10, 11, 0.8);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+
+    .nav-logo {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-logo span {
+      color: var(--accent);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text-primary);
+    }
+
+    .nav-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--accent-dim);
+      color: var(--accent) !important;
+      border: 1px solid rgba(129, 140, 248, 0.2);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .nav-cta:hover {
+      background: rgba(129, 140, 248, 0.18);
+      border-color: rgba(129, 140, 248, 0.35);
+    }
+
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+    }
+
+    /* ============================================================
+       HERO
+       ============================================================ */
+    .hero {
+      padding-top: 160px;
+      padding-bottom: 100px;
+      text-align: center;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 600px;
+      background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 13px;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+    }
+
+    .hero-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .hero h1 {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 700;
+      line-height: 1.05;
+      margin-bottom: 8px;
+      letter-spacing: -0.035em;
+    }
+
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--cyan) 50%, var(--accent) 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-tagline {
+      font-size: clamp(16px, 2.5vw, 20px);
+      color: var(--text-secondary);
+      max-width: 640px;
+      margin: 24px auto 40px;
+      line-height: 1.6;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 24px;
+      border-radius: var(--radius-md);
+      font-size: 15px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+      font-family: var(--font-sans);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0a0a0b;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 24px rgba(129, 140, 248, 0.25);
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--text-tertiary);
+    }
+
+    .btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .hero-stats {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 48px;
+      margin-top: 64px;
+      padding-top: 40px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .hero-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+    }
+
+    .hero-stat-label {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    @media (max-width: 640px) {
+      .hero-stats {
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+    }
+
+    /* ============================================================
+       PROBLEM
+       ============================================================ */
+    .problem {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+      margin-top: 48px;
+    }
+
+    @media (max-width: 768px) {
+      .problem-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+
+    .proof-card {
+      padding: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      transition: border-color 0.2s;
+    }
+
+    .proof-card:hover {
+      border-color: var(--text-tertiary);
+    }
+
+    .proof-card + .proof-card {
+      margin-top: 16px;
+    }
+
+    .proof-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .proof-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      background: var(--red-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .proof-icon svg {
+      width: 18px;
+      height: 18px;
+      color: var(--red);
+    }
+
+    .proof-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .proof-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .proof-cite {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 8px;
+    }
+
+    .problem-conclusion {
+      margin-top: 32px;
+      padding: 24px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(129, 140, 248, 0.15);
+      border-radius: var(--radius-lg);
+    }
+
+    .problem-conclusion p {
+      font-size: 16px;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .problem-conclusion p span {
+      color: var(--accent);
+    }
+
+    /* ============================================================
+       SOLUTION - 6-Phase Cycle
+       ============================================================ */
+    .phases-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 48px;
+    }
+
+    @media (max-width: 768px) {
+      .phases-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .phases-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .phase-card {
+      padding: 28px 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      position: relative;
+      transition: all 0.2s;
+    }
+
+    .phase-card:hover {
+      border-color: var(--text-tertiary);
+      background: var(--bg-card-hover);
+      transform: translateY(-2px);
+    }
+
+    .phase-number {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .phase-number::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .phase-card h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .phase-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ============================================================
+       RESULTS - Convergence Chart
+       ============================================================ */
+    .results {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: start;
+      margin-top: 48px;
+    }
+
+    @media (max-width: 768px) {
+      .results-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+
+    .convergence-chart {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+    }
+
+    .chart-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .chart-title span {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-tertiary);
+      font-weight: 400;
+    }
+
+    .chart-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .chart-label {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text-tertiary);
+      min-width: 80px;
+      text-align: right;
+    }
+
+    .chart-bar-track {
+      flex: 1;
+      height: 28px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .chart-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 10px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--bg-primary);
+      transition: width 1s ease-out;
+    }
+
+    .chart-bar-fill.low {
+      background: linear-gradient(90deg, var(--red) 0%, #fb923c 100%);
+    }
+
+    .chart-bar-fill.mid {
+      background: linear-gradient(90deg, #fb923c 0%, var(--yellow) 100%);
+    }
+
+    .chart-bar-fill.high {
+      background: linear-gradient(90deg, var(--yellow) 0%, var(--green) 100%);
+    }
+
+    .chart-bar-fill.top {
+      background: linear-gradient(90deg, #4ade80 0%, var(--cyan) 100%);
+    }
+
+    .results-highlights {
+      display: grid;
+      gap: 16px;
+    }
+
+    .highlight-card {
+      padding: 20px 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    .highlight-value {
+      font-family: var(--font-mono);
+      font-size: 32px;
+      font-weight: 700;
+    }
+
+    .highlight-value.green { color: var(--green); }
+    .highlight-value.accent { color: var(--accent); }
+    .highlight-value.yellow { color: var(--yellow); }
+    .highlight-value.cyan { color: var(--cyan); }
+
+    .highlight-label {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .highlight-detail {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-top: 2px;
+      font-family: var(--font-mono);
+    }
+
+    /* ============================================================
+       HOW IT WORKS - The ToS Trick
+       ============================================================ */
+    .how-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: start;
+      margin-top: 48px;
+    }
+
+    @media (max-width: 768px) {
+      .how-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+
+    .tos-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+    }
+
+    .tos-table th {
+      text-align: left;
+      padding: 10px 16px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tos-table td {
+      padding: 10px 16px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .tos-table td:first-child {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .code-block {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      overflow-x: auto;
+    }
+
+    .code-block pre {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+
+    .code-block .comment { color: var(--text-tertiary); }
+    .code-block .cmd { color: var(--green); }
+    .code-block .flag { color: var(--accent); }
+    .code-block .string { color: var(--yellow); }
+
+    /* ============================================================
+       ACADEMIC
+       ============================================================ */
+    .academic {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .academic-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 48px;
+    }
+
+    @media (max-width: 768px) {
+      .academic-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .academic-card {
+      padding: 28px 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      transition: border-color 0.2s;
+    }
+
+    .academic-card:hover {
+      border-color: var(--text-tertiary);
+    }
+
+    .academic-card-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .academic-card-icon.purple {
+      background: var(--accent-dim);
+    }
+
+    .academic-card-icon.blue {
+      background: rgba(34, 211, 238, 0.1);
+    }
+
+    .academic-card-icon.green-bg {
+      background: var(--green-dim);
+    }
+
+    .academic-card-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .academic-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .academic-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .academic-card a {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      margin-top: 12px;
+      transition: gap 0.2s;
+    }
+
+    .academic-card a:hover {
+      gap: 10px;
+    }
+
+    .academic-card a svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* ============================================================
+       WAITLIST
+       ============================================================ */
+    .waitlist {
+      text-align: center;
+    }
+
+    .waitlist-box {
+      max-width: 560px;
+      margin: 48px auto 0;
+      padding: 40px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      position: relative;
+    }
+
+    .waitlist-box::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: var(--radius-lg);
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(129, 140, 248, 0.2), transparent, rgba(34, 211, 238, 0.15));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .waitlist-box h3 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .waitlist-box p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+    }
+
+    .waitlist-form {
+      display: flex;
+      gap: 8px;
+    }
+
+    @media (max-width: 480px) {
+      .waitlist-form {
+        flex-direction: column;
+      }
+    }
+
+    .waitlist-form input[type="email"] {
+      flex: 1;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: 15px;
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .waitlist-form input[type="email"]::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .waitlist-form input[type="email"]:focus {
+      border-color: var(--accent);
+    }
+
+    .waitlist-form button {
+      padding: 12px 24px;
+      white-space: nowrap;
+    }
+
+    .waitlist-note {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-top: 16px;
+    }
+
+    /* ============================================================
+       FOOTER
+       ============================================================ */
+    footer {
+      padding: 48px 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .footer-logo {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .footer-logo span {
+      color: var(--accent);
+    }
+
+    .footer-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .footer-links a {
+      font-size: 14px;
+      color: var(--text-tertiary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--text-secondary);
+    }
+
+    .footer-copy {
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    @media (max-width: 640px) {
+      .footer-content {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .footer-left {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    /* ============================================================
+       SECTION DIVIDER
+       ============================================================ */
+    .divider {
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+    }
+
+    /* ============================================================
+       QUOTE BLOCK
+       ============================================================ */
+    .quote-block {
+      padding: 24px 28px;
+      border-left: 3px solid var(--accent);
+      background: var(--accent-dim);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      margin-top: 24px;
+    }
+
+    .quote-block p {
+      font-size: 16px;
+      color: var(--text-primary);
+      font-style: italic;
+      line-height: 1.7;
+    }
+
+    .quote-block cite {
+      display: block;
+      font-size: 13px;
+      color: var(--text-tertiary);
+      font-style: normal;
+      margin-top: 8px;
+    }
+
+    /* ============================================================
+       CLI DEMO BLOCK
+       ============================================================ */
+    .cli-demo {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .cli-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cli-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .cli-dot.red { background: #ff5f57; }
+    .cli-dot.yellow { background: #ffbd2e; }
+    .cli-dot.green { background: #28c840; }
+
+    .cli-title {
+      flex: 1;
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-right: 28px;
+    }
+
+    .cli-body {
+      padding: 20px 24px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .cli-prompt::before {
+      content: '$ ';
+      color: var(--accent);
+    }
+
+    .cli-prompt {
+      color: var(--green);
+    }
+
+    .cli-comment {
+      color: var(--text-tertiary);
+    }
+
+    .cli-output {
+      color: var(--text-secondary);
+      padding-left: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       NAV
+       ============================================================ -->
+  <nav>
+    <div class="container">
+      <a href="#" class="nav-logo"><span>LUCID</span></a>
+      <ul class="nav-links">
+        <li><a href="#problem">Problem</a></li>
+        <li><a href="#solution">Solution</a></li>
+        <li><a href="#results">Results</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#academic">Research</a></li>
+        <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system" class="nav-cta" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       HERO
+       ============================================================ -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        Open source &middot; MIT License
+      </div>
+      <h1>
+        Stop fighting<br>
+        <span class="gradient">AI hallucination.</span><br>
+        Harness it.
+      </h1>
+      <p class="hero-tagline">
+        LUCID is the only tool that verifies what AI-built software actually does versus what it claims to do. It turns LLM hallucination into verified, testable software specifications.
+      </p>
+      <div class="hero-actions">
+        <a href="https://github.com/gtsbahamas/hallucination-reversing-system" class="btn btn-primary" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View on GitHub
+        </a>
+        <a href="#waitlist" class="btn btn-secondary">
+          Join the Waitlist
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+        </a>
+      </div>
+      <div class="hero-stats">
+        <div>
+          <div class="hero-stat-value">90.8%</div>
+          <div class="hero-stat-label">Convergence achieved</div>
+        </div>
+        <div>
+          <div class="hero-stat-value">91</div>
+          <div class="hero-stat-label">Claims extracted</div>
+        </div>
+        <div>
+          <div class="hero-stat-value">~$17</div>
+          <div class="hero-stat-label">Total API cost</div>
+        </div>
+        <div>
+          <div class="hero-stat-value">6</div>
+          <div class="hero-stat-label">Iterations to converge</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PROBLEM
+       ============================================================ -->
+  <section class="problem" id="problem">
+    <div class="container">
+      <div class="section-label">The Problem</div>
+      <h2 class="section-title">Hallucination cannot be eliminated.</h2>
+      <p class="section-subtitle">
+        Three independent formal proofs show that LLM hallucination is mathematically inevitable. Not hard to fix. Impossible.
+      </p>
+
+      <div class="problem-grid">
+        <div>
+          <div class="proof-card">
+            <div class="proof-card-header">
+              <div class="proof-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4.99c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/></svg>
+              </div>
+              <h3>Learning Theory Proof</h3>
+            </div>
+            <p>Any LLM with a computable ground truth function will inevitably hallucinate when used as a general problem solver. LLMs cannot learn all computable functions.</p>
+            <div class="proof-cite">Xu et al., 2024</div>
+          </div>
+
+          <div class="proof-card">
+            <div class="proof-card-header">
+              <div class="proof-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4.99c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/></svg>
+              </div>
+              <h3>Incompleteness Proof</h3>
+            </div>
+            <p>Via G&ouml;del's First Incompleteness Theorem and the Halting Problem. Hallucination stems from the mathematical and logical structure of LLMs themselves.</p>
+            <div class="proof-cite">Banerjee et al., 2024</div>
+          </div>
+
+          <div class="proof-card">
+            <div class="proof-card-header">
+              <div class="proof-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4.99c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"/></svg>
+              </div>
+              <h3>Quadrilemma Proof</h3>
+            </div>
+            <p>No LLM can simultaneously achieve truthful representation, semantic conservation, complete revelation, and knowledge-constrained optimality.</p>
+            <div class="proof-cite">Karpowicz, 2025</div>
+          </div>
+        </div>
+
+        <div>
+          <p class="section-subtitle" style="margin-bottom: 24px;">
+            Every AI development workflow treats hallucination as the enemy. RAG. Chain-of-thought. Guardrails. Constitutional AI. Billions of dollars trying to suppress it.
+          </p>
+          <p class="section-subtitle" style="margin-bottom: 24px;">
+            But hallucination is just the AI <em>confidently describing something that doesn't exist yet.</em>
+          </p>
+          <p class="section-subtitle" style="margin-bottom: 0;">
+            That is also exactly what a product specification does.
+          </p>
+          <div class="problem-conclusion">
+            <p>If hallucination is inevitable, the productive response is to <span>harness it</span> rather than fight it.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SOLUTION - The 6-Phase Cycle
+       ============================================================ -->
+  <section id="solution">
+    <div class="container">
+      <div class="section-label">The Solution</div>
+      <h2 class="section-title">Six phases. Fiction to reality.</h2>
+      <p class="section-subtitle">
+        LUCID converts loose application descriptions into verified software specifications through controlled exploitation of LLM hallucination.
+      </p>
+
+      <div class="phases-grid">
+        <div class="phase-card">
+          <div class="phase-number">01</div>
+          <h3>Describe</h3>
+          <p>Give the AI a loose, intentionally incomplete description of your application. The gaps are where hallucination does its best work.</p>
+        </div>
+        <div class="phase-card">
+          <div class="phase-number">02</div>
+          <h3>Hallucinate</h3>
+          <p>The AI writes a Terms of Service as if the app is live in production. It confabulates specific capabilities, SLAs, encryption standards, and data handling -- all in precise legal language.</p>
+        </div>
+        <div class="phase-card">
+          <div class="phase-number">03</div>
+          <h3>Extract</h3>
+          <p>Every declarative statement becomes a structured, testable requirement. A typical hallucination produces 80-150 extractable claims across security, functionality, performance, and compliance.</p>
+        </div>
+        <div class="phase-card">
+          <div class="phase-number">04</div>
+          <h3>Build</h3>
+          <p>Implement code to satisfy the extracted requirements. Use any methodology you want -- TDD, agile, vibe coding. The ToS claims are your acceptance criteria.</p>
+        </div>
+        <div class="phase-card">
+          <div class="phase-number">05</div>
+          <h3>Converge</h3>
+          <p>Verify every claim against the actual codebase. Each gets a verdict: PASS, PARTIAL, FAIL, or N/A. The gap between fiction and reality becomes your backlog.</p>
+        </div>
+        <div class="phase-card">
+          <div class="phase-number">06</div>
+          <h3>Regenerate</h3>
+          <p>Feed verified reality back. The AI writes an updated ToS that retains what's real and hallucinates new features grounded in what actually exists. Then loop.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       RESULTS
+       ============================================================ -->
+  <section class="results" id="results">
+    <div class="container">
+      <div class="section-label">Results</div>
+      <h2 class="section-title">Convergence is empirically observable.</h2>
+      <p class="section-subtitle">
+        Tested on a production Next.js application with ~30,000 lines of TypeScript across 200+ files.
+      </p>
+
+      <div class="results-grid">
+        <div class="convergence-chart">
+          <div class="chart-title">
+            Compliance Score by Iteration
+            <span>91 claims</span>
+          </div>
+
+          <div class="chart-row">
+            <div class="chart-label">Iter 1</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill low" style="width: 35%;">~35%</div>
+            </div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-label">Iter 3</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill mid" style="width: 57.3%;">57.3%</div>
+            </div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-label">Iter 4</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill mid" style="width: 69.8%;">69.8%</div>
+            </div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-label">Iter 5</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill high" style="width: 83.2%;">83.2%</div>
+            </div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-label">Iter 6</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill top" style="width: 90.8%;">90.8%</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border);">
+            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 10px; height: 10px; border-radius: 2px; background: var(--green);"></div>
+                <span style="font-size: 12px; color: var(--text-tertiary);">PASS: 68</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 10px; height: 10px; border-radius: 2px; background: var(--yellow);"></div>
+                <span style="font-size: 12px; color: var(--text-tertiary);">PARTIAL: 12</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 10px; height: 10px; border-radius: 2px; background: var(--red);"></div>
+                <span style="font-size: 12px; color: var(--text-tertiary);">FAIL: 5</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 10px; height: 10px; border-radius: 2px; background: var(--text-tertiary);"></div>
+                <span style="font-size: 12px; color: var(--text-tertiary);">N/A: 6</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="results-highlights">
+          <div class="highlight-card">
+            <div class="highlight-value green">57.3% &rarr; 90.8%</div>
+            <div class="highlight-label">Compliance score across 6 iterations</div>
+            <div class="highlight-detail">Monotonic increase, diminishing returns as expected</div>
+          </div>
+          <div class="highlight-card">
+            <div class="highlight-value accent">91 claims</div>
+            <div class="highlight-label">Testable requirements extracted</div>
+            <div class="highlight-detail">Spanning security, functionality, privacy, performance, legal</div>
+          </div>
+          <div class="highlight-card">
+            <div class="highlight-value yellow">~$17</div>
+            <div class="highlight-label">Total API cost for 6 iterations</div>
+            <div class="highlight-detail">~$2.90 per iteration (Claude API)</div>
+          </div>
+          <div class="highlight-card">
+            <div class="highlight-value cyan">5 remaining gaps</div>
+            <div class="highlight-label">All legitimate missing functionality</div>
+            <div class="highlight-detail">The hallucinated spec correctly identified real requirements a human PM might miss</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       HOW IT WORKS - The ToS Trick
+       ============================================================ -->
+  <section id="how-it-works">
+    <div class="container">
+      <div class="section-label">How It Works</div>
+      <h2 class="section-title">The Terms of Service trick.</h2>
+      <p class="section-subtitle">
+        Ask an LLM to write a Terms of Service for an application that doesn't exist. Don't tell it the app doesn't exist. Legal language can't be vague -- so the format forces the model to hallucinate <em>precisely</em>.
+      </p>
+
+      <div class="how-grid">
+        <div>
+          <h3 style="font-size: 18px; margin-bottom: 16px;">Why ToS is the ideal hallucination vehicle</h3>
+          <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 24px;">
+            No other document format forces this level of specificity across this many dimensions simultaneously. "The Service may do things" is not a valid legal clause. The format demands precision.
+          </p>
+          <table class="tos-table">
+            <thead>
+              <tr>
+                <th>ToS Section</th>
+                <th>Produces</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Service Description</td>
+                <td>Feature requirements</td>
+              </tr>
+              <tr>
+                <td>Acceptable Use</td>
+                <td>Input validation rules</td>
+              </tr>
+              <tr>
+                <td>Data Handling</td>
+                <td>Privacy &amp; security requirements</td>
+              </tr>
+              <tr>
+                <td>Limitations</td>
+                <td>Performance boundaries</td>
+              </tr>
+              <tr>
+                <td>SLA / Uptime</td>
+                <td>Reliability requirements</td>
+              </tr>
+              <tr>
+                <td>Termination</td>
+                <td>Account lifecycle requirements</td>
+              </tr>
+              <tr>
+                <td>Liability</td>
+                <td>Error handling requirements</td>
+              </tr>
+              <tr>
+                <td>Modifications</td>
+                <td>Versioning requirements</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <div class="cli-demo">
+            <div class="cli-header">
+              <div class="cli-dot red"></div>
+              <div class="cli-dot yellow"></div>
+              <div class="cli-dot green"></div>
+              <div class="cli-title">Terminal</div>
+            </div>
+            <div class="cli-body">
+              <div class="cli-comment"># Initialize in your project</div>
+              <div class="cli-prompt">lucid init</div>
+              <br>
+              <div class="cli-comment"># Generate hallucinated Terms of Service</div>
+              <div class="cli-prompt">lucid hallucinate</div>
+              <div class="cli-output">Writing ToS for nonexistent app...</div>
+              <div class="cli-output">Generated 487 lines, 91 extractable claims</div>
+              <br>
+              <div class="cli-comment"># Extract testable claims</div>
+              <div class="cli-prompt">lucid extract</div>
+              <div class="cli-output">Extracted 91 claims across 5 categories</div>
+              <br>
+              <div class="cli-comment"># Verify claims against your codebase</div>
+              <div class="cli-prompt">lucid verify</div>
+              <div class="cli-output">Compliance: 57.3% (38 PASS, 15 PARTIAL, 32 FAIL)</div>
+              <br>
+              <div class="cli-comment"># Generate fix tasks for gaps</div>
+              <div class="cli-prompt">lucid remediate</div>
+              <div class="cli-output">Generated 47 remediation tasks, sorted by severity</div>
+              <br>
+              <div class="cli-comment"># Feed reality back, get updated spec</div>
+              <div class="cli-prompt">lucid regenerate</div>
+              <div class="cli-output">New ToS grounded in verified reality</div>
+            </div>
+          </div>
+
+          <div class="quote-block">
+            <p>"We're all hallucinating all the time; when we agree about our hallucinations, we call it reality."</p>
+            <cite>Anil Seth, Professor of Cognitive and Computational Neuroscience</cite>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       ACADEMIC
+       ============================================================ -->
+  <section class="academic" id="academic">
+    <div class="container">
+      <div class="section-label">Research</div>
+      <h2 class="section-title">Grounded in neuroscience. Proven empirically.</h2>
+      <p class="section-subtitle">
+        LUCID draws on predictive processing, memory reconsolidation, and the same "neural network dreams as blueprints" principle that earned the 2024 Nobel Prize in Chemistry.
+      </p>
+
+      <div class="academic-grid">
+        <div class="academic-card">
+          <div class="academic-card-icon purple">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+          </div>
+          <h3>Academic Paper</h3>
+          <p>Full paper with theoretical foundations, neuroscience grounding (predictive processing, REBUS model, confabulation research), and empirical convergence data.</p>
+          <a href="https://doi.org/10.5281/zenodo.18522644" target="_blank" rel="noopener">
+            DOI: 10.5281/zenodo.18522644
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </a>
+        </div>
+        <div class="academic-card">
+          <div class="academic-card-icon blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+          </div>
+          <h3>The Protein Parallel</h3>
+          <p>David Baker's protein hallucination used neural network "dreams" as engineering blueprints -- generating novel protein structures validated in the lab. ~100 patents, 20+ biotech companies, 2024 Nobel Prize. LUCID applies the same principle to software.</p>
+          <a href="https://doi.org/10.1038/s41586-021-04184-w" target="_blank" rel="noopener">
+            Baker et al., Nature 2021
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </a>
+        </div>
+        <div class="academic-card">
+          <div class="academic-card-icon green-bg">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          </div>
+          <h3>CHI 2026 Workshop</h3>
+          <p>Submitted to the CHI 2026 Tools for Thought workshop. Explores LUCID as a cognitive tool that wraps System 1 (LLM generation) in a System 2 (verification) process -- the deliberate checking function the model lacks.</p>
+          <a href="https://github.com/gtsbahamas/hallucination-reversing-system/tree/main/chi-submission" target="_blank" rel="noopener">
+            Workshop submission
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="quote-block" style="margin-top: 40px; max-width: 720px;">
+        <p>"Perception is controlled hallucination. Hallucination is uncontrolled perception. LUCID adds the control."</p>
+        <cite>Adapted from Andy Clark, "The Experience Machine" (2023)</cite>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       WAITLIST
+       ============================================================ -->
+  <section class="waitlist" id="waitlist">
+    <div class="container">
+      <div class="section-label">Early Access</div>
+      <h2 class="section-title">LUCID SaaS is coming.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">
+        The open-source CLI works today. The hosted version -- with a dashboard, CI/CD integration, continuous monitoring, and team features -- is in development.
+      </p>
+
+      <div class="waitlist-box">
+        <h3>Join the waitlist</h3>
+        <p>Be the first to know when LUCID SaaS launches. No spam, just one email when it's ready.</p>
+        <form class="waitlist-form" action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
+          <input type="email" name="email" placeholder="you@company.com" required>
+          <button type="submit" class="btn btn-primary">Get Early Access</button>
+        </form>
+        <div class="waitlist-note">
+          Or try the CLI now:
+          <code style="font-family: var(--font-mono); color: var(--accent); margin-left: 4px;">git clone https://github.com/gtsbahamas/hallucination-reversing-system</code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer>
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-left">
+          <a href="#" class="footer-logo"><span>LUCID</span></a>
+          <ul class="footer-links">
+            <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://doi.org/10.5281/zenodo.18522644" target="_blank" rel="noopener">DOI: 10.5281/zenodo.18522644</a></li>
+            <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system/blob/main/docs/paper.md" target="_blank" rel="noopener">Paper</a></li>
+            <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system/blob/main/docs/methodology.md" target="_blank" rel="noopener">Methodology</a></li>
+          </ul>
+        </div>
+        <div class="footer-copy">
+          MIT License &middot; Ty Wells &middot; 2026
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ============================================================
+       MINIMAL JS: Smooth scroll + nav active state
+       ============================================================ -->
+  <script>
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        if (href === '#') return;
+        e.preventDefault();
+        const target = document.querySelector(href);
+        if (target) {
+          const navHeight = 64;
+          const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - navHeight;
+          window.scrollTo({ top: targetPosition, behavior: 'smooth' });
+        }
+      });
+    });
+
+    // Nav background opacity on scroll
+    const nav = document.querySelector('nav');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 20) {
+        nav.style.borderBottomColor = 'var(--border)';
+      } else {
+        nav.style.borderBottomColor = 'var(--border-subtle)';
+      }
+    }, { passive: true });
+  </script>
+
+</body>
+</html>
