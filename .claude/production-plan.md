@@ -47,11 +47,11 @@
 
 ---
 
-## Current Status: 8% → Target: $10K MRR
+## Current Status: 28% → Target: $10K MRR
 
 | Phase | Status | Completion |
 |-------|--------|------------|
-| Phase 0: Foundation (Weeks 1-2) | IN PROGRESS | 3/6 |
+| Phase 0: Foundation (Weeks 1-2) | IN PROGRESS | 9/9 |
 | Phase 1: GitHub Action MVP (Weeks 3-6) | NOT STARTED | 0/6 |
 | Phase 2: SaaS Platform (Weeks 7-12) | NOT STARTED | 0/5 |
 | Phase 3: Consulting Pipeline (Weeks 3-12) | NOT STARTED | 0/6 |
@@ -68,8 +68,8 @@
 ### 0.1 Publications — PARTIALLY COMPLETE
 - [x] Zenodo publication with DOI (10.5281/zenodo.18522644)
 - [x] CHI 2026 Tools for Thought workshop paper (4 pages, `chi-submission/`)
-- [ ] Submit CHI 2026 paper (deadline Feb 12 AoE) — needs Miro poster
-- [ ] Submit to arXiv
+- [x] Submit CHI 2026 paper (submitted via Fillout form, poster PDF uploaded)
+- [BLOCKED] Submit to arXiv — account registered (tywells_lucid2026), needs endorser
 - [x] Update paper: add Karpowicz 2025 citation (added to both CHI and arXiv papers)
 - [ ] Submit to TechRxiv, SSRN
 
@@ -78,14 +78,15 @@
 - [x] LinkedIn posted
 - [x] Twitter/X posted
 - [x] Skool posted (4 AI communities)
-- [ ] Publish blog post (draft at `docs/blog-post.md`)
-- [ ] Post to Reddit r/MachineLearning + r/programming (drafts ready)
-- [ ] Post to Dev.to (draft ready)
+- [x] Publish blog post (blog.html live on GitHub Pages)
+- [BLOCKED] Post to Reddit r/MachineLearning + r/programming — Reddit blocks automated browsers, content ready in docs/distribution-content.md
+- [x] Post to Dev.to (user posted manually)
 
 ### 0.3 Landing Page + Email Capture
-- [ ] Create landing page with waitlist signup
-- [ ] Position: "Verify what AI-built software actually does"
-- [ ] Include convergence chart, paper citation, GitHub link
+- [x] Create landing page with waitlist signup (index.html, GitHub Pages enabled)
+- [x] Position: "Verify what AI-built software actually does"
+- [x] Include convergence chart, paper citation, GitHub link
+- [x] Set up email capture (Formsubmit.co — activated and working)
 
 **Completion criteria:** CHI submitted, blog live, Reddit posted, landing page capturing emails.
 
@@ -194,6 +195,7 @@
 |------|---------|-----------|-------|
 | 2026-02-07 | Initial | Research, paper, LaTeX, old plan created | 5% |
 | 2026-02-08 | Research | Deep-dive research (3 agents), new plan created | 8% |
+| 2026-02-08 | Execution | Landing page, Karpowicz citation, poster content, monetization plan | 15% |
 
 ---
 
