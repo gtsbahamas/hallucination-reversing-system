@@ -1523,14 +1523,15 @@
       <div class="waitlist-box">
         <h3>Join the waitlist</h3>
         <p>Be the first to know when LUCID SaaS launches. No spam, just one email when it's ready.</p>
-        <form class="waitlist-form" action="https://formsubmit.co/tyclaude@snapperland.com" method="POST">
-          <input type="hidden" name="_subject" value="LUCID Waitlist Signup">
-          <input type="hidden" name="_captcha" value="false">
-          <input type="hidden" name="_next" value="https://gtsbahamas.github.io/hallucination-reversing-system/?thanks=1">
-          <input type="hidden" name="_template" value="table">
+        <form class="waitlist-form" id="waitlist-form">
           <input type="email" name="email" placeholder="you@company.com" required>
-          <button type="submit" class="btn btn-primary">Get Early Access</button>
+          <button type="submit" class="btn btn-primary" id="waitlist-btn">Get Early Access</button>
         </form>
+        <div id="waitlist-success" style="display:none; text-align:center; padding:1rem;">
+          <p style="color:var(--accent); font-weight:600; font-size:1.1rem;">You're on the list.</p>
+          <p style="color:var(--text-secondary); margin-top:0.5rem;">We'll email you when LUCID SaaS is ready.</p>
+        </div>
+        <div id="waitlist-error" style="display:none; text-align:center; padding:0.5rem; color:#ef4444;"></div>
         <div class="waitlist-note">
           Or try the CLI now:
           <code style="font-family: var(--font-mono); color: var(--accent); margin-left: 4px;">git clone https://github.com/gtsbahamas/hallucination-reversing-system</code>
@@ -1589,6 +1590,42 @@
         nav.style.borderBottomColor = 'var(--border-subtle)';
       }
     }, { passive: true });
+
+    // Waitlist form submission
+    const waitlistForm = document.getElementById('waitlist-form');
+    if (waitlistForm) {
+      waitlistForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('waitlist-btn');
+        const errorEl = document.getElementById('waitlist-error');
+        const email = this.querySelector('input[name="email"]').value;
+
+        btn.disabled = true;
+        btn.textContent = 'Submitting...';
+        errorEl.style.display = 'none';
+
+        try {
+          const res = await fetch('https://franklabs.io/api/leads/lucid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || 'Something went wrong');
+          }
+
+          waitlistForm.style.display = 'none';
+          document.getElementById('waitlist-success').style.display = 'block';
+        } catch (err) {
+          errorEl.textContent = err.message || 'Something went wrong. Please try again.';
+          errorEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Get Early Access';
+        }
+      });
+    }
   </script>
 
 </body>
