@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Platform Code Quality Index - LUCID</title>
+  <meta name="description" content="Independent benchmark scores for AI code generation platforms. How does your platform measure up against formal verification?">
+  <meta property="og:title" content="AI Platform Code Quality Index - LUCID">
+  <meta property="og:description" content="Independent benchmark scores for AI code generation platforms using formal verification, not just linting.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AI Platform Code Quality Index - LUCID">
+  <meta name="twitter:description" content="Independent benchmark scores for AI code generation platforms using formal verification, not just linting.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0a0a0b;
+      --bg-secondary: #111113;
+      --bg-tertiary: #18181b;
+      --bg-card: #16161a;
+      --bg-card-hover: #1c1c21;
+      --border: #27272a;
+      --border-subtle: #1e1e22;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-tertiary: #71717a;
+      --accent: #818cf8;
+      --accent-hover: #6366f1;
+      --accent-dim: rgba(129, 140, 248, 0.12);
+      --accent-glow: rgba(129, 140, 248, 0.06);
+      --green: #4ade80;
+      --green-dim: rgba(74, 222, 128, 0.12);
+      --yellow: #facc15;
+      --yellow-dim: rgba(250, 204, 21, 0.12);
+      --red: #f87171;
+      --red-dim: rgba(248, 113, 113, 0.12);
+      --cyan: #22d3ee;
+      --cyan-dim: rgba(34, 211, 238, 0.1);
+      --orange: #fb923c;
+      --orange-dim: rgba(251, 146, 60, 0.12);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    section {
+      padding: 100px 0;
+    }
+
+    @media (max-width: 768px) {
+      section { padding: 64px 0; }
+    }
+
+    h1, h2, h3 {
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+
+    .section-subtitle {
+      font-size: 18px;
+      color: var(--text-secondary);
+      max-width: 640px;
+      line-height: 1.7;
+    }
+
+    /* ============================================================
+       NAV
+       ============================================================ */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 10, 11, 0.8);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+
+    .nav-logo {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-logo span { color: var(--accent); }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text-primary); }
+
+    .nav-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--accent-dim);
+      color: var(--accent) !important;
+      border: 1px solid rgba(129, 140, 248, 0.2);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .nav-cta:hover {
+      background: rgba(129, 140, 248, 0.18);
+      border-color: rgba(129, 140, 248, 0.35);
+    }
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+    }
+
+    /* ============================================================
+       HERO
+       ============================================================ */
+    .hero {
+      padding-top: 160px;
+      padding-bottom: 80px;
+      text-align: center;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 600px;
+      background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 13px;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+    }
+
+    .hero-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .hero h1 {
+      font-size: clamp(40px, 6vw, 64px);
+      font-weight: 800;
+      line-height: 1.05;
+      margin-bottom: 8px;
+      letter-spacing: -0.035em;
+    }
+
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--cyan) 50%, var(--accent) 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-tagline {
+      font-size: clamp(16px, 2.5vw, 20px);
+      color: var(--text-secondary);
+      max-width: 680px;
+      margin: 24px auto 40px;
+      line-height: 1.6;
+    }
+
+    .hero-stats {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 48px;
+      margin-top: 48px;
+      padding-top: 40px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .hero-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+
+    .hero-stat-label {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+
+    @media (max-width: 640px) {
+      .hero-stats { gap: 24px; flex-wrap: wrap; }
+    }
+
+    /* ============================================================
+       LEADERBOARD
+       ============================================================ */
+    .leaderboard {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .platform-cards {
+      display: grid;
+      gap: 20px;
+      margin-top: 48px;
+    }
+
+    .platform-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      display: grid;
+      grid-template-columns: 80px 1fr 200px;
+      gap: 32px;
+      align-items: center;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .platform-card:hover {
+      border-color: var(--text-tertiary);
+      background: var(--bg-card-hover);
+      transform: translateY(-2px);
+    }
+
+    .platform-card .rank-badge {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 24px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .rank-badge.rank-1 {
+      background: var(--yellow-dim);
+      color: var(--yellow);
+      border: 2px solid rgba(250, 204, 21, 0.3);
+    }
+
+    .rank-badge.rank-2 {
+      background: var(--orange-dim);
+      color: var(--orange);
+      border: 2px solid rgba(251, 146, 60, 0.3);
+    }
+
+    .rank-badge.rank-3 {
+      background: var(--red-dim);
+      color: var(--red);
+      border: 2px solid rgba(248, 113, 113, 0.3);
+    }
+
+    .rank-badge.rank-pending {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 2px solid rgba(129, 140, 248, 0.3);
+      font-size: 16px;
+    }
+
+    .platform-info h3 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .platform-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .platform-meta-item {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-tertiary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .platform-meta-item svg {
+      width: 14px;
+      height: 14px;
+      opacity: 0.6;
+    }
+
+    .platform-finding {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .platform-finding strong {
+      color: var(--red);
+      font-weight: 600;
+    }
+
+    .platform-finding em {
+      color: var(--yellow);
+      font-style: normal;
+      font-weight: 500;
+    }
+
+    .score-gauge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .gauge-ring {
+      width: 120px;
+      height: 120px;
+      position: relative;
+    }
+
+    .gauge-ring svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    .gauge-ring .track {
+      fill: none;
+      stroke: var(--bg-tertiary);
+      stroke-width: 8;
+    }
+
+    .gauge-ring .fill {
+      fill: none;
+      stroke-width: 8;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1.5s ease-out;
+    }
+
+    .gauge-ring .fill.red { stroke: var(--red); }
+    .gauge-ring .fill.yellow { stroke: var(--yellow); }
+    .gauge-ring .fill.green { stroke: var(--green); }
+    .gauge-ring .fill.accent { stroke: var(--accent); }
+
+    .gauge-value {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .gauge-value small {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-tertiary);
+      margin-top: -2px;
+    }
+
+    .gauge-label {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    @media (max-width: 768px) {
+      .platform-card {
+        grid-template-columns: 1fr;
+        text-align: center;
+        gap: 20px;
+      }
+      .platform-card .rank-badge {
+        margin: 0 auto;
+      }
+      .platform-meta {
+        justify-content: center;
+      }
+      .score-gauge {
+        margin: 0 auto;
+      }
+    }
+
+    /* Pending / Invited cards */
+    .platform-card.pending {
+      border-style: dashed;
+      opacity: 0.75;
+    }
+
+    .platform-card.pending:hover {
+      opacity: 1;
+    }
+
+    .pending-label {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .pending-label.controlled {
+      background: var(--cyan-dim);
+      color: var(--cyan);
+    }
+
+    .pending-label.invited {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    /* ============================================================
+       METHODOLOGY
+       ============================================================ */
+    .methodology-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 48px;
+    }
+
+    @media (max-width: 768px) {
+      .methodology-grid { grid-template-columns: 1fr; }
+    }
+
+    .method-card {
+      padding: 28px 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      transition: border-color 0.2s;
+    }
+
+    .method-card:hover { border-color: var(--text-tertiary); }
+
+    .method-card-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .method-card-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .method-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .method-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* ============================================================
+       WHAT WE TEST
+       ============================================================ */
+    .comparison {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 48px;
+    }
+
+    @media (max-width: 768px) {
+      .compare-grid { grid-template-columns: 1fr; }
+    }
+
+    .compare-card {
+      padding: 32px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+    }
+
+    .compare-card.lucid-card {
+      border-color: rgba(129, 140, 248, 0.3);
+      background: linear-gradient(135deg, var(--bg-card) 0%, rgba(129, 140, 248, 0.04) 100%);
+    }
+
+    .compare-card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .compare-card .compare-sub {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      font-family: var(--font-mono);
+      margin-bottom: 20px;
+    }
+
+    .compare-list {
+      list-style: none;
+    }
+
+    .compare-list li {
+      font-size: 14px;
+      color: var(--text-secondary);
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      line-height: 1.5;
+    }
+
+    .compare-list li:last-child { border-bottom: none; }
+
+    .compare-list .check {
+      color: var(--green);
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .compare-list .cross {
+      color: var(--red);
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .compare-list .dot-icon {
+      color: var(--text-tertiary);
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* ============================================================
+       CTA
+       ============================================================ */
+    .cta-section {
+      text-align: center;
+    }
+
+    .cta-box {
+      max-width: 640px;
+      margin: 48px auto 0;
+      padding: 48px 40px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      position: relative;
+    }
+
+    .cta-box::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: var(--radius-lg);
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(129, 140, 248, 0.2), transparent, rgba(34, 211, 238, 0.15));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .cta-box h3 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .cta-box p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+      line-height: 1.7;
+    }
+
+    .cta-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 24px;
+      border-radius: var(--radius-md);
+      font-size: 15px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+      font-family: var(--font-sans);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0a0a0b;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 24px rgba(129, 140, 248, 0.25);
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--text-tertiary);
+    }
+
+    .btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .cta-note {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-top: 20px;
+      font-family: var(--font-mono);
+    }
+
+    .cta-note a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .cta-note a:hover {
+      text-decoration: underline;
+    }
+
+    /* ============================================================
+       FOOTER
+       ============================================================ */
+    footer {
+      padding: 48px 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .footer-logo {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .footer-logo span { color: var(--accent); }
+
+    .footer-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .footer-links a {
+      font-size: 14px;
+      color: var(--text-tertiary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover { color: var(--text-secondary); }
+
+    .footer-copy {
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    @media (max-width: 640px) {
+      .footer-content {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .footer-left {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    /* ============================================================
+       ANIMATIONS
+       ============================================================ */
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(24px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-in {
+      opacity: 0;
+      animation: fade-up 0.6s ease-out forwards;
+    }
+
+    .animate-in:nth-child(1) { animation-delay: 0.1s; }
+    .animate-in:nth-child(2) { animation-delay: 0.2s; }
+    .animate-in:nth-child(3) { animation-delay: 0.3s; }
+    .animate-in:nth-child(4) { animation-delay: 0.4s; }
+    .animate-in:nth-child(5) { animation-delay: 0.5s; }
+
+    /* ============================================================
+       LAST UPDATED BADGE
+       ============================================================ */
+    .updated-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 8px;
+    }
+
+    .updated-badge svg {
+      width: 14px;
+      height: 14px;
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="container">
+      <a href="../../index.html" class="nav-logo"><span>LUCID</span></a>
+      <ul class="nav-links">
+        <li><a href="../../index.html">Home</a></li>
+        <li><a href="../../report.html">Full Report</a></li>
+        <li><a href="#leaderboard">Rankings</a></li>
+        <li><a href="#methodology">Methodology</a></li>
+        <li><a href="#submit">Submit</a></li>
+        <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system" class="nav-cta" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        Updated February 2026
+      </div>
+      <h1>
+        AI Platform<br>
+        <span class="gradient">Code Quality Index</span>
+      </h1>
+      <p class="hero-tagline">
+        Independent benchmarks measuring what AI-built code actually does versus what it claims to do. Scored by formal verification, not linting.
+      </p>
+      <div class="updated-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Last updated: February 11, 2026 &middot; 5 platforms tracked
+      </div>
+
+      <div class="hero-stats">
+        <div>
+          <div class="hero-stat-value" style="color: var(--red);">39/100</div>
+          <div class="hero-stat-label">Average platform score</div>
+        </div>
+        <div>
+          <div class="hero-stat-value" style="color: var(--text-primary);">950+</div>
+          <div class="hero-stat-label">Files analyzed</div>
+        </div>
+        <div>
+          <div class="hero-stat-value" style="color: var(--yellow);">5</div>
+          <div class="hero-stat-label">Platforms tracked</div>
+        </div>
+        <div>
+          <div class="hero-stat-value" style="color: var(--cyan);">21</div>
+          <div class="hero-stat-label">Critical bugs found</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEADERBOARD -->
+  <section class="leaderboard" id="leaderboard">
+    <div class="container">
+      <div class="section-label">Rankings</div>
+      <h2 class="section-title">How does your platform score?</h2>
+      <p class="section-subtitle">
+        Real applications built by real users on each platform. Verified against 80-150 formal claims per app spanning security, functionality, and architecture.
+      </p>
+
+      <div class="platform-cards">
+
+        <!-- #1: Bolt.new -->
+        <div class="platform-card animate-in">
+          <div class="rank-badge rank-1">#1</div>
+          <div class="platform-info">
+            <h3>Bolt.new</h3>
+            <div class="platform-meta">
+              <div class="platform-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                1 app analyzed
+              </div>
+              <div class="platform-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                437 files
+              </div>
+            </div>
+            <p class="platform-finding">
+              <strong>Broken config bootstrap</strong> -- application fails to initialize correctly.
+              <strong>IDOR vulnerability</strong> -- users can access other users' data by changing IDs.
+              Missing input validation across forms.
+            </p>
+          </div>
+          <div class="score-gauge">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 120 120">
+                <circle class="track" cx="60" cy="60" r="50"/>
+                <circle class="fill red" cx="60" cy="60" r="50"
+                  stroke-dasharray="314.16"
+                  stroke-dashoffset="182.21"/>
+              </svg>
+              <div class="gauge-value" style="color: var(--red);">
+                42
+                <small>/100</small>
+              </div>
+            </div>
+            <div class="gauge-label">Quality Score</div>
+          </div>
+        </div>
+
+        <!-- #1: Lovable (tied) -->
+        <div class="platform-card animate-in">
+          <div class="rank-badge rank-1">#1</div>
+          <div class="platform-info">
+            <h3>Lovable</h3>
+            <div class="platform-meta">
+              <div class="platform-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                2 apps analyzed
+              </div>
+              <div class="platform-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                238 files
+              </div>
+            </div>
+            <p class="platform-finding">
+              <strong>Unprotected admin routes</strong> -- any user can access admin panels.
+              <strong>Missing implementations</strong> -- UI buttons wired to empty handlers.
+              Generated code passes linting but fails functional verification.
+            </p>
+          </div>
+          <div class="score-gauge">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 120 120">
+                <circle class="track" cx="60" cy="60" r="50"/>
+                <circle class="fill red" cx="60" cy="60" r="50"
+                  stroke-dasharray="314.16"
+                  stroke-dashoffset="182.21"/>
+              </svg>
+              <div class="gauge-value" style="color: var(--red);">
+                42
+                <small>/100</small>
+              </div>
+            </div>
+            <div class="gauge-label">Quality Score</div>
+          </div>
+        </div>
+
+        <!-- #3: Replit -->
+        <div class="platform-card animate-in">
+          <div class="rank-badge rank-3">#3</div>
+          <div class="platform-info">
+            <h3>Replit</h3>
+            <div class="platform-meta">
+              <div class="platform-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                1 app analyzed
+              </div>
+              <div class="platform-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                275 files
+              </div>
+            </div>
+            <p class="platform-finding">
+              <strong>Fake analytics</strong> -- dashboard displays hardcoded data, not real metrics.
+              <strong>Non-existent API endpoints</strong> -- frontend calls routes that return 404.
+              Worst score of all benchmarked platforms.
+            </p>
+          </div>
+          <div class="score-gauge">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 120 120">
+                <circle class="track" cx="60" cy="60" r="50"/>
+                <circle class="fill red" cx="60" cy="60" r="50"
+                  stroke-dasharray="314.16"
+                  stroke-dashoffset="213.63"/>
+              </svg>
+              <div class="gauge-value" style="color: var(--red);">
+                32
+                <small>/100</small>
+              </div>
+            </div>
+            <div class="gauge-label">Quality Score</div>
+          </div>
+        </div>
+
+        <!-- v0 (Vercel) - Controlled only -->
+        <div class="platform-card pending animate-in">
+          <div class="rank-badge rank-pending">--</div>
+          <div class="platform-info">
+            <h3>v0 <span style="font-size: 14px; color: var(--text-tertiary); font-weight: 400;">(Vercel)</span></h3>
+            <div class="platform-meta">
+              <div class="platform-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                1 app analyzed
+              </div>
+              <div class="platform-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                ~15 files
+              </div>
+            </div>
+            <p class="platform-finding">
+              <em>Controlled benchmark only</em> -- scored 100% on a todo app benchmark, but no real-world production app data yet.
+              Pending real-world application analysis for ranking.
+            </p>
+            <span class="pending-label controlled">Controlled data only</span>
+          </div>
+          <div class="score-gauge">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 120 120">
+                <circle class="track" cx="60" cy="60" r="50"/>
+                <circle class="fill accent" cx="60" cy="60" r="50"
+                  stroke-dasharray="314.16"
+                  stroke-dashoffset="314.16"/>
+              </svg>
+              <div class="gauge-value" style="color: var(--accent);">
+                TBD
+                <small>&nbsp;</small>
+              </div>
+            </div>
+            <div class="gauge-label">Awaiting data</div>
+          </div>
+        </div>
+
+        <!-- Cursor - Not benchmarked -->
+        <div class="platform-card pending animate-in">
+          <div class="rank-badge rank-pending">--</div>
+          <div class="platform-info">
+            <h3>Cursor</h3>
+            <div class="platform-meta">
+              <div class="platform-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                Not yet benchmarked
+              </div>
+            </div>
+            <p class="platform-finding">
+              <em>Invited to participate.</em> Cursor has been invited to submit applications for formal verification benchmarking.
+              We welcome their participation in the index.
+            </p>
+            <span class="pending-label invited">Invited to participate</span>
+          </div>
+          <div class="score-gauge">
+            <div class="gauge-ring">
+              <svg viewBox="0 0 120 120">
+                <circle class="track" cx="60" cy="60" r="50"/>
+                <circle class="fill accent" cx="60" cy="60" r="50"
+                  stroke-dasharray="314.16"
+                  stroke-dashoffset="314.16"/>
+              </svg>
+              <div class="gauge-value" style="color: var(--accent);">
+                --
+                <small>&nbsp;</small>
+              </div>
+            </div>
+            <div class="gauge-label">Not scored</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- WHAT WE TEST -->
+  <section class="comparison" id="what-we-test">
+    <div class="container">
+      <div class="section-label">What We Test</div>
+      <h2 class="section-title">Formal verification, not linting.</h2>
+      <p class="section-subtitle">
+        Traditional code quality tools check syntax. We check whether the application actually does what it's supposed to do.
+      </p>
+
+      <div class="compare-grid">
+        <div class="compare-card">
+          <h3 style="color: var(--text-tertiary);">Traditional Tools</h3>
+          <div class="compare-sub">ESLint, SonarQube, CodeClimate</div>
+          <ul class="compare-list">
+            <li><span class="dot-icon">-</span> Syntax correctness and style enforcement</li>
+            <li><span class="dot-icon">-</span> Known vulnerability patterns (CVEs)</li>
+            <li><span class="dot-icon">-</span> Code complexity metrics</li>
+            <li><span class="cross">x</span> Cannot detect empty handlers behind real buttons</li>
+            <li><span class="cross">x</span> Cannot detect fake analytics dashboards</li>
+            <li><span class="cross">x</span> Cannot detect unprotected admin routes</li>
+            <li><span class="cross">x</span> Cannot detect IDOR vulnerabilities in business logic</li>
+            <li><span class="cross">x</span> Cannot detect claims-vs-reality gaps</li>
+          </ul>
+        </div>
+        <div class="compare-card lucid-card">
+          <h3 style="color: var(--accent);">LUCID Verification</h3>
+          <div class="compare-sub">Formal claim extraction + codebase verification</div>
+          <ul class="compare-list">
+            <li><span class="check">+</span> Extracts 80-150 testable claims per application</li>
+            <li><span class="check">+</span> Verifies every button, form, and API actually works</li>
+            <li><span class="check">+</span> Detects scaffolded UI with no backend</li>
+            <li><span class="check">+</span> Catches IDOR, broken auth, missing validation</li>
+            <li><span class="check">+</span> Identifies fake data and hardcoded responses</li>
+            <li><span class="check">+</span> Maps claimed features to actual implementations</li>
+            <li><span class="check">+</span> Scores security, functionality, architecture, compliance</li>
+            <li><span class="check">+</span> Produces actionable remediation tasks</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- METHODOLOGY -->
+  <section id="methodology">
+    <div class="container">
+      <div class="section-label">Methodology</div>
+      <h2 class="section-title">How we score platforms.</h2>
+      <p class="section-subtitle">
+        All benchmarked applications are user-built projects from public repositories or submitted codebases. No cherry-picked examples.
+      </p>
+
+      <div class="methodology-grid">
+        <div class="method-card">
+          <div class="method-card-icon" style="background: var(--accent-dim);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <h3>Claim Extraction</h3>
+          <p>LUCID generates a formal specification for each application, extracting 80-150 testable claims across security, functionality, data handling, performance, and compliance.</p>
+        </div>
+        <div class="method-card">
+          <div class="method-card-icon" style="background: var(--cyan-dim);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          </div>
+          <h3>Codebase Verification</h3>
+          <p>Each claim is verified against the actual source code. Every function, route, handler, and data flow is traced. PASS, PARTIAL, FAIL, or N/A verdict per claim.</p>
+        </div>
+        <div class="method-card">
+          <div class="method-card-icon" style="background: var(--green-dim);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M16 8v8m-8-8v8m-4-4h16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          </div>
+          <h3>Scoring</h3>
+          <p>Composite score (0-100) weighted across categories: security (30%), functionality (30%), architecture (20%), and compliance (20%). Severity-weighted to penalize critical gaps.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SUBMIT CTA -->
+  <section class="cta-section" id="submit">
+    <div class="container">
+      <div class="section-label">Contribute</div>
+      <h2 class="section-title">Submit your codebase.</h2>
+      <p class="section-subtitle" style="margin: 0 auto;">
+        Are you building with an AI platform? Submit your application for a free formal verification report. Help make the index more comprehensive.
+      </p>
+
+      <div class="cta-box">
+        <h3>Get your free quality score</h3>
+        <p>
+          Submit a public repo URL or invite us to a private repo. We'll run LUCID verification and add the results to the index. Platform developers are also welcome to participate directly.
+        </p>
+        <div class="cta-actions">
+          <a href="mailto:tyclaude@snapperland.com?subject=LUCID%20Code%20Quality%20Index%20-%20Codebase%20Submission&body=Platform%20used:%0ARepo%20URL:%0AApp%20description:%0A" class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Submit Codebase
+          </a>
+          <a href="../../report.html" class="btn btn-secondary">
+            View Full Report
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+          </a>
+        </div>
+        <div class="cta-note">
+          Or email directly: <a href="mailto:tyclaude@snapperland.com">tyclaude@snapperland.com</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-left">
+          <a href="../../index.html" class="footer-logo"><span>LUCID</span></a>
+          <ul class="footer-links">
+            <li><a href="../../report.html">Full Report</a></li>
+            <li><a href="https://doi.org/10.5281/zenodo.18522644" target="_blank" rel="noopener">Research Paper</a></li>
+            <li><a href="https://github.com/gtsbahamas/hallucination-reversing-system" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="../../index.html#waitlist">API Docs</a></li>
+          </ul>
+        </div>
+        <div class="footer-copy">
+          MIT License &middot; Ty Wells &middot; 2026
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- JS: Smooth scroll + gauge animations -->
+  <script>
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        if (href === '#') return;
+        e.preventDefault();
+        const target = document.querySelector(href);
+        if (target) {
+          const navHeight = 64;
+          const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - navHeight;
+          window.scrollTo({ top: targetPosition, behavior: 'smooth' });
+        }
+      });
+    });
+
+    // Nav border on scroll
+    const nav = document.querySelector('nav');
+    window.addEventListener('scroll', () => {
+      nav.style.borderBottomColor = window.scrollY > 20 ? 'var(--border)' : 'var(--border-subtle)';
+    }, { passive: true });
+
+    // Animate gauge rings on scroll into view
+    const gauges = document.querySelectorAll('.gauge-ring');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.3 });
+
+    gauges.forEach(g => observer.observe(g));
+
+    // Animate platform cards on scroll
+    const cards = document.querySelectorAll('.animate-in');
+    const cardObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+          cardObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+
+    cards.forEach(c => {
+      c.style.opacity = '0';
+      c.style.transform = 'translateY(24px)';
+      c.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+      cardObserver.observe(c);
+    });
+  </script>
+
+</body>
+</html>
