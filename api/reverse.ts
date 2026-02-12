@@ -1,14 +1,52 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 
 const MODEL = 'claude-sonnet-4-5-20250929';
+const API_URL = 'https://api.anthropic.com/v1/messages';
 
-function getClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY not configured');
+interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+interface AnthropicResponse {
+  content: Array<TextBlock | { type: string }>;
+  usage: { input_tokens: number; output_tokens: number };
+}
+
+async function callAnthropic(
+  apiKey: string,
+  system: string,
+  userMessage: string,
+  maxTokens: number,
+): Promise<AnthropicResponse> {
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Anthropic API ${response.status}: ${body.slice(0, 300)}`);
   }
-  return new Anthropic({ apiKey, timeout: 5 * 60 * 1000 });
+
+  return response.json() as Promise<AnthropicResponse>;
+}
+
+function getText(resp: AnthropicResponse): string {
+  return resp.content
+    .filter((b): b is TextBlock => b.type === 'text')
+    .map(b => b.text)
+    .join('');
 }
 
 // ── Spec Synthesizer ──────────────────────────────────────────
@@ -120,24 +158,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Invalid or missing API key' });
   }
 
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  }
+
   try {
-    const client = getClient();
     const startTime = Date.now();
     let totalIn = 0, totalOut = 0;
 
-    // Log for debugging
     console.log(`[reverse] Starting: task="${task.slice(0, 50)}" lang=${language}`);
 
     // ── Phase 1: Spec Synthesis ──
-    const specMsg = await client.messages.create({
-      model: MODEL, max_tokens: 16_000,
-      system: SYNTHESIS_SYSTEM,
-      messages: [{ role: 'user', content: `Language: ${language}\n\nTask:\n${task}` }],
-    });
-    totalIn += specMsg.usage.input_tokens;
-    totalOut += specMsg.usage.output_tokens;
-    const specText = specMsg.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('');
-    const specs = safeParseArray(specText) as Array<{ id: string; category: string; severity: string; description: string; assertion: string; rationale: string }>;
+    const specResp = await callAnthropic(
+      apiKey, SYNTHESIS_SYSTEM,
+      `Language: ${language}\n\nTask:\n${task}`,
+      16_000,
+    );
+    totalIn += specResp.usage.input_tokens;
+    totalOut += specResp.usage.output_tokens;
+    const specs = safeParseArray(getText(specResp)) as Array<{
+      id: string; category: string; severity: string;
+      description: string; assertion: string; rationale: string;
+    }>;
+
+    console.log(`[reverse] Phase 1 done: ${specs.length} specs`);
 
     // ── Phase 2: Constraints ──
     const taskLower = task.toLowerCase();
@@ -150,16 +195,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const specList = specs.map(s => `[${s.id}] (${s.category}, ${s.severity}) ${s.description}\n  Assertion: ${s.assertion}`).join('\n\n');
-    const conMsg = await client.messages.create({
-      model: MODEL, max_tokens: 8_000,
-      system: CONSTRAINT_SYSTEM,
-      messages: [{ role: 'user', content: `Language: ${language}\nTask: ${task}\n\nSpecifications:\n${specList}` }],
-    });
-    totalIn += conMsg.usage.input_tokens;
-    totalOut += conMsg.usage.output_tokens;
-    const conText = conMsg.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('');
-    const specConstraints = (safeParseArray(conText) as Array<{ type: string; description: string; pattern?: string }>).map(c => ({ ...c, source: 'spec' }));
+    const specList = specs.map(s =>
+      `[${s.id}] (${s.category}, ${s.severity}) ${s.description}\n  Assertion: ${s.assertion}`
+    ).join('\n\n');
+
+    const conResp = await callAnthropic(
+      apiKey, CONSTRAINT_SYSTEM,
+      `Language: ${language}\nTask: ${task}\n\nSpecifications:\n${specList}`,
+      8_000,
+    );
+    totalIn += conResp.usage.input_tokens;
+    totalOut += conResp.usage.output_tokens;
+    const specConstraints = (safeParseArray(getText(conResp)) as Array<{
+      type: string; description: string; pattern?: string;
+    }>).map(c => ({ ...c, source: 'spec' }));
 
     const allConstraints = [...domainConstraints, ...specConstraints];
     const seen = new Set<string>();
@@ -170,8 +219,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return true;
     }).map((c, i) => ({ id: `CON-${String(i + 1).padStart(3, '0')}`, ...c }));
 
+    console.log(`[reverse] Phase 2 done: ${constraints.length} constraints`);
+
     // ── Phase 3: Guided Generation ──
-    const specBlock = specs.map(s => `[${s.id}] (${s.severity}/${s.category}): ${s.description}\n  Assertion: ${s.assertion}`).join('\n');
+    const specBlock = specs.map(s =>
+      `[${s.id}] (${s.severity}/${s.category}): ${s.description}\n  Assertion: ${s.assertion}`
+    ).join('\n');
     const musts = constraints.filter(c => c.type === 'must');
     const mustNots = constraints.filter(c => c.type === 'must-not');
     const prefers = constraints.filter(c => c.type === 'prefer');
@@ -183,28 +236,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const genSystem = `You are an expert programmer. Generate production-quality ${language} code.\n\nSPECIFICATIONS — Your code MUST satisfy ALL:\n${specBlock}\n\nCONSTRAINTS:\n${conBlock}\nReturn ONLY the code. No markdown fences, no explanations.`;
 
-    const genMsg = await client.messages.create({
-      model: MODEL, max_tokens: 16_000,
-      system: genSystem,
-      messages: [{ role: 'user', content: `Generate ${language} code for:\n\n${task}` }],
-    });
-    totalIn += genMsg.usage.input_tokens;
-    totalOut += genMsg.usage.output_tokens;
-    const code = stripFences(genMsg.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join(''));
+    const genResp = await callAnthropic(
+      apiKey, genSystem,
+      `Generate ${language} code for:\n\n${task}`,
+      16_000,
+    );
+    totalIn += genResp.usage.input_tokens;
+    totalOut += genResp.usage.output_tokens;
+    const code = stripFences(getText(genResp));
+
+    console.log(`[reverse] Phase 3 done: ${code.length} chars of code`);
 
     // ── Self-Verification ──
-    const verMsg = await client.messages.create({
-      model: MODEL, max_tokens: 8_000,
-      system: VERIFICATION_SYSTEM,
-      messages: [{ role: 'user', content: `CODE:\n${code}\n\nSPECIFICATIONS:\n${specBlock}` }],
-    });
-    totalIn += verMsg.usage.input_tokens;
-    totalOut += verMsg.usage.output_tokens;
-    const verText = verMsg.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('');
-    const verification = safeParseArray(verText) as Array<{ specId: string; status: string; reasoning: string }>;
+    const verResp = await callAnthropic(
+      apiKey, VERIFICATION_SYSTEM,
+      `CODE:\n${code}\n\nSPECIFICATIONS:\n${specBlock}`,
+      8_000,
+    );
+    totalIn += verResp.usage.input_tokens;
+    totalOut += verResp.usage.output_tokens;
+    const verification = safeParseArray(getText(verResp)) as Array<{
+      specId: string; status: string; reasoning: string;
+    }>;
     const satisfiedCount = verification.filter(v => v.status === 'satisfied').length;
 
     const durationMs = Date.now() - startTime;
+
+    console.log(`[reverse] Done: ${satisfiedCount}/${specs.length} specs satisfied in ${durationMs}ms`);
 
     res.setHeader('Access-Control-Allow-Origin', '*');
     return res.status(200).json({
@@ -228,17 +286,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     const stack = err instanceof Error ? err.stack : undefined;
-    // Dig into the cause chain for APIConnectionError
-    let causeMessage: string | undefined;
-    if (err && typeof err === 'object' && 'cause' in err) {
-      const cause = (err as { cause: unknown }).cause;
-      causeMessage = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
-    }
-    console.error(`[reverse] Error: ${message}`, causeMessage, stack);
-    return res.status(500).json({
-      error: message,
-      cause: causeMessage,
-      detail: stack?.split('\n').slice(0, 5),
-    });
+    console.error(`[reverse] Error: ${message}`, stack);
+    return res.status(500).json({ error: message, detail: stack?.split('\n').slice(0, 5) });
   }
 }
