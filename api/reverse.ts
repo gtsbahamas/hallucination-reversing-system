@@ -125,6 +125,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const startTime = Date.now();
     let totalIn = 0, totalOut = 0;
 
+    // Log for debugging
+    console.log(`[reverse] Starting: task="${task.slice(0, 50)}" lang=${language}`);
+
     // ── Phase 1: Spec Synthesis ──
     const specMsg = await client.messages.create({
       model: MODEL, max_tokens: 16_000,
@@ -224,6 +227,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    return res.status(500).json({ error: message });
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error(`[reverse] Error: ${message}`, stack);
+    return res.status(500).json({ error: message, detail: stack?.split('\n').slice(0, 3) });
   }
 }
