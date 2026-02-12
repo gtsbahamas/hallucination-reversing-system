@@ -225,10 +225,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         durationMs,
       },
     });
-  } catch (err) {
+  } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     const stack = err instanceof Error ? err.stack : undefined;
-    console.error(`[reverse] Error: ${message}`, stack);
-    return res.status(500).json({ error: message, detail: stack?.split('\n').slice(0, 3) });
+    // Dig into the cause chain for APIConnectionError
+    let causeMessage: string | undefined;
+    if (err && typeof err === 'object' && 'cause' in err) {
+      const cause = (err as { cause: unknown }).cause;
+      causeMessage = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
+    }
+    console.error(`[reverse] Error: ${message}`, causeMessage, stack);
+    return res.status(500).json({
+      error: message,
+      cause: causeMessage,
+      detail: stack?.split('\n').slice(0, 5),
+    });
   }
 }
