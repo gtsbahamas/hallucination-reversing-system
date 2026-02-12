@@ -1,0 +1,14 @@
+{
+  "task_id": "sympy__sympy-12171",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "resolved": false,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_Derivative\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_Integer\",\n        \"test_Rational\",\n        \"test_Function\",\n        \"test_Mul\",\n        \"test_constants\",\n        \"test_containers\",\n        \"test_Integral\"\n      ],\n      \"failure\": [\n        \"test_Pow\"\n      ]\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/sympy/printing/mathematica.py\n+++ b/sympy/printing/mathematica.py\n@@ -109,6 +109,13 @@ class MCodePrinter(CodePrinter):\n     def _print_Sum(self, expr):\n         return \"Hold[Sum[\" + ', '.join(self.doprint(a) for a in expr.args) + \"]]\"\n \n+    def _print_Derivative(self, expr):\n+        return \"D[%s]\" % (self.stringify(expr.args, \", \"))\n+\n+    def _print_Float(self, expr):\n+        res = str(expr)\n+        return res.replace('e', '*^')\n+\n \n def mathematica_code(expr, **settings):\n     r\"\"\"Converts an expr to a string of the Wolfram Mathematica code"
+}

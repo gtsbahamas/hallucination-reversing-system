@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/132",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "all_passed": false,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"/tmp/tmpqt9b0lxi.py\", line 71, in <module>\n    check(is_nested)\n    ~~~~~^^^^^^^^^^^\n  File \"/tmp/tmpqt9b0lxi.py\", line 53, in check\n    assert candidate('[]]]]]]][[[[[]') == False\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n",
+    "returncode": 1,
+    "error_type": "assertion_error"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "TESTS FAILED.\nReturn code: 1\nError type: assertion_error\nStderr:\nTraceback (most recent call last):\n  File \"/tmp/tmptt6govs1.py\", line 67, in <module>\n    check(is_nested)\n    ~~~~~^^^^^^^^^^^\n  File \"/tmp/tmptt6govs1.py\", line 49, in check\n    assert candidate('[]]]]]]][[[[[]') == False\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n\nStdout:\n",
+      "remediation": "Looking at the failing test case `'[]]]]]]][[[[[]'`, let me trace through the current implementation:\n\n**Left-to-right pass:**\n- `[` \u2192 depth=1, max_depth=1\n- `]` \u2192 depth=0\n- `]]]]]]]` \u2192 depth goes negative\n- `[[[[[` \u2192 depth increases but never reaches 2\n- `[` \u2192 final depth=1\n- max_depth stays at 1\n\n**Right-to-left pass (reversed string `'[[[[[]]]]]]]]]['`):**\n- `]` \u2192 depth=1\n- `[[[[[` \u2192 depth goes negative  \n- `]]]]]]` \u2192 depth increases back up\n- `]` \u2192 depth increases further\n- `[` \u2192 depth decreases\n\nThe issue is that when processing right-to-left, the function treats `]` as opening brackets. For the string `'[]]]]]]][[[[[]'`, when reversed, we get many `]` characters in a row which can create a false depth >= 2.\n\n**The Problem:**\nThe current implementation incorrectly returns `True` for `'[]]]]]]][[[[[]'` because the right-to-left pass finds depth >= 2, but this doesn't represent a valid nested subsequence.\n\n**The Fix:**\n\nThe right-to-left pass should only count valid bracket sequences. We need to ensure that depth never goes negative in either direction, as negative depth indicates unmatched brackets.\n\n**Fix Plan:**\n\n1. **Lines to change:** The right-to-left loop (lines ~23-29)\n\n2. **What to fix:** Add a check to ensure depth doesn't go negative. If depth would go negative, skip that character or reset.\n\n3. **Specific change:** \n   - After `depth -= 1` in the right-to-left pass, add: `if depth < 0: depth = 0`\n   - OR better: only update max_depth when depth is valid (>= 0)\n\n4. **Why this fixes it:** This ensures we only consider valid bracket subsequences. When we encounter more `[` than `]` while going right-to-left, it means those brackets don't have matching pairs in a valid subsequence, so we shouldn't count them toward nesting depth.\n\nThe same fix should also be applied to the left-to-right pass for consistency (add `if depth < 0: depth = 0` after `depth -= 1`).",
+      "passed": false
+    }
+  ],
+  "ablation": null
+}

@@ -1,0 +1,21 @@
+{
+  "task_id": "sympy__sympy-20212",
+  "condition": "lucid",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_zero\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_rational\",\n        \"test_large_rational\",\n        \"test_negative_real\",\n        \"test_expand\",\n        \"test_issue_3449\",\n        \"test_issue_3866\",\n        \"test_negative_one\",\n        \"test_issue_4362\",\n        \"test_Pow_Expr_args\",\n        \"test_Pow_signs\",\n        \"test_power_with_noncommutative_mul_as_base\",\n        \"test_power_rewrite_exp\",\n        \"test_pow_as_base_exp\",\n        \"test_nseries\",\n        \"test_issue_6100_12942_4473\",\n        \"test_issue_6208\",\n        \"test_issue_6990\",\n        \"test_issue_6068\",\n        \"test_issue_6782\",\n        \"test_issue_6653\",\n        \"test_issue_6429\",\n        \"test_issue_7638\",\n        \"test_issue_8582\",\n        \"test_issue_8650\",\n        \"test_issue_13914\",\n        \"test_better_sqrt\",\n        \"test_issue_2993\",\n        \"test_issue_17450\",\n        \"test_issue_18190\",\n        \"test_issue_14815\",\n        \"test_issue_18509\",\n        \"test_issue_18762\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/sympy/core/power.py\n+++ b/sympy/core/power.py\n@@ -318,6 +318,8 @@\n                 return S.One\n             elif e is S.One:\n                 return b\n+            elif b is S.Zero and e is S.NegativeInfinity:\n+                return S.ComplexInfinity\n             elif e == -1 and not b:\n                 return S.ComplexInfinity\n             # Only perform autosimplification if exponent or base is a Symbol or number"
+}

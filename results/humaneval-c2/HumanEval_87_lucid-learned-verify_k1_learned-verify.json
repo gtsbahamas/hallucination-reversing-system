@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/87",
+  "condition": "lucid-learned-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "```json\n[\n  {\n    \"claim\": \"Finds all occurrences of x in the 2D list\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly iterates through all rows and columns, checking if each value equals x and collecting coordinates.\"\n  },\n  {\n    \"claim\": \"Returns coordinates as tuples in format (row, column)\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Each coordinate is correctly stored as a tuple (row_idx, col_idx) where both indices start from 0.\"\n  },\n  {\n    \"claim\": \"Sorts coordinates by rows in ascending order\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The sort key uses coord[0] (row index) as the primary sort criterion, which sorts rows in ascending order.\"\n  },\n  {\n    \"claim\": \"Sorts coordinates within each row by columns in descending order\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The sort key uses -coord[1] (negative column index) as the secondary sort criterion, which sorts columns in descending order within each row.\"\n  },\n  {\n    \"claim\": \"Handles empty list correctly\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"When lst is empty, the for loop doesn't execute and returns an empty list, matching the expected behavior for get_row([], 1) == [].\"\n  },\n  {\n    \"claim\": \"Handles rows with different numbers of columns\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation uses enumerate on each row independently, so it naturally handles rows of varying lengths.\"\n  },\n  {\n    \"claim\": \"Example 1: get_row([[1,2,3,4,5,6], [1,2,3,4,1,6], [1,2,3,4,5,1]], 1) == [(0, 0), (1, 4), (1, 0), (2, 5), (2, 0)]\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Coordinates found: (0,0), (1,0), (1,4), (2,0), (2,5). After sorting by row ascending then column descending: [(0,0), (1,4), (1,0), (2,5), (2,0)]. This matches the expected output.\"\n  },\n  {\n    \"claim\": \"Example 2: get_row([], 1) == []\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Empty input returns empty result as expected.\"\n  },\n  {\n    \"claim\": \"Example 3: get_row([[], [1], [1, 2, 3]], 3) == [(2, 2)]\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Value 3 is found only at row 2, column 2, returning [(2, 2)] as expected.\"\n  }\n]\n```",
+      "remediation": "Based on the test results, **all claims are passing** \u2014 the implementation is actually correct! \n\nHowever, let me verify the logic once more against the specification:\n\n## Analysis\n\nThe current implementation:\n1. \u2705 Finds all occurrences of `x` \n2. \u2705 Returns coordinates as `(row, column)` tuples\n3. \u2705 Sorts by row ascending (primary key: `coord[0]`)\n4. \u2705 Sorts by column descending within each row (secondary key: `-coord[1]`)\n5. \u2705 Handles all test cases correctly\n\n## Conclusion\n\n**No fix is needed.** The implementation is correct as-is.\n\nThe sorting key `(coord[0], -coord[1])` properly implements:\n- Primary sort: rows in ascending order\n- Secondary sort: columns in descending order (within each row)\n\nThis matches the specification requirement: \"Sort coordinates initially by rows in ascending order. Also, sort coordinates of the row by columns in descending order.\"\n\nAll test cases pass, including the edge cases (empty list, rows with different lengths, multiple occurrences).",
+      "passed": true
+    }
+  ],
+  "ablation": "learned-verify"
+}

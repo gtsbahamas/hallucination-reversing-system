@@ -1,0 +1,21 @@
+{
+  "task_id": "django__django-15347",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"A message's extra_tags attribute is correctly preserved when retrieved\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_add (messages_tests.test_cookie.CookieTests)\",\n        \"test_add_lazy_translation (messages_tests.test_cookie.CookieTests)\",\n        \"test_add_update (messages_tests.test_cookie.CookieTests)\",\n        \"test_context_processor_message_levels (messages_tests.test_cookie.CookieTests)\",\n        \"CookieStorage honors SESSION_COOKIE_DOMAIN, SESSION_COOKIE_SECURE, and\",\n        \"test_custom_tags (messages_tests.test_cookie.CookieTests)\",\n        \"test_default_level (messages_tests.test_cookie.CookieTests)\",\n        \"test_existing_add (messages_tests.test_cookie.CookieTests)\",\n        \"test_existing_add_read_update (messages_tests.test_cookie.CookieTests)\",\n        \"Reading the existing storage doesn't cause the data to be lost.\",\n        \"test_existing_read_add_update (messages_tests.test_cookie.CookieTests)\",\n        \"With the message middleware enabled, messages are properly stored and\",\n        \"test_get (messages_tests.test_cookie.CookieTests)\",\n        \"test_get_bad_cookie (messages_tests.test_cookie.CookieTests)\",\n        \"test_high_level (messages_tests.test_cookie.CookieTests)\",\n        \"A complex nested data structure containing Message\",\n        \"test_level_tag (messages_tests.test_cookie.CookieTests)\",\n        \"test_low_level (messages_tests.test_cookie.CookieTests)\",\n        \"If the data exceeds what is allowed in a cookie, older messages are\",\n        \"test_message_rfc6265 (messages_tests.test_cookie.CookieTests)\",\n        \"When the middleware is disabled, an exception is raised when one\",\n        \"When the middleware is disabled, an exception is not raised\",\n        \"Messages persist properly when multiple POSTs are made before a GET.\",\n        \"test_no_update (messages_tests.test_cookie.CookieTests)\",\n        \"test_repr (messages_tests.test_cookie.CookieTests)\",\n        \"A message containing SafeData is keeping its safe status when\",\n        \"test_settings_level (messages_tests.test_cookie.CookieTests)\",\n        \"test_tags (messages_tests.test_cookie.CookieTests)\",\n        \"test_with_template_response (messages_tests.test_cookie.CookieTests)\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "---\n\ndiff --git a/django/contrib/messages/storage/cookie.py b/django/contrib/messages/storage/cookie.py\nindex 1234567890..abcdef1234 100644\n--- a/django/contrib/messages/storage/cookie.py\n+++ b/django/contrib/messages/storage/cookie.py\n@@ -18,7 +18,7 @@ class MessageEncoder(json.JSONEncoder):\n             # Using 0/1 here instead of False/True to produce more compact json\n             is_safedata = 1 if isinstance(obj.message, SafeData) else 0\n             message = [self.message_key, is_safedata, obj.level, obj.message]\n-            if obj.extra_tags:\n+            if obj.extra_tags is not None:\n                 message.append(obj.extra_tags)\n             return message\n         return super().default(obj)"
+}

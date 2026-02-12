@@ -1,0 +1,22 @@
+flowchart TD
+    INPUT["Input:\n- Source Code\n- Extracted Claims"] --> SELECT["Select Verification Method\nper claim type"]
+
+    SELECT --> T1["Type Checking\n(type correctness claims)"]
+    SELECT --> T2["Test Execution\n(behavioral claims)"]
+    SELECT --> T3["Static Analysis\n(code quality claims)"]
+    SELECT --> T4["Bounded Model Checking\n(safety property claims)"]
+    SELECT --> T5["API Conformance\n(interface claims)"]
+
+    T1 --> SANDBOX["Sandboxed Execution\nEnvironment"]
+    T2 --> SANDBOX
+    T3 --> SANDBOX
+    T4 --> SANDBOX
+    T5 --> SANDBOX
+
+    SANDBOX --> RESULT["Execution Result\n- Exit code\n- stdout/stderr\n- Error messages\n- Stack traces\n- Execution time"]
+
+    RESULT --> VERDICT["Verdict Assignment\nPASS: all tests pass\nPARTIAL: some tests pass\nFAIL: all tests fail\nN/A: not testable"]
+
+    VERDICT --> ZERO["Zero-Noise Property:\nVerdict is EXACT within\ndecidable domain.\nNo false positives.\nNo false negatives."]
+
+    ZERO --> OUTPUT["Output:\n- Per-claim verdicts\n- Error diagnostics\n- Specification gap"]

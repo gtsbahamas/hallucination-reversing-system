@@ -1,0 +1,21 @@
+{
+  "task_id": "sympy__sympy-20442",
+  "condition": "lucid",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_convert_to\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_str_repr\",\n        \"test_eq\",\n        \"test_Quantity_definition\",\n        \"test_abbrev\",\n        \"test_print\",\n        \"test_Quantity_eq\",\n        \"test_add_sub\",\n        \"test_quantity_abs\",\n        \"test_check_unit_consistency\",\n        \"test_mul_div\",\n        \"test_units\",\n        \"test_issue_quart\",\n        \"test_issue_5565\",\n        \"test_find_unit\",\n        \"test_Quantity_derivative\",\n        \"test_quantity_postprocessing\",\n        \"test_factor_and_dimension\",\n        \"test_dimensional_expr_of_derivative\",\n        \"test_get_dimensional_expr_with_function\",\n        \"test_binary_information\",\n        \"test_conversion_with_2_nonstandard_dimensions\",\n        \"test_eval_subs\",\n        \"test_issue_14932\",\n        \"test_issue_14547\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/sympy/physics/units/util.py\n+++ b/sympy/physics/units/util.py\n@@ -31,7 +31,11 @@ def _get_conversion_matrix_for_expr(expr, target_units, unit_system):\n     camat = Matrix([[dimension_system.get_dimensional_dependencies(i, mark_dimensionless=True).get(j, 0) for i in target_dims] for j in canon_dim_units])\n     exprmat = Matrix([dim_dependencies.get(k, 0) for k in canon_dim_units])\n \n-    res_exponents = camat.solve_least_squares(exprmat, method=None)\n+    try:\n+        res_exponents = camat.solve(exprmat)\n+    except ValueError:\n+        # No exact solution exists for the conversion\n+        return None\n     return res_exponents"
+}

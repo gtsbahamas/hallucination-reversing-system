@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/145",
+  "condition": "lucid-learned-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "```json\n[\n  {\n    \"claim\": \"Sorts integers by sum of their digits in ascending order\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly uses sorted() with a custom key function (digit_sum) to sort by digit sum in ascending order\"\n  },\n  {\n    \"claim\": \"Handles negative numbers correctly (first digit negative, rest positive)\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"For negative numbers, the digit_sum function correctly treats the first digit as negative and remaining digits as positive: -11 becomes -1+1=0, -12 becomes -1+2=1\"\n  },\n  {\n    \"claim\": \"Maintains original order for items with same digit sum (stable sort)\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Python's sorted() is stable by default, so items with equal digit sums maintain their original relative order. For example, 1 and -12 both have sum=1, and 1 appears before -12 in both input and output\"\n  },\n  {\n    \"claim\": \"Handles empty list correctly\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"sorted([]) returns [], satisfying the requirement that order_by_points([]) == []\"\n  },\n  {\n    \"claim\": \"Handles zero correctly\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The function explicitly handles n==0 by returning 0, which is correct\"\n  },\n  {\n    \"claim\": \"Produces correct output for example [1, 11, -1, -11, -12]\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Digit sums: 1\u21921, 11\u21922, -1\u2192-1, -11\u21920, -12\u21921. Sorted by sum with stable ordering: [-1, -11, 1, -12, 11], which matches expected output\"\n  }\n]\n```",
+      "remediation": "The implementation is actually **correct** based on the test results showing all claims passing. However, let me verify the logic once more against the specification:\n\n## Analysis\n\nThe current implementation correctly:\n1. Calculates digit sums where for negative numbers, only the first digit is negative\n2. Uses Python's stable sort to maintain original order for equal sums\n3. Handles edge cases (empty list, zero)\n\n## Verification with Example\n\nFor `[1, 11, -1, -11, -12]`:\n- `1` \u2192 sum = 1\n- `11` \u2192 sum = 1+1 = 2  \n- `-1` \u2192 sum = -1\n- `-11` \u2192 sum = -1+1 = 0\n- `-12` \u2192 sum = -1+2 = 1\n\nSorted by sum (stable): `[-1, -11, 1, -12, 11]` \u2713\n\n## Conclusion\n\n**No fix needed.** The implementation is correct as-is. All test claims pass, and the logic properly handles:\n- Digit sum calculation for positive and negative numbers\n- Stable sorting to preserve original order for equal sums\n- Edge cases\n\nIf there were actual test failures not shown in the feedback, please provide them. Otherwise, this implementation satisfies the specification.",
+      "passed": false
+    }
+  ],
+  "ablation": "learned-verify"
+}

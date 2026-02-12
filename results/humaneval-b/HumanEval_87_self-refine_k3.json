@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/87",
+  "condition": "self-refine",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "Let me analyze this implementation against the specification and examples.\n\n**Testing against the examples:**\n\n1. `get_row([[1,2,3,4,5,6], [1,2,3,4,1,6], [1,2,3,4,5,1]], 1)`\n   - Row 0: 1 found at column 0 \u2192 (0, 0)\n   - Row 1: 1 found at columns 0 and 4 \u2192 (1, 0), (1, 4)\n   - Row 2: 1 found at columns 0 and 5 \u2192 (2, 0), (2, 5)\n   - After sorting by (row ascending, column descending): [(0, 0), (1, 4), (1, 0), (2, 5), (2, 0)]\n   - Expected: [(0, 0), (1, 4), (1, 0), (2, 5), (2, 0)] \u2713\n\n2. `get_row([], 1)`\n   - No rows, returns []\n   - Expected: [] \u2713\n\n3. `get_row([[], [1], [1, 2, 3]], 3)`\n   - Row 0: empty, no matches\n   - Row 1: no 3 found\n   - Row 2: 3 found at column 2 \u2192 (2, 2)\n   - Expected: [(2, 2)] \u2713\n\n**Logic verification:**\n- The function correctly iterates through all rows and columns\n- It correctly identifies matching values\n- The sorting key `(coord[0], -coord[1])` correctly sorts by row ascending (coord[0]) and column descending (-coord[1])\n- Edge cases (empty list, empty rows) are handled correctly\n\n**NO ISSUES FOUND**\n\nThe implementation correctly matches the specification and handles all the provided examples and edge cases properly.",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null
+}

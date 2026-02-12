@@ -1,0 +1,14 @@
+{
+  "task_id": "sympy__sympy-12419",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_Identity\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_shape\",\n        \"test_matexpr\",\n        \"test_subs\",\n        \"test_ZeroMatrix\",\n        \"test_ZeroMatrix_doit\",\n        \"test_Identity_doit\",\n        \"test_addition\",\n        \"test_multiplication\",\n        \"test_MatPow\",\n        \"test_MatrixSymbol\",\n        \"test_dense_conversion\",\n        \"test_free_symbols\",\n        \"test_zero_matmul\",\n        \"test_matadd_simplify\",\n        \"test_matmul_simplify\",\n        \"test_invariants\",\n        \"test_indexing\",\n        \"test_single_indexing\",\n        \"test_MatrixElement_commutative\",\n        \"test_MatrixSymbol_determinant\",\n        \"test_MatrixElement_diff\",\n        \"test_MatrixElement_doit\",\n        \"test_identity_powers\",\n        \"test_Zero_power\",\n        \"test_matrixelement_diff\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/sympy/matrices/expressions/matexpr.py\n+++ b/sympy/matrices/expressions/matexpr.py\n@@ -617,10 +617,13 @@ class Identity(MatrixExpr):\n     def conjugate(self):\n         return self\n \n     def _entry(self, i, j):\n-        if i == j:\n+        eq = Eq(i, j)\n+        if eq == True:\n             return S.One\n-        else:\n+        elif eq == False:\n             return S.Zero\n+        from sympy import KroneckerDelta\n+        return KroneckerDelta(i, j)\n \n     def _eval_determinant(self):\n         return S.One\n```\n\nThis patch modifies the `_entry` method of the `Identity` class to:\n1. Use `Eq(i, j)` to check equality\n2. Return `S.One` only when the equality is definitely `True` (e.g., both are the same number)\n3. Return `S.Zero` only when the equality is definitely `False` (e.g., different numbers)\n4. Return `KroneckerDelta(i, j)` when we can't determine the equality (e.g., symbolic variables)\n\nThis allows the `Sum` to properly handle the symbolic case and evaluate to `n` instead of `0`."
+}

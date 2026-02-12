@@ -1,0 +1,21 @@
+{
+  "task_id": "sympy__sympy-21847",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_monomials\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_monomial_count\",\n        \"test_monomial_mul\",\n        \"test_monomial_div\",\n        \"test_monomial_gcd\",\n        \"test_monomial_lcm\",\n        \"test_monomial_max\",\n        \"test_monomial_pow\",\n        \"test_monomial_min\",\n        \"test_monomial_divides\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/sympy/polys/monomials.py\n+++ b/sympy/polys/monomials.py\n@@ -127,7 +127,7 @@ def itermonomials(variables, max_degrees, min_degrees=None):\n                 for variable in item:\n                     if variable != 1:\n                         powers[variable] += 1\n-                if max(powers.values()) >= min_degree:\n+                if sum(powers.values()) >= min_degree:\n                     monomials_list_comm.append(Mul(*item))\n             yield from set(monomials_list_comm)\n         else:\n@@ -139,7 +139,7 @@ def itermonomials(variables, max_degrees, min_degrees=None):\n                 for variable in item:\n                     if variable != 1:\n                         powers[variable] += 1\n-                if max(powers.values()) >= min_degree:\n+                if sum(powers.values()) >= min_degree:\n                     monomials_list_non_comm.append(Mul(*item))\n             yield from set(monomials_list_non_comm)\n     else:"
+}

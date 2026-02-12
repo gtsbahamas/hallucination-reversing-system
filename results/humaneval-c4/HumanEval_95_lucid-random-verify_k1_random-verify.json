@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/95",
+  "condition": "lucid-random-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "FAIL: The implementation has bugs in edge case handling.",
+      "remediation": "## Fix Plan\n\n**Problem:** The function incorrectly requires all keys to be alphabetic (using `key.isalpha()`), but the specification and examples show that keys can contain non-alphabetic characters (e.g., \"ZIP\" contains letters, but the logic should work for any string).\n\n**Lines to change:**\n\n**Line 19-20:** Remove the `isalpha()` check\n```python\nif not key.isalpha():\n    return False\n```\n\n**Why this fixes the issue:**\n\n1. The specification only requires checking if keys are:\n   - All strings (not other types like integers)\n   - Either all lowercase OR all uppercase\n\n2. The `isalpha()` check is too restrictive - it rejects valid strings that contain numbers, spaces, or special characters\n\n3. The `islower()` and `isupper()` methods already handle the case checking correctly:\n   - `islower()` returns True if all cased characters are lowercase (ignores non-cased chars)\n   - `isupper()` returns True if all cased characters are uppercase (ignores non-cased chars)\n\n4. However, there's a subtle issue: strings with NO alphabetic characters (like \"123\") would pass both `islower()` and `isupper()`, making `all_lower` and `all_upper` both True\n\n**Additional fix needed:**\n\nAfter removing the `isalpha()` check, we need to ensure keys have at least one alphabetic character. Replace lines 19-20 with:\n\n```python\nif not any(c.isalpha() for c in key):\n    return False\n```\n\nThis ensures each key has at least one letter to determine case, while allowing mixed alphanumeric strings like \"ZIP\" or \"Age\".",
+      "passed": true
+    }
+  ],
+  "ablation": "random-verify"
+}

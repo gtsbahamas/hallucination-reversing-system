@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/83",
+  "condition": "lucid-no-extract",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "TESTS FAILED.\nReturn code: 1\nError type: syntax_error\nStderr:\n  File \"/tmp/tmpk2gjcqkf.py\", line 20\n    2. **End with 1**: The last digit is 1, first digit can be 1-9 (can't be 0), middle (n-2) digits can be 0-9\n                                                                       ^\nSyntaxError: unterminated string literal (detected at line 20)\n\nStdout:\n",
+      "remediation": "## Fix Plan\n\n**Problem**: The implementation code contains markdown-style comments that are not valid Python syntax. The numbered list items (1., 2., 3.) and the markdown bold syntax (**text**) are causing syntax errors.\n\n**Fix**:\n1. **Remove all the explanation comments** (lines with numbered lists and markdown formatting)\n2. **Keep only the actual Python code**: the function definition, the if statement for n==1, and the return statement\n\n**Specific changes**:\n- Delete lines starting with \"Looking at this problem...\" through \"...= 18 \u00d7 10^(n-2)\"\n- Delete lines starting with \"1. **Start with 1**...\" through \"3. **Start with 1 AND end with 1**...\"\n- Delete the line \"Special case for n=1:...\"\n- Keep only:\n  ```python\n  def starts_one_ends(n):\n      \"\"\"\n      Given a positive integer n, return the count of the numbers of n-digit\n      positive integers that start or end with 1.\n      \"\"\"\n      if n == 1:\n          return 1\n      return 18 * (10 ** (n - 2))\n  ```\n\n**Why this fixes the issue**: The syntax error occurs because the explanation text contains characters that Python interprets as code. Removing the non-code text leaves only valid Python syntax.",
+      "passed": false
+    }
+  ],
+  "ablation": "no-extract"
+}

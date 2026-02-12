@@ -1,0 +1,21 @@
+{
+  "task_id": "django__django-13230",
+  "condition": "lucid",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_rss2_feed (syndication_tests.tests.SyndicationFeedTest)\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_add_domain (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_atom_feed (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_atom_feed_published_and_updated_elements (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_atom_multiple_enclosures (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_atom_single_enclosure (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_aware_datetime_conversion (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_custom_feed_generator (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_feed_generator_language_attribute (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_feed_last_modified_time (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_feed_last_modified_time_naive_date (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_feed_url (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_item_link_error (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_latest_post_date (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_naive_datetime_conversion (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_rss091_feed (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_rss2_feed_guid_permalink_false (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_rss2_feed_guid_permalink_true (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_rss2_multiple_enclosures (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_rss2_single_enclosure (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_secure_urls (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_template_context_feed (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_template_feed (syndication_tests.tests.SyndicationFeedTest)\",\n        \"test_title_escaping (syndication_tests.tests.SyndicationFeedTest)\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/django/contrib/syndication/views.py\n+++ b/django/contrib/syndication/views.py\n@@ -183,6 +183,7 @@ class Feed:\n             updateddate = self._get_dynamic_attr('item_updateddate', item)\n             if updateddate and is_naive(updateddate):\n                 updateddate = make_aware(updateddate, tz)\n+            comments = self._get_dynamic_attr('item_comments', item)\n \n             feed.add_item(\n                 title=title,\n@@ -198,6 +199,7 @@ class Feed:\n                 author_link=author_link,\n                 categories=self._get_dynamic_attr('item_categories', item),\n                 item_copyright=self._get_dynamic_attr('item_copyright', item),\n+                comments=comments,\n                 **self.item_extra_kwargs(item)\n             )\n         return feed"
+}

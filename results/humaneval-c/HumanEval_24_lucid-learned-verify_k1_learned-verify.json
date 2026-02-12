@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/24",
+  "condition": "lucid-learned-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "```json\n[\n  {\n    \"claim\": \"Function finds the largest divisor of n that is smaller than n\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The function iterates from n-1 down to 1 and returns the first number that divides n evenly. This correctly identifies the largest proper divisor.\"\n  },\n  {\n    \"claim\": \"Function handles the example case largest_divisor(15) = 5\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"For n=15, the function checks 14, 13, 12, 11, 10, 9, 8, 7, 6, 5 in order. Since 15 % 5 == 0, it returns 5, which is correct.\"\n  },\n  {\n    \"claim\": \"Function returns a divisor smaller than n\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The range starts at n-1, ensuring the returned divisor is always strictly less than n.\"\n  },\n  {\n    \"claim\": \"Function handles edge cases (e.g., prime numbers)\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"For prime numbers, no divisor exists between 2 and n-1, so the loop completes and returns 1, which is the correct largest divisor for primes.\"\n  },\n  {\n    \"claim\": \"Function handles n=1\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"For n=1, range(0, 0, -1) produces an empty sequence, so the function returns 1. While 1 has no proper divisors, returning 1 is a reasonable behavior.\"\n  }\n]\n```",
+      "remediation": "## Analysis\n\nThe current implementation **passes all tests** and appears to be functionally correct. However, there's a significant **performance issue** that should be addressed.\n\n## Fix Plan\n\n**Optimization needed: Only check divisors up to n/2**\n\n### Changes Required:\n\n**Line 5:** Modify the range\n```python\n# Current:\nfor i in range(n - 1, 0, -1):\n\n# Should be:\nfor i in range(n // 2, 0, -1):\n```\n\n### Why This Fixes the Issue:\n\n1. **Mathematical property**: Any divisor of n (other than n itself) must be \u2264 n/2\n   - If d divides n and d > n/2, then d \u00d7 2 > n, meaning d can only divide n if d = n\n   \n2. **Performance improvement**: Reduces iterations by ~50% for all inputs\n\n3. **Correctness preserved**: \n   - For composite numbers, the largest proper divisor is always \u2264 n/2\n   - For prime numbers, still correctly returns 1\n   - Edge cases (n=1, n=2) still work correctly\n\n### Example Impact:\n- For n=15: checks 7,6,5 instead of 14,13,12,11,10,9,8,7,6,5\n- For n=100: checks 50 values instead of 99 values\n\n**Note**: The current implementation is correct but inefficient. This optimization maintains correctness while improving time complexity from O(n) worst-case to O(n/2).",
+      "passed": true
+    }
+  ],
+  "ablation": "learned-verify"
+}

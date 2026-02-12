@@ -1,0 +1,21 @@
+{
+  "task_id": "sympy__sympy-21055",
+  "condition": "lucid",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_arg\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_Abs\",\n        \"test_pow1\",\n        \"test_pow2\",\n        \"test_exp\",\n        \"test_Piecewise\",\n        \"test_atan2\",\n        \"test_re\",\n        \"test_im\",\n        \"test_complex\",\n        \"test_sign\",\n        \"test_func_args\",\n        \"test_eval_refine\",\n        \"test_refine_issue_12724\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/sympy/assumptions/refine.py\n+++ b/sympy/assumptions/refine.py\n@@ -271,6 +271,29 @@ def refine_sign(expr, assumptions):\n     return expr\n \n \n+def refine_arg(expr, assumptions):\n+    \"\"\"\n+    Handler for complex argument.\n+\n+    Examples\n+    ========\n+\n+    >>> from sympy.assumptions.refine import refine_arg\n+    >>> from sympy import Q, arg\n+    >>> from sympy.abc import x\n+    >>> refine_arg(arg(x), Q.positive(x))\n+    0\n+    >>> refine_arg(arg(x), Q.negative(x))\n+    pi\n+    \"\"\"\n+    arg_expr = expr.args[0]\n+    if ask(Q.positive(arg_expr), assumptions):\n+        return S.Zero\n+    if ask(Q.negative(arg_expr), assumptions):\n+        return S.Pi\n+    return None\n+\n+\n def refine_matrixelement(expr, assumptions):\n     \"\"\"\n     Handler for symmetric part.\n@@ -296,6 +319,7 @@ handlers_dict = {\n     're': refine_re,\n     'im': refine_im,\n     'sign': refine_sign,\n+    'arg': refine_arg,\n     'MatrixElement': refine_matrixelement\n }  # type: Dict[str, Callable[[Expr, Boolean], Expr]]"
+}

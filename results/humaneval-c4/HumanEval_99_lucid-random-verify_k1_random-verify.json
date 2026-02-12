@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/99",
+  "condition": "lucid-random-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "FAIL: The implementation has bugs in edge case handling.",
+      "remediation": "## Fix Plan\n\n**Problem Analysis:**\nThe current implementation has issues with the rounding logic, particularly for negative numbers and the use of Python's default `round()` function which uses \"round half to even\" (banker's rounding) instead of rounding away from zero.\n\n**Lines to Change:**\n\n**Line 18-19:** The condition `num - int(num) == 0.5` is correct for positive numbers.\n\n**Line 20:** `return int(num) + 1` is correct.\n\n**Line 21-22:** Replace `return round(num)` with `return int(num + 0.5)` to ensure consistent rounding behavior for positive numbers that aren't exactly at 0.5.\n\n**Line 25:** The condition `abs(num) - int(abs(num)) == 0.5` is correct for detecting when a negative number is equidistant.\n\n**Line 26:** `return int(num) - 1` is correct.\n\n**Line 27-28:** Replace `return round(num)` with `return int(num - 0.5)` to ensure consistent rounding behavior for negative numbers that aren't exactly at 0.5.\n\n**Why This Fixes the Issue:**\n1. Python's `round()` uses banker's rounding (round half to even), which doesn't always round away from zero. For example, `round(2.5)` returns `2`, not `3`.\n2. For positive numbers not at exactly 0.5, using `int(num + 0.5)` ensures proper rounding up when the decimal part is \u2265 0.5.\n3. For negative numbers not at exactly 0.5, using `int(num - 0.5)` ensures proper rounding down (away from zero) when the decimal part is \u2265 0.5.\n4. The explicit checks for 0.5 handle the equidistant case correctly by rounding away from zero.",
+      "passed": true
+    }
+  ],
+  "ablation": "random-verify"
+}

@@ -1,0 +1,14 @@
+flowchart TD
+    START[Begin Iteration k] --> GEN["Step 1: Generate/Regenerate\nLLM produces source code\n(initial or from remediation plan)"]
+    GEN --> EXT["Step 2: Extract Claims\nDecompose code into\ntestable predicates"]
+    EXT --> SANDBOX["Step 3: Prepare Sandbox\n- Process isolation\n- Network isolation\n- Filesystem isolation\n- Resource quotas\n- Timeout limits"]
+    SANDBOX --> EXEC["Step 4: Execute Tests\nRun code against test\nspecification in sandbox"]
+    EXEC --> COLLECT["Step 5: Collect Results\n- Pass/fail per test\n- Error messages\n- Stack traces\n- Execution timing"]
+    COLLECT --> VERDICT["Step 6: Produce Verdicts\nFor each claim:\nPASS | PARTIAL | FAIL | N/A"]
+    VERDICT --> GAP["Step 7: Compute Specification Gap\ngap = 1 - (pass_count / applicable_count)"]
+    GAP --> CHECK{gap == 0\nOR\nk >= max_iterations?}
+    CHECK -->|Yes| RETURN["Return:\n- Verified code\n- Verification results\n- Gap metric\n- Iteration count"]
+    CHECK -->|No| REMEDIATE["Step 8: Generate Remediation Plan\n- Diagnose root causes\n- Propose targeted fixes\n- Preserve passing code"]
+    REMEDIATE --> REGEN["Step 9: Regenerate with Context\n- Original task\n- Current code\n- Verification results\n- Remediation plan\n- Prior iteration code"]
+    REGEN --> INCREMENT["k = k + 1"]
+    INCREMENT --> EXT

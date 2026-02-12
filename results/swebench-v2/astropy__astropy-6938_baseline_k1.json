@@ -1,0 +1,14 @@
+{
+  "task_id": "astropy__astropy-6938",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "resolved": false,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_ascii_table_data\",\n        \"astropy/io/fits/tests/test_table.py::TestTableFunctions::test_ascii_table\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_sample_file\",\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_image_create\",\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data\",\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_scaled_data_auto_rescale\",\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_uint16_data\",\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_groups_hdu_data\",\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_open_with_no_keywords\",\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_writeto_convenience\",\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_hdu_writeto\",\n        \"astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_datasum_only\",\n        \"astropy/io/fits/tests/test_table.py::test_regression_scalar_indexing\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/astropy/io/fits/fitsrec.py\n+++ b/astropy/io/fits/fitsrec.py\n@@ -1287,7 +1287,7 @@ class FITS_rec(np.recarray):\n \n         # Replace exponent separator in floating point numbers\n         if 'D' in format:\n-            output_field.replace(encode_ascii('E'), encode_ascii('D'))\n+            output_field = output_field.replace(encode_ascii('E'), encode_ascii('D'))\n \n         # We want the raw data, so don't use the view of the data as a\n         # FITS_rec"
+}

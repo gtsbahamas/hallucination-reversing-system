@@ -1,0 +1,35 @@
+{
+  "task_id": "HumanEval/95",
+  "condition": "lucid-random-verify",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "FAIL: The implementation has bugs in edge case handling.",
+      "remediation": "## Fix Plan\n\n**Problem:** The `islower()` and `isupper()` methods return `True` for strings that don't contain any cased characters (e.g., empty strings, strings with only numbers/symbols). This causes incorrect behavior for edge cases.\n\n**Lines to change:** Lines 18-19 (the `all_lower` and `all_upper` checks)\n\n**Fix:**\n```python\n# Replace lines 18-19 with:\nall_lower = all(key.islower() and key.isalpha() for key in dict.keys())\nall_upper = all(key.isupper() and key.isalpha() for key in dict.keys())\n```\n\n**Why this fixes the issue:**\n- `key.isalpha()` ensures that each key contains at least one alphabetic character\n- This prevents strings like `\"\"`, `\"123\"`, or `\"---\"` from passing the case checks\n- Combined with `islower()`/`isupper()`, it ensures keys are:\n  1. Non-empty strings with letters\n  2. Consistently all lowercase OR all uppercase\n\n**Alternative (more lenient) fix** if keys can contain non-alphabetic characters but must have at least one cased letter:\n```python\nall_lower = all(any(c.islower() for c in key) and not any(c.isupper() for c in key) for key in dict.keys())\nall_upper = all(any(c.isupper() for c in key) and not any(c.islower() for c in key) for key in dict.keys())\n```\n\nThe first fix (with `isalpha()`) is simpler and likely the intended behavior based on the examples.",
+      "passed": true
+    },
+    {
+      "iteration": 2,
+      "verification": "FAIL: The implementation has bugs in edge case handling.",
+      "remediation": "## Fix Plan\n\n**Problem:** The `key.isalpha()` check is too restrictive. It rejects keys that contain non-alphabetic characters (like digits), but the specification only requires checking case consistency for string keys.\n\n**Lines to change:** Lines 15-16\n\n**Current code:**\n```python\nall_lower = all(key.islower() and key.isalpha() for key in dict.keys())\nall_upper = all(key.isupper() and key.isalpha() for key in dict.keys())\n```\n\n**Fix:**\n```python\nall_lower = all(key.islower() for key in dict.keys())\nall_upper = all(key.isupper() for key in dict.keys())\n```\n\n**Why this fixes the issue:**\n- `str.islower()` returns `True` if the string contains at least one cased character and all cased characters are lowercase (non-cased characters like digits are ignored)\n- `str.isupper()` returns `True` if the string contains at least one cased character and all cased characters are uppercase\n- This allows keys like `\"ZIP\"` (all uppercase) and `\"a\"` (all lowercase) to pass, while still rejecting mixed-case keys like `\"Name\"`\n- The `isalpha()` check was incorrectly rejecting valid keys that contain digits or other non-alphabetic characters\n\n**Edge case handled:** Keys like `\"ZIP\"` with all uppercase letters will now correctly return `True` instead of being rejected by the `isalpha()` requirement.",
+      "passed": true
+    },
+    {
+      "iteration": 3,
+      "verification": "FAIL: The return type is incorrect for some inputs.",
+      "remediation": "## Fix Plan\n\n**Problem:** The `islower()` and `isupper()` methods return `True` for strings that don't contain any cased characters (e.g., empty strings, strings with only numbers/symbols). This causes incorrect results for edge cases.\n\n**Lines to change:**\n- Lines 18-19 (the `all_lower` and `all_upper` checks)\n\n**Fix:**\nReplace:\n```python\nall_lower = all(key.islower() for key in dict.keys())\nall_upper = all(key.isupper() for key in dict.keys())\n```\n\nWith:\n```python\nall_lower = all(key.islower() and key.isalpha() for key in dict.keys())\nall_upper = all(key.isupper() and key.isalpha() for key in dict.keys())\n```\n\n**Why this fixes the issue:**\n- `key.isalpha()` ensures that the key contains at least one alphabetic character\n- This prevents strings without cased characters (like `\"\"`, `\"123\"`, `\"_\"`) from incorrectly passing the `islower()` or `isupper()` checks\n- Combined with `islower()`/`isupper()`, this ensures keys are truly all lowercase or all uppercase alphabetic strings",
+      "passed": true
+    }
+  ],
+  "ablation": "random-verify"
+}

@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/145",
+  "condition": "lucid-random-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "FAIL: The implementation has bugs in edge case handling.",
+      "remediation": "# Fix Plan\n\n## Problem Analysis\nThe current implementation has an issue with the digit sum calculation for negative numbers. When `n < 0`, the code calculates:\n```python\ntotal = -int(s[0]) + sum(int(d) for d in s[1:])\n```\n\nBut `total` was already calculated as the sum of all digits (line before the if statement), so this is redundant and incorrect.\n\n## Specific Fix\n\n**Lines to change:** Lines in the `digit_sum` function (the calculation logic)\n\n**Current problematic code:**\n```python\ns = str(abs(n))\ntotal = sum(int(d) for d in s)\n\nif n < 0:\n    total = -int(s[0]) + sum(int(d) for d in s[1:])\n```\n\n**Fix:**\n```python\ns = str(abs(n))\n\nif n < 0:\n    # For negative numbers, first digit is negative, rest are positive\n    total = -int(s[0]) + sum(int(d) for d in s[1:])\nelse:\n    total = sum(int(d) for d in s)\n```\n\n**Why this fixes the issue:**\n1. Removes the redundant calculation of `total` before the conditional\n2. Only calculates the sum once, using the correct logic based on sign\n3. For negative numbers: first digit negative + remaining digits positive\n4. For non-negative numbers: all digits positive\n5. Handles edge cases properly (single digit negatives, zero, etc.)\n\nThe stable sort with `sorted(nums, key=digit_sum)` is already correct and maintains original order for equal sums.",
+      "passed": false
+    }
+  ],
+  "ablation": "random-verify"
+}

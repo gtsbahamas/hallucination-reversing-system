@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/153",
+  "condition": "lucid-learned-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "I'll evaluate the implementation against the specification by checking each requirement.\n\n```json\n[\n  {\n    \"claim\": \"Calculates CAP as the number of uppercase letters in the extension's name\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly uses `sum(1 for c in ext if c.isupper())` to count uppercase letters\"\n  },\n  {\n    \"claim\": \"Calculates SM as the number of lowercase letters in the extension's name\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly uses `sum(1 for c in ext if c.islower())` to count lowercase letters\"\n  },\n  {\n    \"claim\": \"Calculates strength as CAP - SM\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly computes `strength = cap - sm`\"\n  },\n  {\n    \"claim\": \"Finds the strongest (maximum strength) extension\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation tracks max_strength and updates strongest_ext when a higher strength is found\"\n  },\n  {\n    \"claim\": \"When multiple extensions have the same strength, chooses the one that comes first in the list\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation uses `strength > max_strength` (strict inequality), which means it only updates when a strictly greater strength is found, preserving the first occurrence in case of ties\"\n  },\n  {\n    \"claim\": \"Returns a string in the format 'ClassName.StrongestExtensionName'\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation returns `f\\\"{class_name}.{strongest_ext}\\\"` which matches the required format\"\n  },\n  {\n    \"claim\": \"Example: Strongest_Extension('Slices', ['SErviNGSliCes', 'Cheese', 'StuFfed']) returns 'Slices.SErviNGSliCes'\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"SErviNGSliCes has CAP=5 (S,E,N,G,C), SM=6 (r,v,i,l,i,e,s), strength=-1; Cheese has CAP=1, SM=5, strength=-4; StuFfed has CAP=2, SM=4, strength=-2. The strongest is SErviNGSliCes with -1, which is correctly selected\"\n  },\n  {\n    \"claim\": \"Example: Strongest_Extension('my_class', ['AA', 'Be', 'CC']) returns 'my_class.AA'\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"AA has strength=2-0=2; Be has strength=1-1=0; CC has strength=2-0=2. AA and CC tie at strength 2, but AA comes first and is correctly selected\"\n  }\n]\n```",
+      "remediation": "## Fix Plan\n\n**No changes needed** - the implementation is correct.\n\nThe function properly:\n1. Calculates CAP (uppercase count) and SM (lowercase count) for each extension\n2. Computes strength as CAP - SM\n3. Tracks the maximum strength and corresponding extension\n4. Uses strict inequality (`>`) to ensure the first extension wins in case of ties\n5. Returns the result in the correct format\n\nAll test cases pass, including:\n- The 'Slices' example (correctly returns 'Slices.SErviNGSliCes' with strength -1)\n- The 'my_class' example (correctly returns 'my_class.AA', choosing the first of two extensions with strength 2)\n\nThe implementation matches the specification exactly.",
+      "passed": true
+    }
+  ],
+  "ablation": "learned-verify"
+}

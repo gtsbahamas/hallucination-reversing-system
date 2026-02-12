@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/43",
+  "condition": "lucid-no-extract",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "TESTS FAILED.\nReturn code: 1\nError type: syntax_error\nStderr:\n  File \"/tmp/tmpyb13xnfh.py\", line 27\n    - Use a set to track numbers we've seen\n                                   ^\nSyntaxError: unterminated string literal (detected at line 27)\n\nStdout:\n",
+      "remediation": "## Fix Plan\n\n**Problem**: The implementation code contains unescaped text that's being interpreted as Python code, causing a syntax error.\n\n**Lines to change**: Lines 2-14 (the entire \"Key observations\" and \"Approach\" section, plus the trace examples)\n\n**Fix**: Remove all the explanatory text between the docstring and the actual function implementation. The function should go directly from the docstring to the code.\n\n**Corrected structure**:\n```\ndef pairs_sum_to_zero(l):\n    \"\"\"\n    [docstring content]\n    \"\"\"\n    seen = set()\n    for num in l:\n        if -num in seen:\n            return True\n        seen.add(num)\n    return False\n```\n\n**Why this fixes it**: The explanatory text (starting with \"Key observations:\", \"Approach:\", etc.) is not in a comment or string, so Python tries to parse it as code. Removing this prose and keeping only the actual Python implementation will resolve the syntax error.\n\nThe actual algorithm logic is correct - it properly checks for pairs that sum to zero using a set to track seen numbers.",
+      "passed": false
+    }
+  ],
+  "ablation": "no-extract"
+}

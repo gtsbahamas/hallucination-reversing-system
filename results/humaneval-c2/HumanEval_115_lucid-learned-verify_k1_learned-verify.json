@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/115",
+  "condition": "lucid-learned-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "```json\n[\n  {\n    \"claim\": \"Counts water units in each well (row) by summing 1s\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly uses sum(row) to count water units in each row, which counts all 1s since 0s contribute nothing to the sum\"\n  },\n  {\n    \"claim\": \"Calculates number of bucket trips needed per well using ceiling division\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Uses math.ceil(water_units / capacity) which correctly rounds up the division to get the minimum number of trips needed\"\n  },\n  {\n    \"claim\": \"Sums up all trips across all wells\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Accumulates trips_needed into total_trips for each row and returns the total\"\n  },\n  {\n    \"claim\": \"Example 1: grid=[[0,0,1,0], [0,1,0,0], [1,1,1,1]], capacity=1 returns 6\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Well 0: 1 unit \u2192 ceil(1/1)=1, Well 1: 1 unit \u2192 ceil(1/1)=1, Well 2: 4 units \u2192 ceil(4/1)=4. Total: 1+1+4=6\"\n  },\n  {\n    \"claim\": \"Example 2: grid=[[0,0,1,1], [0,0,0,0], [1,1,1,1], [0,1,1,1]], capacity=2 returns 5\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Well 0: 2 units \u2192 ceil(2/2)=1, Well 1: 0 units \u2192 ceil(0/2)=0, Well 2: 4 units \u2192 ceil(4/2)=2, Well 3: 3 units \u2192 ceil(3/2)=2. Total: 1+0+2+2=5\"\n  },\n  {\n    \"claim\": \"Example 3: grid=[[0,0,0], [0,0,0]], capacity=5 returns 0\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Both wells have 0 units, so ceil(0/5)=0 for each. Total: 0+0=0\"\n  },\n  {\n    \"claim\": \"Handles empty wells (rows with all 0s) correctly\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"When sum(row)=0, math.ceil(0/capacity)=0, correctly requiring no trips\"\n  },\n  {\n    \"claim\": \"Handles edge case where water units exactly divide by capacity\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"math.ceil handles exact division correctly (e.g., ceil(4/2)=2, not 3)\"\n  }\n]\n```",
+      "remediation": "## Fix Plan\n\n**Issue**: Division by zero vulnerability when `capacity` is 0 or negative.\n\nWhile the current implementation passes all test cases, it has a critical flaw: it doesn't validate the `capacity` parameter. According to the constraints, `1 <= capacity <= 10`, but the function doesn't enforce this.\n\n**Lines to change**: Add validation at the beginning of the function (after the import statement)\n\n**The fix**:\n```python\ndef max_fill(grid, capacity):\n    import math\n    # Add this validation\n    if capacity <= 0:\n        raise ValueError(\"Capacity must be positive\")\n    \n    total_trips = 0\n    for row in grid:\n        water_units = sum(row)\n        trips_needed = math.ceil(water_units / capacity)\n        total_trips += trips_needed\n    return total_trips\n```\n\n**Why this fixes the issue**:\n- Prevents `ZeroDivisionError` when `capacity = 0`\n- Ensures the function behavior aligns with the stated constraints\n- Provides clear error messaging for invalid inputs\n- Negative capacity values are also nonsensical in this context and should be rejected\n\n**Alternative approach** (if you want to handle edge cases gracefully instead of raising an error):\n- Return 0 or infinity for invalid capacity values\n- However, raising an error is more appropriate since invalid capacity violates the problem constraints\n\nThe rest of the implementation is correct and doesn't need changes.",
+      "passed": false
+    }
+  ],
+  "ablation": "learned-verify"
+}

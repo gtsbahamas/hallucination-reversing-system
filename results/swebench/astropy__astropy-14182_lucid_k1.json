@@ -1,0 +1,20 @@
+{
+  "task_id": "astropy__astropy-14182",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "resolved": false,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"astropy/io/ascii/tests/test_rst.py::test_rst_with_header_rows\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal_names\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal_names_include\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal_exclude\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column_header\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_right_indented_table\",\n        \"astropy/io/ascii/tests/test_rst.py::test_trailing_spaces_in_row_definition\",\n        \"astropy/io/ascii/tests/test_rst.py::test_write_normal\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "TESTS FAILED.\n\nTest output:\n{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"astropy/io/ascii/tests/test_rst.py::test_rst_with_header_rows\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal_names\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal_names_include\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal_exclude\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column_header\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_right_indented_table\",\n        \"astropy/io/ascii/tests/test_rst.py::test_trailing_spaces_in_row_definition\",\n        \"astropy/io/ascii/tests/test",
+      "remediation": "Looking at the issue, previous patch, and test results, here's my analysis:\n\n## What Was Wrong With the Previous Patch\n\nThe previous patch only added `header_rows` parameter to the `RST.__init__()` method and passed it to the parent class. However, this is insufficient because:\n\n1. **The `write()` method doesn't account for header rows**: The RST format has a specific structure where it adds separator lines (the `====` lines) at the top and bottom. The current `write()` method just does:\n   ```python\n   lines = super().write(lines)\n   lines = [lines[1]] + lines + [lines[1]]\n   return lines\n   ```\n   This assumes `lines[1]` is always the separator line, which breaks when there are multiple header rows.\n\n2. **Header row separators need special handling**: In RST format, when there are multiple header rows (like name and unit), there needs to be a separator line between the header rows and the data rows, but the current logic doesn't handle this correctly.\n\n## Key Insights from Test Outpu",
+      "passed": false
+    }
+  ],
+  "ablation": null
+}

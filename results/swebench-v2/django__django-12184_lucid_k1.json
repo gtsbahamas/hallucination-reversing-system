@@ -1,0 +1,21 @@
+{
+  "task_id": "django__django-12184",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_re_path_with_missing_optional_parameter (urlpatterns.tests.SimplifiedURLTests)\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_allows_non_ascii_but_valid_identifiers (urlpatterns.tests.ParameterRestrictionTests)\",\n        \"test_non_identifier_parameter_name_causes_exception (urlpatterns.tests.ParameterRestrictionTests)\",\n        \"test_matching_urls (urlpatterns.tests.ConverterTests)\",\n        \"test_nonmatching_urls (urlpatterns.tests.ConverterTests)\",\n        \"test_resolve_type_error_propagates (urlpatterns.tests.ConversionExceptionTests)\",\n        \"test_resolve_value_error_means_no_match (urlpatterns.tests.ConversionExceptionTests)\",\n        \"test_reverse_value_error_propagates (urlpatterns.tests.ConversionExceptionTests)\",\n        \"test_converter_resolve (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_converter_reverse (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_converter_reverse_with_second_layer_instance_namespace (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_invalid_converter (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_inclusion_is_matchable (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_inclusion_is_reversible (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_lookup_with_double_inclusion (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_lookup_with_empty_string_inclusion (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_lookup_with_inclusion (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_lookup_with_multiple_parameters (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_lookup_with_typed_parameters (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_lookup_without_parameters (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_reverse_with_parameter (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_path_reverse_without_parameter (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_re_path (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_re_path_with_optional_parameter (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_space_in_route (urlpatterns.tests.SimplifiedURLTests)\",\n        \"test_two_variable_at_start_of_path_pattern (urlpatterns.tests.SimplifiedURLTests)\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/django/urls/resolvers.py\n+++ b/django/urls/resolvers.py\n@@ -195,8 +195,8 @@\n     def match(self, path):\n         match = self.regex.search(path)\n         if match:\n             # If there are any named groups, use those as kwargs, ignoring\n             # non-named groups. Otherwise, pass all non-named arguments as\n             # positional arguments.\n             kwargs = {k: v for k, v in match.groupdict().items() if v is not None}\n-            args = () if kwargs else match.groups()\n+            args = () if match.groupdict() else match.groups()\n             return path[match.end():], args, kwargs\n         return None"
+}

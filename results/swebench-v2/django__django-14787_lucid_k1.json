@@ -1,0 +1,21 @@
+{
+  "task_id": "django__django-14787",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"@method_decorator preserves wrapper assignments.\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_cache_control_decorator_http_request (decorators.tests.CacheControlDecoratorTest)\",\n        \"Ensures @xframe_options_deny properly sets the X-Frame-Options header.\",\n        \"Ensures @xframe_options_exempt properly instructs the\",\n        \"Ensures @xframe_options_sameorigin properly sets the X-Frame-Options\",\n        \"Built-in decorators set certain attributes of the wrapped function.\",\n        \"test_cache_page (decorators.tests.DecoratorsTest)\",\n        \"Test for the require_safe decorator.\",\n        \"The user_passes_test decorator can be applied multiple times (#9474).\",\n        \"test_never_cache_decorator (decorators.tests.NeverCacheDecoratorTest)\",\n        \"test_never_cache_decorator_http_request (decorators.tests.NeverCacheDecoratorTest)\",\n        \"test_argumented (decorators.tests.MethodDecoratorTests)\",\n        \"test_bad_iterable (decorators.tests.MethodDecoratorTests)\",\n        \"@method_decorator can be used to decorate a class and its methods.\",\n        \"test_descriptors (decorators.tests.MethodDecoratorTests)\",\n        \"@method_decorator on a nonexistent method raises an error.\",\n        \"@method_decorator on a non-callable attribute raises an error.\",\n        \"A decorator that sets a new attribute on the method.\",\n        \"test_preserve_attributes (decorators.tests.MethodDecoratorTests)\",\n        \"test_preserve_signature (decorators.tests.MethodDecoratorTests)\",\n        \"@method_decorator can accept a tuple of decorators.\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/django/utils/decorators.py\n+++ b/django/utils/decorators.py\n@@ -30,6 +30,7 @@ def _multi_decorate(decorators, method):\n         # 'self' argument, but it's a closure over self so it can call\n         # 'func'. Also, wrap method.__get__() in a function because new\n         # attributes can't be set on bound method objects, only on functions.\n         bound_method = partial(method.__get__(self, type(self)))\n+        update_wrapper(bound_method, method)\n         for dec in decorators:\n             bound_method = dec(bound_method)\n         return bound_method(*args, **kwargs)\n```\n\nThis patch adds a call to `update_wrapper(bound_method, method)` right after creating the `partial` object. This will copy the attributes like `__name__`, `__module__`, `__doc__`, `__dict__`, `__annotations__`, and `__qualname__` from the original method to the partial object, making it compatible with decorators that expect these attributes (like those using `@wraps(func)`)."
+}

@@ -1,0 +1,21 @@
+{
+  "task_id": "django__django-15851",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_parameters (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_accent (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)\",\n        \"test_basic (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)\",\n        \"test_column (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)\",\n        \"test_crash_password_does_not_leak (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)\",\n        \"test_nopass (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)\",\n        \"test_passfile (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)\",\n        \"test_service (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)\",\n        \"test_ssl_certificate (dbshell.test_postgresql.PostgreSqlDbshellCommandTestCase)\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/django/db/backends/postgresql/client.py\n+++ b/django/db/backends/postgresql/client.py\n@@ -36,8 +36,8 @@ class DatabaseClient(BaseDatabaseClient):\n             args += [\"-h\", host]\n         if port:\n             args += [\"-p\", str(port)]\n+        args.extend(parameters)\n         if dbname:\n             args += [dbname]\n-        args.extend(parameters)\n \n         env = {}\n         if passwd:"
+}

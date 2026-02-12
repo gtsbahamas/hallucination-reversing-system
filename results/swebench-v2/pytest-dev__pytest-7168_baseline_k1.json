@@ -1,0 +1,14 @@
+{
+  "task_id": "pytest-dev__pytest-7168",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"testing/io/test_saferepr.py::test_simple_repr\",\n        \"testing/io/test_saferepr.py::test_maxsize\",\n        \"testing/io/test_saferepr.py::test_maxsize_error_on_instance\",\n        \"testing/io/test_saferepr.py::test_exceptions\",\n        \"testing/io/test_saferepr.py::test_baseexception\",\n        \"testing/io/test_saferepr.py::test_buggy_builtin_repr\",\n        \"testing/io/test_saferepr.py::test_big_repr\",\n        \"testing/io/test_saferepr.py::test_repr_on_newstyle\",\n        \"testing/io/test_saferepr.py::test_unicode\",\n        \"testing/io/test_saferepr.py::test_pformat_dispatch\",\n        \"testing/io/test_saferepr.py::test_broken_getattribute\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/src/_pytest/_io/saferepr.py\n+++ b/src/_pytest/_io/saferepr.py\n@@ -14,13 +14,13 @@ def _try_repr_or_str(obj):\n \n def _format_repr_exception(exc: BaseException, obj: Any) -> str:\n     try:\n         exc_info = _try_repr_or_str(exc)\n     except (KeyboardInterrupt, SystemExit):\n         raise\n     except BaseException as exc:\n         exc_info = \"unpresentable exception ({})\".format(_try_repr_or_str(exc))\n     return \"<[{} raised in repr()] {} object at 0x{:x}>\".format(\n-        exc_info, obj.__class__.__name__, id(obj)\n+        exc_info, type(obj).__name__, id(obj)\n     )\n \n \n def _ellipsize(s: str, maxsize: int) -> str:"
+}

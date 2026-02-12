@@ -1,0 +1,14 @@
+{
+  "task_id": "django__django-14016",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "resolved": false,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_combine_and_empty (queries.test_q.QTests)\",\n        \"test_combine_or_empty (queries.test_q.QTests)\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_combine_not_q_object (queries.test_q.QTests)\",\n        \"test_deconstruct (queries.test_q.QTests)\",\n        \"test_deconstruct_and (queries.test_q.QTests)\",\n        \"test_deconstruct_multiple_kwargs (queries.test_q.QTests)\",\n        \"test_deconstruct_negated (queries.test_q.QTests)\",\n        \"test_deconstruct_nested (queries.test_q.QTests)\",\n        \"test_deconstruct_or (queries.test_q.QTests)\",\n        \"test_reconstruct (queries.test_q.QTests)\",\n        \"test_reconstruct_and (queries.test_q.QTests)\",\n        \"test_reconstruct_negated (queries.test_q.QTests)\",\n        \"test_reconstruct_or (queries.test_q.QTests)\"\n      ],\n      \"failure\": [\n        \"test_combine_and_both_empty (queries.test_q.QTests)\",\n        \"test_combine_or_both_empty (queries.test_q.QTests)\"\n      ]\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/django/db/models/query_utils.py\n+++ b/django/db/models/query_utils.py\n@@ -43,11 +43,11 @@ class Q(tree.Node):\n \n         # If the other Q() is empty, ignore it and just use `self`.\n         if not other:\n-            return copy.deepcopy(self)\n+            return self.clone()\n         # Or if this Q is empty, ignore it and just use `other`.\n         elif not self:\n-            return copy.deepcopy(other)\n+            return other.clone()\n \n         obj = type(self)()\n         obj.connector = conn"
+}

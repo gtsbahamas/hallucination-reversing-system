@@ -1,0 +1,33 @@
+{
+  "task_id": "sympy__sympy-13043",
+  "condition": "lucid",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "resolved": false,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_decompose\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_best_origin\"\n      ]\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "TESTS FAILED.\n\nTest output:\n{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_decompose\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_best_origin\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}",
+      "remediation": "Looking at the issue and the failed patch, I can identify the problem:\n\n## Analysis of Previous Patch\n\n**What was wrong:**\nThe previous patch sorted by degree (the dictionary keys), but the issue is that `decompose()` with `separate=True` is supposed to return individual **monomials**, not grouped terms by degree. The current implementation groups terms by their total degree in `poly_dict`, so sorting by degree doesn't give us individual monomials in a consistent order.\n\n**Key insight from the code:**\nLooking at how `decompose()` is used in `polytope_integrate()`:\n```python\nmonoms = decompose(polys, separate=True)\nfor monom in monoms:\n    if monom.is_number:\n        integral_value += result_dict[1] * monom\n    else:\n        coeff = LC(monom)\n        integral_value += result_dict[monom / coeff] * coeff\n```\n\nThe code expects individual monomials (like `x*y`, `x**2`, etc.), not sums of terms with the same degree.\n\n**The real problem:**\nWhen `separate=False`, `poly_dict` maps degree \u2192 sum ",
+      "passed": false
+    },
+    {
+      "iteration": 2,
+      "verification": "TESTS FAILED.\n\nTest output:\n{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_decompose\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_best_origin\"\n      ]\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}",
+      "remediation": "Looking at the issue and the failed patch, I can identify the problems:\n\n## Analysis of Previous Patch Issues\n\n1. **Wrong return type for `separate=True`**: The patch returns a sorted list of monomials, but the code expects a list of polynomials grouped by degree (not individual monomials).\n\n2. **Misunderstanding of `separate=True` behavior**: Looking at the usage in `polytope_integrate()`:\n   ```python\n   monoms = decompose(polys, separate=True)\n   for monom in monoms:\n       if monom.is_number:\n           integral_value += result_dict[1] * monom\n       else:\n           coeff = LC(monom)\n           integral_value += result_dict[monom / coeff] * coeff\n   ```\n   The code expects each element to be a polynomial (possibly with multiple terms of the same degree), not individual monomials.\n\n3. **The docstring example confirms this**:\n   ```python\n   >>> decompose(x**2 + x*y + x + y + x**3*y**2 + y**5, True)\n   [x + y, x**2 + x*y, x**3*y**2 + y**5]\n   ```\n   It returns polynomials grouped by",
+      "passed": false
+    },
+    {
+      "iteration": 3,
+      "verification": "TESTS FAILED.\n\nTest output:\n{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_decompose\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_best_origin\"\n      ]\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}",
+      "remediation": "Looking at the issue and the failed patch, I can identify the problem:\n\n## Analysis of the Previous Patch\n\n**What was wrong:**\nThe patch sorted by degree (the dictionary keys), but the actual requirement is different. The `decompose()` function is used in `polytope_integrate()` where it processes monomials, and the caller expects the **individual monomials** to be returned in a consistent order, not grouped by degree.\n\nLooking at the usage in `polytope_integrate()`:\n```python\nmonoms = decompose(polys, separate=True)\nfor monom in monoms:\n    if monom.is_number:\n        integral_value += result_dict[1] * monom\n    else:\n        coeff = LC(monom)\n        integral_value += result_dict[monom / coeff] * coeff\n```\n\nThe code expects individual monomials (terms), not degree-grouped polynomials.\n\n**Key insight from the code:**\nWhen `separate=True`, the function should return individual terms/monomials in a deterministic order. The current implementation groups terms by degree in `poly_dict`, but",
+      "passed": false
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/sympy/integrals/intpoly.py\n+++ b/sympy/integrals/intpoly.py\n@@ -637,11 +637,14 @@ def decompose(expr, separate=False):\n     \"\"\"\n     expr = S(expr)\n \n+    if separate:\n+        # Return individual terms in canonical order\n+        return list(expr.as_ordered_terms())\n+\n+    # Group by degree for the dictionary case\n     poly_dict = {}\n-\n     for term in expr.as_ordered_terms():\n         degree = sum(degree_list(term, x, y))\n         poly_dict[degree] = poly_dict.get(degree, S.Zero) + term\n \n-    if separate:\n-        return list(poly_dict.values())\n-\n     return poly_dict"
+}

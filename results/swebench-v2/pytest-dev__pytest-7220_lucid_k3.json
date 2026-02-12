@@ -1,0 +1,21 @@
+{
+  "task_id": "pytest-dev__pytest-7220",
+  "condition": "lucid",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"testing/test_nodes.py::test_failure_with_changed_cwd\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"testing/test_nodes.py::test_ischildnode[--True]\",\n        \"testing/test_nodes.py::test_ischildnode[-foo-True]\",\n        \"testing/test_nodes.py::test_ischildnode[-foo/bar-True]\",\n        \"testing/test_nodes.py::test_ischildnode[-foo/bar::TestBaz-True]\",\n        \"testing/test_nodes.py::test_ischildnode[foo-food-False]\",\n        \"testing/test_nodes.py::test_ischildnode[foo/bar::TestBaz-foo/bar-False]\",\n        \"testing/test_nodes.py::test_ischildnode[foo/bar::TestBaz-foo/bar::TestBop-False]\",\n        \"testing/test_nodes.py::test_ischildnode[foo/bar-foo/bar::TestBop-True]\",\n        \"testing/test_nodes.py::test_node_from_parent_disallowed_arguments\",\n        \"testing/test_nodes.py::test__check_initialpaths_for_relpath\",\n        \"testing/test_nodes.py::test_std_warn_not_pytestwarning\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/src/_pytest/nodes.py\n+++ b/src/_pytest/nodes.py\n@@ -426,10 +426,17 @@\n         else:\n             truncate_locals = True\n \n+        # If the current working directory has changed (e.g., in a fixture),\n+        # use absolute paths so that the displayed paths are still correct\n+        # relative to the original invocation directory.\n         try:\n-            os.getcwd()\n-            abspath = False\n+            cwd = os.getcwd()\n+            if self.config.invocation_dir.realpath() != py.path.local(cwd).realpath():\n+                abspath = True\n+            else:\n+                abspath = False\n         except OSError:\n+            # Current working directory no longer exists\n             abspath = True\n \n         return excinfo.getrepr("
+}

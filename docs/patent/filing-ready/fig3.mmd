@@ -1,0 +1,25 @@
+flowchart TD
+    subgraph Platform["AI Coding Platform"]
+        direction LR
+        USER[Developer] --> PLAT["Platform\nUI/Agent"]
+        PLAT --> CODEGEN["LLM Code\nGeneration"]
+    end
+
+    subgraph LUCIDAPI["LUCID Verification API"]
+        direction LR
+        API["API\nEndpoint"] --> AUTH["Authentication\n& Rate Limiting"]
+        AUTH --> METER["Metering\nModule"]
+        METER --> LOOP["Iterative\nVerification Loop\n(Fig. 1)"]
+        LOOP --> AUDIT["Audit Trail\nLogger"]
+        AUDIT --> RESP["API\nResponse"]
+    end
+
+    subgraph Modes["Integration Modes"]
+        direction LR
+        INLINE["Inline:\nSynchronous verification\nbefore user sees code"]
+        BG["Background:\nAsync verification\nwith callback/polling"]
+        CICD["CI/CD:\nPipeline step\nbefore merge"]
+    end
+
+    CODEGEN -->|"POST /verify\n{code, task, max_k}"| API
+    RESP -->|"200 OK\n{verified_code,\nresults, gap,\niterations}"| PLAT

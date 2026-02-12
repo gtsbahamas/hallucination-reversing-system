@@ -1,0 +1,14 @@
+{
+  "task_id": "django__django-13660",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "resolved": false,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_command_option_inline_function_call (shell.tests.ShellCommandTestCase)\",\n        \"test_stdin_read_inline_function_call (shell.tests.ShellCommandTestCase)\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_command_option (shell.tests.ShellCommandTestCase)\",\n        \"test_shell_with_bpython_not_installed (shell.tests.ShellCommandTestCase)\",\n        \"test_shell_with_ipython_not_installed (shell.tests.ShellCommandTestCase)\",\n        \"test_stdin_read (shell.tests.ShellCommandTestCase)\"\n      ],\n      \"failure\": [\n        \"test_command_option_globals (shell.tests.ShellCommandTestCase)\",\n        \"test_stdin_read_globals (shell.tests.ShellCommandTestCase)\"\n      ]\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/django/core/management/commands/shell.py\n+++ b/django/core/management/commands/shell.py\n@@ -83,12 +83,12 @@ class Command(BaseCommand):\n     def handle(self, **options):\n         # Execute the command and exit.\n         if options['command']:\n-            exec(options['command'])\n+            exec(options['command'], {})\n             return\n \n         # Execute stdin if it has anything to read and exit.\n         # Not supported on Windows due to select.select() limitations.\n         if sys.platform != 'win32' and not sys.stdin.isatty() and select.select([sys.stdin], [], [], 0)[0]:\n-            exec(sys.stdin.read())\n+            exec(sys.stdin.read(), {})\n             return\n \n         available_shells = [options['interface']] if options['interface'] else self.shells"
+}

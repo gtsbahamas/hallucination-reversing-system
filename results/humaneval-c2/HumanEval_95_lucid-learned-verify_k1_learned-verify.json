@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/95",
+  "condition": "lucid-learned-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "```json\n[\n  {\n    \"claim\": \"Return False if the given dictionary is empty\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly checks 'if not dict:' at the beginning and returns False for empty dictionaries.\"\n  },\n  {\n    \"claim\": \"Return True if all keys are strings in lower case\",\n    \"verdict\": \"FAIL\",\n    \"reasoning\": \"The implementation requires keys to be alphabetic only (key.isalpha()), but the specification and examples don't require this. For example, a key like 'key1' (containing digits) would be rejected, but the specification only requires keys to be strings in lower case, not purely alphabetic.\"\n  },\n  {\n    \"claim\": \"Return True if all keys are strings in upper case\",\n    \"verdict\": \"FAIL\",\n    \"reasoning\": \"The implementation requires keys to be alphabetic only (key.isalpha()), but the specification and examples don't require this. For example, a key like 'KEY1' (containing digits) would be rejected, but the specification only requires keys to be strings in upper case, not purely alphabetic.\"\n  },\n  {\n    \"claim\": \"Return False if keys are not all strings\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly checks 'if not isinstance(key, str):' and returns False when encountering non-string keys, as shown in the example with key 8.\"\n  },\n  {\n    \"claim\": \"Return False if keys are mixed case (some lower, some upper)\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation tracks all_lower and all_upper separately and returns 'all_lower or all_upper', which correctly returns False when keys are mixed case.\"\n  },\n  {\n    \"claim\": \"Return False if keys are strings but not all lower and not all upper (e.g., 'Name')\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly identifies when keys like 'Name' are neither all lowercase nor all uppercase, setting both all_lower and all_upper to False, resulting in False being returned.\"\n  }\n]\n```",
+      "remediation": "## Fix Plan\n\n**Problem:** The implementation incorrectly requires all keys to be purely alphabetic (using `key.isalpha()`), but the specification only requires keys to be strings that are either all lowercase or all uppercase. Keys can contain non-alphabetic characters like digits.\n\n**Lines to change:**\n- **Remove lines 18-19** (the `isalpha()` check):\n  ```python\n  if not key.isalpha():\n      return False\n  ```\n\n**Why this fixes the issue:**\n1. The specification states \"all keys are strings in lower case or all keys are strings in upper case\" \u2014 it doesn't restrict keys to alphabetic characters only\n2. The `islower()` and `isupper()` methods already handle the case checking correctly:\n   - `\"key1\".islower()` returns `True` (lowercase string with digits)\n   - `\"KEY1\".isupper()` returns `True` (uppercase string with digits)\n   - `\"Name\".islower()` returns `False` and `\"Name\".isupper()` returns `False` (mixed case)\n3. Removing the `isalpha()` check allows keys like \"ZIP\" or \"key1\" to be properly evaluated based on their case, not their character composition\n\nThe rest of the logic remains correct and will properly handle all test cases once this overly restrictive check is removed.",
+      "passed": true
+    }
+  ],
+  "ablation": "learned-verify"
+}

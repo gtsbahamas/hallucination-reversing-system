@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/50",
+  "condition": "lucid-no-context",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "TESTS FAILED.\nReturn code: 1\nError type: syntax_error\nStderr:\n  File \"/tmp/tmpsgnpji5i.py\", line 14\n    Looking at the `encode_shift` function, I can see it:\n            ^^\nSyntaxError: invalid syntax\n\nStdout:\n",
+      "remediation": "## Fix Plan\n\n**Problem**: The implementation contains prose text outside of the function that's causing a syntax error. The actual decoding logic is correct.\n\n**Fix**:\n- **Remove lines 1-4** (the explanatory text starting with \"Looking at the `encode_shift` function...\")\n- **Keep only the function definition** starting from `def decode_shift(s: str):`\n\n**Why this fixes the issue**: \nThe prose explanation was accidentally included in the Python file instead of being a comment. Python interprets it as invalid syntax. The actual decode logic `chr(((ord(ch) - 5 - ord(\"a\")) % 26) + ord(\"a\"))` is correct - it shifts backward by 5 positions, which properly reverses the forward shift of 5 in `encode_shift`.\n\n**Final implementation should be**:\n```python\ndef decode_shift(s: str):\n    \"\"\"\n    takes as input string encoded with encode_shift function. Returns decoded string.\n    \"\"\"\n    return \"\".join([chr(((ord(ch) - 5 - ord(\"a\")) % 26) + ord(\"a\")) for ch in s])\n```",
+      "passed": false
+    }
+  ],
+  "ablation": "no-context"
+}

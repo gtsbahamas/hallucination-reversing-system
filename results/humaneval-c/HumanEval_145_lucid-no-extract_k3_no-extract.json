@@ -1,0 +1,29 @@
+{
+  "task_id": "HumanEval/145",
+  "condition": "lucid-no-extract",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "TESTS FAILED.\nReturn code: 1\nError type: syntax_error\nStderr:\n  File \"/tmp/tmpxm6ab9of.py\", line 31\n    Then sorted by sum: -3, -2, -1, 1, 2 \u2192 `-12, -11, -1, 1, 11`\n                                         ^\nSyntaxError: invalid character '\u2192' (U+2192)\n\nStdout:\n",
+      "remediation": "## Fix Plan\n\n**Problem**: The code contains non-Python text (comments/reasoning) that should be removed. The actual implementation logic is correct, but it's embedded in explanatory text that causes a syntax error.\n\n**Fix**:\n1. **Remove lines 1-45** (all the reasoning/explanation text before the function definition)\n2. **Keep only the function definition** starting from `def order_by_points(nums):` through the end of the implementation\n\n**Specific changes**:\n- Delete everything before the `def order_by_points(nums):` line\n- Keep the complete function implementation (lines with `def digit_sum(n):`, the logic inside it, and the `return sorted(...)` statement)\n\n**Why this fixes the issue**:\nThe syntax error occurs because the file contains natural language explanation with special characters (like `\u2192`) that Python tries to parse as code. The actual function implementation is correct - it properly:\n- Handles the digit sum calculation for negative numbers (only first digit negative, rest positive)\n- Uses stable sort with index as secondary key to maintain original order for equal sums\n- The logic matches the expected behavior from the examples\n\nThe fix is simply to extract the clean function code without the surrounding explanation.",
+      "passed": false
+    },
+    {
+      "iteration": 2,
+      "verification": "ALL TESTS PASSED. Implementation is correct.",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": "no-extract"
+}

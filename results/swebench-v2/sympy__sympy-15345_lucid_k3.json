@@ -1,0 +1,27 @@
+{
+  "task_id": "sympy__sympy-15345",
+  "condition": "lucid",
+  "max_iterations": 3,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_Function\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_Integer\",\n        \"test_Rational\",\n        \"test_Pow\",\n        \"test_Mul\",\n        \"test_constants\",\n        \"test_containers\",\n        \"test_Integral\",\n        \"test_Derivative\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "TESTS FAILED.\n\nTest output:\n{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_Function\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_Integer\",\n        \"test_Rational\",\n        \"test_Pow\",\n        \"test_Mul\",\n        \"test_constants\",\n        \"test_containers\",\n        \"test_Integral\",\n        \"test_Derivative\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}",
+      "remediation": "## Analysis\n\nThe previous patch attempted to add `Max` and `Min` to the `known_functions` dictionary, but it failed because it's looking up functions by their **string name** (`expr.func.__name__`), not by the actual function class.\n\n### What was wrong with the previous patch:\n\n1. The patch added entries with keys `\"Max\"` and `\"Min\"` (strings)\n2. However, when `Max(x, 2)` is called, `expr.func.__name__` returns `\"Max\"` (the string name of the class)\n3. The lookup in `_print_Function` checks: `if expr.func.__name__ in self.known_functions`\n4. This should work, BUT the issue is that the existing `known_functions` dictionary uses **lowercase** function names like `\"exp\"`, `\"log\"`, `\"sin\"`, etc.\n5. These correspond to SymPy functions whose `__name__` attribute is lowercase (e.g., `sympy.functions.elementary.exponential.exp.__name__ == \"exp\"`)\n\n### Key insight from the code:\n\nLooking at the `_print_Function` method:\n```python\ndef _print_Function(self, expr):\n    if expr.func.__name__ in sel",
+      "passed": false
+    },
+    {
+      "iteration": 2,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/sympy/printing/mathematica.py\n+++ b/sympy/printing/mathematica.py\n@@ -105,6 +105,12 @@ class MCodePrinter(CodePrinter):\n         dexpr = expr.expr\n         dvars = [i[0] if i[1] == 1 else i for i in expr.variable_count]\n         return \"Hold[D[\" + ', '.join(self.doprint(a) for a in [dexpr] + dvars) + \"]]\"\n+\n+    def _print_Max(self, expr):\n+        return \"Max[%s]\" % self.stringify(expr.args, \", \")\n+\n+    def _print_Min(self, expr):\n+        return \"Min[%s]\" % self.stringify(expr.args, \", \")\n \n \n def mathematica_code(expr, **settings):"
+}

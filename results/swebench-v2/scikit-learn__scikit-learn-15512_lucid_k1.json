@@ -1,0 +1,21 @@
+{
+  "task_id": "scikit-learn__scikit-learn-15512",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_affinity_propagation_non_convergence_regressiontest\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_affinity_propagation\",\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_affinity_propagation_predict\",\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_affinity_propagation_predict_error\",\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_affinity_propagation_fit_non_convergence\",\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_affinity_propagation_equal_mutual_similarities\",\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_affinity_propagation_predict_non_convergence\",\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_equal_similarities_and_preferences\",\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_affinity_propagation_convergence_warning_dense_sparse[centers0]\",\n        \"sklearn/cluster/tests/test_affinity_propagation.py::test_affinity_propagation_convergence_warning_dense_sparse[centers1]\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/sklearn/cluster/_affinity_propagation.py\n+++ b/sklearn/cluster/_affinity_propagation.py\n@@ -145,6 +145,7 @@ def affinity_propagation(S, preference=None, convergence_iter=15, max_iter=200,\n \n     ind = np.arange(n_samples)\n \n+    converged = False\n     for it in range(max_iter):\n         # tmp = A + S; compute responsibilities\n         np.add(A, S, tmp)\n@@ -182,17 +183,18 @@ def affinity_propagation(S, preference=None, convergence_iter=15, max_iter=200,\n             se = np.sum(e, axis=1)\n             unconverged = (np.sum((se == convergence_iter) + (se == 0))\n                            != n_samples)\n-            if (not unconverged and (K > 0)) or (it == max_iter):\n+            if not unconverged and (K > 0):\n+                converged = True\n                 if verbose:\n                     print(\"Converged after %d iterations.\" % it)\n                 break\n     else:\n         if verbose:\n             print(\"Did not converge\")\n \n     I = np.flatnonzero(E)\n     K = I.size  # Identify exemplars\n \n-    if K > 0:\n+    if K > 0 and converged:\n         c = np.argmax(S[:, I], axis=1)\n         c[I] = np.arange(K)  # Identify clusters\n         # Refine the final set of exemplars and clusters and return results"
+}

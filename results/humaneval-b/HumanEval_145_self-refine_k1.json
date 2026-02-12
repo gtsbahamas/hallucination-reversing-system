@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/145",
+  "condition": "self-refine",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ISSUES FOUND:\n\n1. **Inefficient use of `nums.index(x)` in the sort key**\n   - The lambda function `lambda x: (digit_sum(x), nums.index(x))` calls `nums.index(x)` for each comparison during sorting\n   - If there are duplicate values in the list, `nums.index(x)` will always return the index of the *first* occurrence, not the actual index of the current element\n   - For example, with `[1, 2, 1]`, both `1` values would get index `0` from `nums.index(1)`, breaking the stable sort requirement\n   - **Fix**: Use `enumerate()` to pair each element with its original index before sorting, or rely on Python's stable sort without explicitly using index\n\n2. **Python's `sorted()` is already stable**\n   - Python's sort is guaranteed to be stable, meaning elements with equal keys maintain their original relative order\n   - The explicit `nums.index(x)` in the key is unnecessary and causes the bug mentioned above\n   - **Fix**: Simply use `sorted(nums, key=digit_sum)` - the stable sort will automatically preserve original order for equal sums\n\n**Corrected implementation:**\n```python\ndef order_by_points(nums):\n    def digit_sum(n):\n        if n == 0:\n            return 0\n        \n        s = str(abs(n))\n        total = sum(int(d) for d in s)\n        \n        if n < 0:\n            total -= 2 * int(s[0])\n        \n        return total\n    \n    return sorted(nums, key=digit_sum)\n```\n\nOr if you want to be explicit about indices:\n```python\nreturn [x for _, x in sorted(enumerate(nums), key=lambda ix: (digit_sum(ix[1]), ix[0]))]\n```",
+      "remediation": "## Fix Plan\n\n**Problem:** The current implementation incorrectly uses `nums.index(x)` in the sort key, which:\n1. Returns the index of the *first* occurrence for duplicate values, not the current element's actual index\n2. Is unnecessary since Python's `sorted()` is already stable\n\n**Lines to Change:**\n- Line with `return sorted(nums, key=lambda x: (digit_sum(x), nums.index(x)))`\n\n**The Fix:**\nReplace with:\n```python\nreturn sorted(nums, key=digit_sum)\n```\n\n**Why This Fixes It:**\n1. **Python's stable sort guarantee**: `sorted()` automatically preserves the original relative order of elements with equal keys\n2. **Removes the duplicate-value bug**: No longer incorrectly maps all duplicate values to the first occurrence's index\n3. **More efficient**: Eliminates O(n) index lookups during sorting\n\n**Alternative (if explicit indexing is preferred):**\n```python\nreturn [x for _, x in sorted(enumerate(nums), key=lambda ix: (digit_sum(ix[1]), ix[0]))]\n```\nThis pairs each element with its true index via `enumerate()`, but is unnecessary given Python's stable sort.\n\n**Summary:** Remove the `nums.index(x)` component from the sort key entirely. The `digit_sum` function logic is correct; only the sorting mechanism needs simplification.",
+      "passed": true
+    }
+  ],
+  "ablation": null
+}

@@ -1,0 +1,14 @@
+{
+  "task_id": "django__django-11964",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "resolved": false,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_str (model_enums.tests.ChoicesTests)\",\n        \"test_textchoices (model_enums.tests.ChoicesTests)\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_integerchoices (model_enums.tests.ChoicesTests)\",\n        \"test_integerchoices_auto_label (model_enums.tests.ChoicesTests)\",\n        \"test_integerchoices_containment (model_enums.tests.ChoicesTests)\",\n        \"test_integerchoices_empty_label (model_enums.tests.ChoicesTests)\",\n        \"test_integerchoices_functional_api (model_enums.tests.ChoicesTests)\",\n        \"test_invalid_definition (model_enums.tests.ChoicesTests)\",\n        \"test_textchoices_auto_label (model_enums.tests.ChoicesTests)\",\n        \"test_textchoices_blank_value (model_enums.tests.ChoicesTests)\",\n        \"test_textchoices_containment (model_enums.tests.ChoicesTests)\",\n        \"test_textchoices_empty_label (model_enums.tests.ChoicesTests)\",\n        \"test_textchoices_functional_api (model_enums.tests.ChoicesTests)\",\n        \"test_bool_unsupported (model_enums.tests.CustomChoicesTests)\",\n        \"test_labels_valid (model_enums.tests.CustomChoicesTests)\",\n        \"test_timezone_unsupported (model_enums.tests.CustomChoicesTests)\",\n        \"test_uuid_unsupported (model_enums.tests.CustomChoicesTests)\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/django/db/models/enums.py\n+++ b/django/db/models/enums.py\n@@ -70,6 +70,9 @@\n class TextChoices(str, Choices):\n     \"\"\"Class for creating enumerated string choices.\"\"\"\n \n+    def __str__(self):\n+        return str(self.value)\n+\n     def _generate_next_value_(name, start, count, last_values):\n         return name\n \n</diff>"
+}

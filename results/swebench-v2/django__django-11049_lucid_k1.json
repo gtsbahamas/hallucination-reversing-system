@@ -1,0 +1,21 @@
+{
+  "task_id": "django__django-11049",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_invalid_string (model_fields.test_durationfield.TestValidation)\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_dumping (model_fields.test_durationfield.TestSerialization)\",\n        \"test_loading (model_fields.test_durationfield.TestSerialization)\",\n        \"test_formfield (model_fields.test_durationfield.TestFormField)\",\n        \"test_exact (model_fields.test_durationfield.TestQuerying)\",\n        \"test_gt (model_fields.test_durationfield.TestQuerying)\",\n        \"test_create_empty (model_fields.test_durationfield.TestSaveLoad)\",\n        \"test_fractional_seconds (model_fields.test_durationfield.TestSaveLoad)\",\n        \"test_simple_roundtrip (model_fields.test_durationfield.TestSaveLoad)\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/django/db/models/fields/__init__.py\n+++ b/django/db/models/fields/__init__.py\n@@ -1678,7 +1678,7 @@ class DateTimeField(DateField):\n \n class DurationField(Field):\n     \"\"\"\n-    Store timedelta objects.\n+    Store timedelta objects. \n \n     Use interval on PostgreSQL, INTERVAL DAY TO SECOND on Oracle, and bigint\n     of microseconds on other databases.\n@@ -1686,7 +1686,7 @@ class DurationField(Field):\n     empty_strings_allowed = False\n     default_error_messages = {\n         'invalid': _(\"'%(value)s' value has an invalid format. It must be in \"\n-                     \"[DD] [HH:[MM:]]ss[.uuuuuu] format.\")\n+                     \"[DD] [[HH:]MM:]ss[.uuuuuu] format.\")\n     }\n     description = _(\"Duration\")"
+}

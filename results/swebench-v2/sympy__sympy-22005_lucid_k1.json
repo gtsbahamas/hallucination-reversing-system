@@ -1,0 +1,21 @@
+{
+  "task_id": "sympy__sympy-22005",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_solve_poly_system\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_solve_biquadratic\",\n        \"test_solve_triangulated\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/sympy/solvers/polysys.py\n+++ b/sympy/solvers/polysys.py\n@@ -237,6 +237,11 @@ def solve_generic(polys, opt):\n             else:\n                 return None\n \n+        if len(basis) < len(gens):\n+            raise NotImplementedError(filldedent('''\n+                only zero-dimensional systems supported\n+                (finite number of solutions)\n+                '''))\n+\n         univariate = list(filter(_is_univariate, basis))\n \n         if len(univariate) == 1:"
+}

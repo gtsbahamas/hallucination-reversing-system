@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/21",
+  "condition": "lucid-random-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "FAIL: The implementation has bugs in edge case handling.",
+      "remediation": "## Fix Plan\n\n**Issue Identified:**\nThe function fails when all numbers in the list are identical (e.g., `[5.0, 5.0, 5.0]`), causing division by zero since `range_val = max_val - min_val = 0`.\n\n**Fix Required:**\n\n**Line to change:** Line 10 (the return statement)\n\n**Current code:**\n```python\nreturn [(x - min_val) / range_val for x in numbers]\n```\n\n**Fix:**\nAdd a conditional check before the division:\n```python\nif range_val == 0:\n    return [0.0] * len(numbers)\nreturn [(x - min_val) / range_val for x in numbers]\n```\n\n**Why this fixes the issue:**\n- When all numbers are identical, `min_val == max_val`, so `range_val = 0`\n- Division by zero would cause a runtime error\n- By convention, when all values are the same, they should all map to 0.0 (or any constant value, but 0.0 is most logical since there's no range to scale)\n- This handles the edge case while preserving correct behavior for normal inputs\n\n**Alternative approach** (if you want to return 0.5 for all identical values):\n```python\nif range_val == 0:\n    return [0.5] * len(numbers)\n```\n\nBut returning `[0.0]` is more standard for degenerate cases.",
+      "passed": true
+    }
+  ],
+  "ablation": "random-verify"
+}

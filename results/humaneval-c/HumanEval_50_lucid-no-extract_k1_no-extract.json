@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/50",
+  "condition": "lucid-no-extract",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "TESTS FAILED.\nReturn code: 1\nError type: syntax_error\nStderr:\n  File \"/tmp/tmp3ediv30a.py\", line 14\n    Looking at the `encode_shift` function, I can see it:\n            ^^\nSyntaxError: invalid syntax\n\nStdout:\n",
+      "remediation": "## Fix Plan\n\n**Problem**: The implementation contains prose text outside of the function, causing a syntax error. The actual decoding logic is correct.\n\n**Fix**:\n- **Remove lines with prose text** (the \"Looking at...\" paragraph that appears before the function definition)\n- **Keep only the function definition** with the decoding logic\n\n**Corrected implementation should be**:\n```python\ndef decode_shift(s: str):\n    \"\"\"\n    takes as input string encoded with encode_shift function. Returns decoded string.\n    \"\"\"\n    return \"\".join([chr(((ord(ch) - 5 - ord(\"a\")) % 26) + ord(\"a\")) for ch in s])\n```\n\n**Why this fixes it**:\n- Removes the invalid Python syntax (plain English text in the code)\n- The decoding logic `ord(ch) - 5` correctly reverses the encoding operation `ord(ch) + 5`\n- The modulo 26 operation properly handles wrap-around for characters near the beginning of the alphabet",
+      "passed": false
+    }
+  ],
+  "ablation": "no-extract"
+}

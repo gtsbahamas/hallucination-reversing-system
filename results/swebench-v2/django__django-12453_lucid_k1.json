@@ -1,0 +1,21 @@
+{
+  "task_id": "django__django-12453",
+  "condition": "lucid",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_circular_reference (backends.base.test_creation.TestDeserializeDbFromString)\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_custom_test_name (backends.base.test_creation.TestDbSignatureTests)\",\n        \"test_custom_test_name_with_test_prefix (backends.base.test_creation.TestDbSignatureTests)\",\n        \"test_default_name (backends.base.test_creation.TestDbSignatureTests)\",\n        \"test_migrate_test_setting_false (backends.base.test_creation.TestDbCreationTests)\",\n        \"test_migrate_test_setting_true (backends.base.test_creation.TestDbCreationTests)\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "ALL TESTS PASSED",
+      "passed": true,
+      "early_stop": true
+    }
+  ],
+  "ablation": null,
+  "solution": "--- a/django/db/backends/base/creation.py\n+++ b/django/db/backends/base/creation.py\n@@ -5,7 +5,7 @@ from io import StringIO\n from django.apps import apps\n from django.conf import settings\n from django.core import serializers\n-from django.db import router\n+from django.db import router, transaction\n \n # The prefix to put on the default database name when creating\n # the test database.\n@@ -126,8 +126,9 @@ class BaseDatabaseCreation:\n         the serialize_db_to_string() method.\n         \"\"\"\n         data = StringIO(data)\n-        for obj in serializers.deserialize(\"json\", data, using=self.connection.alias):\n-            obj.save()\n+        with transaction.atomic(using=self.connection.alias):\n+            for obj in serializers.deserialize(\"json\", data, using=self.connection.alias):\n+                obj.save()\n \n     def _get_database_display_str(self, verbosity, database_name):\n         \"\"\""
+}

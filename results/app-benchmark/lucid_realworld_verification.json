@@ -1,0 +1,2725 @@
+{
+  "brand-zen": {
+    "name": "brand-zen",
+    "platform": "Lovable",
+    "file_count": 152,
+    "source_chars": 60020,
+    "health_score": 42,
+    "claims": [
+      {
+        "claim_id": "C1",
+        "category": "SECURITY",
+        "claim": "User authentication is required and enforced via Supabase auth",
+        "evidence": "App.tsx: Uses supabase.auth.getUser() in generateReportFromAnalytics. AdminQuotaManager.tsx: Fetches from /admin/* endpoints without visible auth checks in component.",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C2",
+        "category": "SECURITY",
+        "claim": "Admin routes (/admin/*) are protected and require admin privileges",
+        "evidence": "App.tsx: Routes defined for /admin, /admin/users, /admin/monitoring, etc. No visible auth guards or role checks in routing layer.",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C3",
+        "category": "DATA_FLOW",
+        "claim": "API calls use createApiUrl() helper for consistent URL construction",
+        "evidence": "AdminQuotaManager.tsx, AdminQuotaManagerV2.tsx, ArchiveRetention.tsx: All use createApiUrl('/admin/...'). Implementation of createApiUrl not shown.",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C4",
+        "category": "ERROR_HANDLING",
+        "claim": "React Query retries failed requests with exponential backoff, but not on 4xx errors",
+        "evidence": "App.tsx: QueryClient configured with retry logic: 'if (error?.status >= 400 && error?.status < 500) return false; return failureCount < 3;'",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C5",
+        "category": "ERROR_HANDLING",
+        "claim": "Global error boundary (AppErrorBoundary) catches React errors",
+        "evidence": "App.tsx: <AppErrorBoundary> wraps entire app. Implementation not shown in provided code.",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C6",
+        "category": "DATA_FLOW",
+        "claim": "Supabase client is used for database operations (mentions, reports, profiles, user_roles)",
+        "evidence": "AnalyticsChart.tsx: supabase.from('mentions').select(...), supabase.from('reports').upsert(...). Supabase client imported from '@/integrations/supabase/client'.",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C7",
+        "category": "FUNCTIONAL",
+        "claim": "Analytics chart fetches mentions data with pagination (1000 records per chunk)",
+        "evidence": "AnalyticsChart.tsx: 'const chunkSize = 1000; const chunks = Math.ceil(count / chunkSize); for (let i = 0; i < chunks; i++) { ...range(i * chunkSize, (i + 1) * chunkSize - 1) }'",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C8",
+        "category": "FUNCTIONAL",
+        "claim": "Quota limits can be set per user and per source type",
+        "evidence": "AdminQuotaManager.tsx: Creates quota limits with user_id, source_type, monthly_limit. AdminQuotaManagerV2.tsx: Manages default quotas and user exceptions.",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C9",
+        "category": "DATA_FLOW",
+        "claim": "Admin endpoints return JSON with {success, data, error} structure",
+        "evidence": "AdminQuotaManager.tsx: 'const result = await response.json(); if (result.success) { setQuotaLimits(result.data || []); } else { toast.error(result.error) }'",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C10",
+        "category": "SECURITY",
+        "claim": "Quota deletion requires user confirmation",
+        "evidence": "AdminQuotaManager.tsx: 'if (!confirm('Are you sure you want to delete this quota limit?')) return;'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C11",
+        "category": "FUNCTIONAL",
+        "claim": "Analytics can be filtered by date range (start/end date) or preset periods (7/14/30/90 days)",
+        "evidence": "AnalyticsChart.tsx: useState for startDate/endDate, Select for period. Query uses 'gte/lte published_at' with calculated rangeStart/rangeEnd.",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C12",
+        "category": "FUNCTIONAL",
+        "claim": "Analytics can be filtered by enabled source types",
+        "evidence": "AnalyticsChart.tsx: 'if (enabledAnalytics.length && enabledAnalytics.length < 4) { baseQuery = baseQuery.in('source_type', enabledAnalytics); }'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C13",
+        "category": "DATA_FLOW",
+        "claim": "Reports can be generated from analytics view and upserted to 'reports' table",
+        "evidence": "AnalyticsChart.tsx: generateReportFromAnalytics() creates report object with user_id, report_month, totals, top_sources. Uses upsert with onConflict: 'user_id,report_month'.",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C14",
+        "category": "FUNCTIONAL",
+        "claim": "Sentiment is categorized as positive (>=51), neutral (50), negative (<=49)",
+        "evidence": "AnalyticsChart.tsx: 'if (mention.sentiment >= 51) dayData.positive++; else if (mention.sentiment === 50) dayData.neutral++; else if (mention.sentiment <= 49) dayData.negative++;'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C15",
+        "category": "ERROR_HANDLING",
+        "claim": "Toast notifications are used for user feedback on errors and success",
+        "evidence": "AdminQuotaManager.tsx, AnalyticsChart.tsx: 'toast.error(...)', 'toast.success(...)', 'toast({ title, description, variant })'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C16",
+        "category": "FUNCTIONAL",
+        "claim": "Archive retention days can be configured and old archives deleted",
+        "evidence": "ArchiveRetention.tsx: updateRetention() posts to /api/admin/archive-retention with action: 'update_retention'. deleteOldArchives() posts with action: 'delete_old_archives'.",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C17",
+        "category": "DATA_FLOW",
+        "claim": "Global settings (like archive_retention_days) are fetched via useGlobalSettings hook",
+        "evidence": "ArchiveRetention.tsx: 'const { settings: globalSettings, loading: settingsLoading, refreshSettings } = useGlobalSettings();'",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C18",
+        "category": "FUNCTIONAL",
+        "claim": "Default quotas apply to all users unless they have individual exceptions",
+        "evidence": "AdminQuotaManagerV2.tsx: 'Set the default monthly limits for each data source. These apply to all users unless they have individual exceptions.'",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C19",
+        "category": "DATA_FLOW",
+        "claim": "Effective quotas distinguish between 'default' and 'exception' quota types",
+        "evidence": "AdminQuotaManagerV2.tsx: EffectiveQuotaLimit interface has quota_type: 'default' | 'exception'. Fetches with query param '?quota_type=exception'.",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C20",
+        "category": "FUNCTIONAL",
+        "claim": "User exceptions can be created for specific user+source combinations",
+        "evidence": "AdminQuotaManagerV2.tsx: createUserException() posts to /admin/quota-limits with user_id, source_type, monthly_limit, is_active.",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C21",
+        "category": "FUNCTIONAL",
+        "claim": "Quota analytics show overall stats, source analytics, and top users",
+        "evidence": "AdminQuotaManager.tsx: QuotaAnalytics interface includes overall_stats, source_analytics, top_users. Fetched from /admin/quota-analytics?days=30.",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C22",
+        "category": "SECURITY",
+        "claim": "User deletion from quota exceptions uses user_id and source_type as identifiers",
+        "evidence": "AdminQuotaManagerV2.tsx: deleteUserException() calls DELETE /admin/quota-limits?user_id=${userId}&source_type=${sourceType}.",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C23",
+        "category": "ERROR_HANDLING",
+        "claim": "Loading states prevent duplicate actions during async operations",
+        "evidence": "AdminQuotaManager.tsx, AdminQuotaManagerV2.tsx: 'const [saving, setSaving] = useState<string | null>(null);' and buttons disabled when 'saving !== null' or 'saving === id'.",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C24",
+        "category": "FUNCTIONAL",
+        "claim": "Source types are mapped to display names (youtube -> YouTube, x -> X (Twitter), etc.)",
+        "evidence": "AdminQuotaManager.tsx, AdminQuotaManagerV2.tsx: 'const sourceDisplayNames: Record<string, string> = { youtube: 'YouTube', reddit: 'Reddit', x: 'X (Twitter)', ... }'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C25",
+        "category": "DATA_FLOW",
+        "claim": "React Query caches data for 10 minutes (gcTime) and considers it stale after 5 minutes (staleTime)",
+        "evidence": "App.tsx: QueryClient defaultOptions: 'staleTime: 5 * 60 * 1000, gcTime: 10 * 60 * 1000'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C26",
+        "category": "FUNCTIONAL",
+        "claim": "Performance monitoring is enabled in development mode",
+        "evidence": "App.tsx: '{process.env.NODE_ENV === 'development' && (<PerformanceMonitor />)}'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C27",
+        "category": "FUNCTIONAL",
+        "claim": "Theme switching (light/dark/system) is supported via ThemeProvider",
+        "evidence": "App.tsx: '<ThemeProvider attribute=\"class\" defaultTheme=\"system\" enableSystem>'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C28",
+        "category": "FUNCTIONAL",
+        "claim": "Timezone preferences are managed via TimezoneProvider context",
+        "evidence": "App.tsx: '<TimezoneProvider>' wraps the app. README mentions timezone context.",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C29",
+        "category": "FUNCTIONAL",
+        "claim": "Notifications are managed via NotificationProvider context",
+        "evidence": "App.tsx: '<NotificationProvider>' wraps the app.",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C30",
+        "category": "SECURITY",
+        "claim": "Password setup and emergency signin routes exist for authentication flows",
+        "evidence": "App.tsx: '<Route path=\"/password-setup\" element={<PasswordSetup />} />' and '<Route path=\"/auth/callback\" element={<EmergencySignin />} />'",
+        "risk": "MEDIUM"
+      }
+    ],
+    "verification": {
+      "layer": "L2_FORMAL_VERIFICATION",
+      "timestamp": "2025-06-10T12:00:00Z",
+      "overall_health_score": 42,
+      "critical_bugs": [
+        {
+          "claim_id": "C2",
+          "severity": "CRITICAL",
+          "bug_type": "security",
+          "title": "Admin routes completely unprotected",
+          "description": "All /admin/* routes are defined in App.tsx with NO authentication or authorization checks. Any user can navigate to /admin/users, /admin/monitoring, /admin/configuration, /admin/tools and access admin functionality. The routing layer has zero guards.",
+          "evidence": "App.tsx lines 89-107: Routes defined with no wrapper components, no auth checks, no role validation. Just <Route path='/admin/users' element={<UsersOverview />} />. The components themselves (AdminQuotaManager, AdminQuotaManagerV2) make API calls to /admin/* endpoints but never verify the current user's role before rendering UI or allowing actions.",
+          "impact": "Any authenticated user (or potentially unauthenticated if session handling is broken) can access admin panels, view all users, modify quota limits, delete data, and access sensitive monitoring information."
+        },
+        {
+          "claim_id": "C5",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl",
+          "title": "AppErrorBoundary implementation not provided",
+          "description": "App.tsx wraps everything in <AppErrorBoundary> but the actual implementation is not in the provided code. If this component is missing or broken, unhandled errors will crash the entire app with no recovery.",
+          "evidence": "App.tsx line 67: 'import { AppErrorBoundary } from \"@/components/ErrorBoundaries\";' but ErrorBoundaries.tsx not provided. README mentions it exists but we cannot verify it works.",
+          "impact": "If ErrorBoundaries.tsx is scaffolding or incomplete, any React error will white-screen the app. No fallback UI, no error reporting."
+        },
+        {
+          "claim_id": "C6",
+          "severity": "CRITICAL",
+          "bug_type": "data_flow",
+          "title": "Supabase client configuration and RLS policies unknown",
+          "description": "Code imports supabase client from '@/integrations/supabase/client' but we don't see the actual client setup, RLS policies, or whether anon key vs service key is used. If RLS is misconfigured or client uses service key in frontend, all data is exposed.",
+          "evidence": "AnalyticsChart.tsx line 16: 'import { supabase } from \"@/integrations/supabase/client\";' \u2014 client implementation not provided. If this client bypasses RLS or uses wrong credentials, security is broken.",
+          "impact": "Potential data breach if RLS is disabled or client has elevated privileges. Users could read/write any data in mentions, reports, profiles tables."
+        },
+        {
+          "claim_id": "C3",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl",
+          "title": "createApiUrl() implementation missing \u2014 API calls may fail",
+          "description": "All admin components use createApiUrl('/admin/...') but the actual implementation is not provided. If this function is broken, returns wrong URLs, or doesn't handle base URL correctly, all API calls will 404.",
+          "evidence": "AdminQuotaManager.tsx line 3: 'import { createApiUrl } from '@/lib/api';' \u2014 lib/api.ts not provided. If createApiUrl is TODO or returns hardcoded localhost, production will break.",
+          "impact": "All admin functionality (quota management, analytics, archive retention) will fail silently or with network errors. Users will see 'Failed to fetch' toasts but no data."
+        }
+      ],
+      "verification_results": [
+        {
+          "claim_id": "C1",
+          "verdict": "PARTIAL",
+          "reasoning": "AnalyticsChart.tsx calls supabase.auth.getUser() in generateReportFromAnalytics (line 147), proving auth is used. BUT: AdminQuotaManager and AdminQuotaManagerV2 make API calls to /admin/* endpoints without any visible auth token passing or session checks in the component code. The API endpoints themselves might check auth, but we can't verify that from frontend code alone. If backend endpoints are unprotected, this is a critical hole.",
+          "severity": "MAJOR",
+          "bug_type": "security",
+          "code_ref": "AnalyticsChart.tsx:147, AdminQuotaManager.tsx:88-95"
+        },
+        {
+          "claim_id": "C2",
+          "verdict": "FAIL",
+          "reasoning": "Admin routes are defined in App.tsx (lines 89-107) with ZERO protection. No ProtectedRoute wrapper, no role check, no auth guard. Anyone can type /admin/users in the URL and access the page. The components render immediately without checking if user is admin. This is a textbook authorization bypass vulnerability.",
+          "severity": "CRITICAL",
+          "bug_type": "security",
+          "code_ref": "App.tsx:89-107"
+        },
+        {
+          "claim_id": "C3",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "createApiUrl is imported and used everywhere but implementation not provided. If it's missing or broken, all API calls fail. If it's just a simple helper that prepends base URL, it's fine. But we can't verify. This is a critical dependency with no visibility.",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl",
+          "code_ref": "AdminQuotaManager.tsx:3, lib/api.ts (not provided)"
+        },
+        {
+          "claim_id": "C4",
+          "verdict": "PASS",
+          "reasoning": "React Query retry logic is correctly implemented in App.tsx lines 48-56. It checks error.status and skips retry for 4xx, retries up to 3 times for 5xx with exponential backoff (1s, 2s, 4s, max 30s). This is solid error handling.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "App.tsx:48-56"
+        },
+        {
+          "claim_id": "C5",
+          "verdict": "FAIL",
+          "reasoning": "AppErrorBoundary is imported and used but implementation not provided. If this component is missing, broken, or just a TODO, the entire error boundary strategy fails. We cannot verify it catches errors, logs them, or shows fallback UI.",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl",
+          "code_ref": "App.tsx:67, components/ErrorBoundaries.tsx (not provided)"
+        },
+        {
+          "claim_id": "C6",
+          "verdict": "FAIL",
+          "reasoning": "Supabase client is used extensively but we don't see the client setup, RLS policies, or auth configuration. If client uses anon key with broken RLS, all data is exposed. If it uses service key in frontend (catastrophic), users can do anything. We cannot verify security without seeing integrations/supabase/client.ts.",
+          "severity": "CRITICAL",
+          "bug_type": "security",
+          "code_ref": "AnalyticsChart.tsx:16, integrations/supabase/client.ts (not provided)"
+        },
+        {
+          "claim_id": "C7",
+          "verdict": "PASS",
+          "reasoning": "AnalyticsChart.tsx implements chunked pagination correctly (lines 46-62). It fetches count first, calculates chunks of 1000, then loops through ranges. This prevents memory issues with large datasets. Well done.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AnalyticsChart.tsx:46-62"
+        },
+        {
+          "claim_id": "C8",
+          "verdict": "PASS",
+          "reasoning": "AdminQuotaManager.tsx and AdminQuotaManagerV2.tsx both support per-user, per-source quota limits. Data structures include user_id, source_type, monthly_limit. API calls create/update/delete these limits. Functionality is implemented.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManager.tsx:88-120, AdminQuotaManagerV2.tsx:150-180"
+        },
+        {
+          "claim_id": "C9",
+          "verdict": "PASS",
+          "reasoning": "All admin API calls expect {success, data, error} JSON structure. Code consistently checks result.success and handles result.data or result.error. This is a good pattern.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManager.tsx:95-102, AdminQuotaManagerV2.tsx:85-92"
+        },
+        {
+          "claim_id": "C10",
+          "verdict": "PASS",
+          "reasoning": "Quota deletion requires confirm() dialog (AdminQuotaManager.tsx line 155). This prevents accidental deletions. Good UX.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManager.tsx:155"
+        },
+        {
+          "claim_id": "C11",
+          "verdict": "PASS",
+          "reasoning": "AnalyticsChart.tsx supports both preset periods (7/14/30/90 days via Select) and custom date ranges (startDate/endDate via Calendar popovers). Date range is correctly applied to Supabase query with gte/lte. Works as claimed.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AnalyticsChart.tsx:30-35, 38-42, 238-280"
+        },
+        {
+          "claim_id": "C12",
+          "verdict": "PASS",
+          "reasoning": "Analytics filtering by source type is implemented (lines 50-52). If enabledAnalytics array has items and length < 4, query adds .in('source_type', enabledAnalytics). This works.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AnalyticsChart.tsx:50-52"
+        },
+        {
+          "claim_id": "C13",
+          "verdict": "PARTIAL",
+          "reasoning": "generateReportFromAnalytics() creates report and upserts to 'reports' table (lines 130-175). It fetches user, builds report object, calls upsert with onConflict. HOWEVER: If user is not authenticated, supabase.auth.getUser() might return null and code throws 'User not authenticated'. This error is caught and toasted, but the function should check auth earlier. Also, report_month uses custom format 'yyyy-MM-dd..yyyy-MM-dd' which might not match expected schema.",
+          "severity": "MINOR",
+          "bug_type": "logic_error",
+          "code_ref": "AnalyticsChart.tsx:130-175"
+        },
+        {
+          "claim_id": "C14",
+          "verdict": "PASS",
+          "reasoning": "Sentiment categorization is correct: >=51 positive, ==50 neutral, <=49 negative (lines 72-76). Also checks for null and -1 to skip invalid sentiments. Good data handling.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AnalyticsChart.tsx:72-76"
+        },
+        {
+          "claim_id": "C15",
+          "verdict": "PASS",
+          "reasoning": "Toast notifications are used consistently for errors and success across all components. Uses both toast() from sonner and useToast hook. Good user feedback.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManager.tsx:102, AnalyticsChart.tsx:109"
+        },
+        {
+          "claim_id": "C16",
+          "verdict": "PARTIAL",
+          "reasoning": "ArchiveRetention.tsx has updateRetention() and deleteOldArchives() functions that POST to /api/admin/archive-retention. BUT: The component is truncated in provided code (line 82 cuts off mid-render). We can't verify the full UI or if the API endpoint exists. If endpoint is missing, these functions will fail.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl",
+          "code_ref": "ArchiveRetention.tsx:28-60 (truncated)"
+        },
+        {
+          "claim_id": "C17",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "ArchiveRetention.tsx uses useGlobalSettings() hook (line 11) to fetch archive_retention_days. Hook implementation not provided. If hook is broken or returns stale data, retention settings won't work. We can't verify hook correctness.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl",
+          "code_ref": "ArchiveRetention.tsx:11, hooks/useGlobalSettings.ts (not provided)"
+        },
+        {
+          "claim_id": "C18",
+          "verdict": "PASS",
+          "reasoning": "AdminQuotaManagerV2.tsx clearly documents that default quotas apply unless user has exception (line 195 CardDescription). Code fetches default quotas and exceptions separately, merges them in UI. Logic is sound.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManagerV2.tsx:195-200"
+        },
+        {
+          "claim_id": "C19",
+          "verdict": "PASS",
+          "reasoning": "EffectiveQuotaLimit interface (lines 18-31) has quota_type: 'default' | 'exception'. fetchEffectiveQuotas() queries with ?quota_type=exception (line 77). Data structure supports distinction.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManagerV2.tsx:18-31, 77"
+        },
+        {
+          "claim_id": "C20",
+          "verdict": "PASS",
+          "reasoning": "createUserException() (lines 150-180) POSTs to /admin/quota-limits with user_id, source_type, monthly_limit, is_active. Creates individual exceptions as claimed.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManagerV2.tsx:150-180"
+        },
+        {
+          "claim_id": "C21",
+          "verdict": "PASS",
+          "reasoning": "QuotaAnalytics interface (lines 30-54 in AdminQuotaManager.tsx) includes overall_stats, source_analytics, top_users. fetchAnalytics() calls /admin/quota-analytics?days=30. Data structure matches claim.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManager.tsx:30-54, 125-135"
+        },
+        {
+          "claim_id": "C22",
+          "verdict": "PASS",
+          "reasoning": "deleteUserException() (lines 182-205 in AdminQuotaManagerV2.tsx) calls DELETE /admin/quota-limits?user_id=${userId}&source_type=${sourceType}. Uses both identifiers as claimed.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManagerV2.tsx:182-205"
+        },
+        {
+          "claim_id": "C23",
+          "verdict": "PASS",
+          "reasoning": "All admin components use saving state (useState<string | null>(null)) and disable buttons when saving !== null or saving === id. Prevents duplicate submissions. Good pattern.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManager.tsx:67, AdminQuotaManagerV2.tsx:48"
+        },
+        {
+          "claim_id": "C24",
+          "verdict": "PASS",
+          "reasoning": "sourceDisplayNames constant maps source_type keys to display names (youtube -> YouTube, x -> X (Twitter), etc.). Used consistently in all admin components.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "AdminQuotaManager.tsx:56-62, AdminQuotaManagerV2.tsx:38-44"
+        },
+        {
+          "claim_id": "C25",
+          "verdict": "PASS",
+          "reasoning": "React Query config in App.tsx sets staleTime: 5min, gcTime: 10min (lines 58-60). Data is considered fresh for 5min, cached for 10min. Correct implementation.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "App.tsx:58-60"
+        },
+        {
+          "claim_id": "C26",
+          "verdict": "PASS",
+          "reasoning": "PerformanceMonitor is conditionally rendered only in development (line 119: process.env.NODE_ENV === 'development'). Won't bloat production bundle.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "App.tsx:119-121"
+        },
+        {
+          "claim_id": "C27",
+          "verdict": "PASS",
+          "reasoning": "ThemeProvider from next-themes is configured with attribute='class', defaultTheme='system', enableSystem (line 93). Supports light/dark/system themes as claimed.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "App.tsx:93"
+        },
+        {
+          "claim_id": "C28",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "TimezoneProvider wraps app (line 94) but implementation not provided. If provider is broken or doesn't actually manage timezone, features depending on it will fail. Can't verify.",
+          "severity": "MINOR",
+          "bug_type": "missing_impl",
+          "code_ref": "App.tsx:94, contexts/TimezoneContext.tsx (not provided)"
+        },
+        {
+          "claim_id": "C29",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "NotificationProvider wraps app (line 95) but implementation not provided. If provider is scaffolding, notification features won't work. Can't verify.",
+          "severity": "MINOR",
+          "bug_type": "missing_impl",
+          "code_ref": "App.tsx:95, contexts/NotificationContext.tsx (not provided)"
+        },
+        {
+          "claim_id": "C30",
+          "verdict": "PASS",
+          "reasoning": "Routes for /password-setup and /auth/callback exist (lines 84-85). Components PasswordSetup and EmergencySignin are imported. Auth flow routes are defined.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_ref": "App.tsx:84-85"
+        }
+      ],
+      "code_smells": [
+        {
+          "type": "security",
+          "description": "Admin routes have zero authorization checks. Any user can access /admin/* URLs directly.",
+          "location": "App.tsx:89-107",
+          "severity": "CRITICAL"
+        },
+        {
+          "type": "missing_impl",
+          "description": "Critical dependencies (createApiUrl, AppErrorBoundary, supabase client, useGlobalSettings) not provided. Cannot verify they work.",
+          "location": "Multiple imports",
+          "severity": "CRITICAL"
+        },
+        {
+          "type": "data_flow",
+          "description": "Supabase RLS policies unknown. If RLS is disabled or misconfigured, all data is exposed.",
+          "location": "integrations/supabase/client.ts (not provided)",
+          "severity": "CRITICAL"
+        },
+        {
+          "type": "error_handling",
+          "description": "AnalyticsChart.tsx fetches data in chunks but doesn't handle partial failures. If one chunk fails, entire fetch fails.",
+          "location": "AnalyticsChart.tsx:46-62",
+          "severity": "MAJOR"
+        },
+        {
+          "type": "scaffolding",
+          "description": "ArchiveRetention.tsx component is truncated. Cannot verify full implementation or if it's production-ready.",
+          "location": "ArchiveRetention.tsx:82 (truncated)",
+          "severity": "MAJOR"
+        },
+        {
+          "type": "logic_error",
+          "description": "generateReportFromAnalytics() uses custom report_month format 'yyyy-MM-dd..yyyy-MM-dd' which might not match database schema expectations.",
+          "location": "AnalyticsChart.tsx:145",
+          "severity": "MINOR"
+        },
+        {
+          "type": "race_condition",
+          "description": "Multiple components fetch data on mount without debouncing or request cancellation. Rapid navigation could cause stale data or memory leaks.",
+          "location": "AdminQuotaManager.tsx:73, AdminQuotaManagerV2.tsx:56",
+          "severity": "MINOR"
+        },
+        {
+          "type": "dead_code",
+          "description": "AdminQuotaManager.tsx has editingLimit state and startEdit() function but edit functionality appears incomplete (no update form shown).",
+          "location": "AdminQuotaManager.tsx:68, 189-195",
+          "severity": "MINOR"
+        }
+      ],
+      "positive_patterns": [
+        {
+          "pattern": "Chunked pagination for large datasets",
+          "description": "AnalyticsChart.tsx fetches data in 1000-record chunks to prevent memory issues. Excellent for scalability.",
+          "location": "AnalyticsChart.tsx:46-62"
+        },
+        {
+          "pattern": "Consistent error handling with toast notifications",
+          "description": "All components use toast() for user feedback on errors and success. Good UX pattern.",
+          "location": "Multiple components"
+        },
+        {
+          "pattern": "Loading states prevent duplicate actions",
+          "description": "All admin components disable buttons during async operations using saving state. Prevents race conditions.",
+          "location": "AdminQuotaManager.tsx:67, AdminQuotaManagerV2.tsx:48"
+        },
+        {
+          "pattern": "React Query retry logic with exponential backoff",
+          "description": "Smart retry strategy: skip 4xx errors, retry 5xx with backoff. Handles transient failures well.",
+          "location": "App.tsx:48-56"
+        },
+        {
+          "pattern": "Confirmation dialogs for destructive actions",
+          "description": "Quota deletion requires confirm(). Prevents accidental data loss.",
+          "location": "AdminQuotaManager.tsx:155"
+        },
+        {
+          "pattern": "Separation of default quotas and user exceptions",
+          "description": "AdminQuotaManagerV2.tsx cleanly separates global defaults from per-user overrides. Good data model.",
+          "location": "AdminQuotaManagerV2.tsx"
+        }
+      ],
+      "summary": {
+        "total_claims": 30,
+        "passed": 17,
+        "failed": 4,
+        "partial": 3,
+        "suspicious": 6,
+        "critical_issues": 4,
+        "major_issues": 4,
+        "minor_issues": 4,
+        "blockers": [
+          "Admin routes completely unprotected - any user can access admin panels",
+          "Critical dependencies (createApiUrl, AppErrorBoundary, supabase client) not provided - cannot verify they work",
+          "Supabase RLS policies unknown - potential data breach if misconfigured",
+          "Multiple context providers (TimezoneProvider, NotificationProvider, useGlobalSettings) not provided - features may be broken"
+        ],
+        "recommendation": "DO NOT DEPLOY TO PRODUCTION. This codebase has critical security vulnerabilities (unprotected admin routes, unknown RLS policies) and missing implementations (error boundaries, API helpers, context providers). The admin panel is completely open to any user. Fix authorization, provide missing code, and re-verify before deployment."
+      }
+    },
+    "remediation": [],
+    "summary": {
+      "total_claims": 30,
+      "pass": 0,
+      "fail": 0,
+      "partial": 0,
+      "suspicious": 0,
+      "critical_bugs": 4,
+      "critical_bug_details": [
+        {
+          "claim_id": "C2",
+          "severity": "CRITICAL",
+          "bug_type": "security",
+          "title": "Admin routes completely unprotected",
+          "description": "All /admin/* routes are defined in App.tsx with NO authentication or authorization checks. Any user can navigate to /admin/users, /admin/monitoring, /admin/configuration, /admin/tools and access admin functionality. The routing layer has zero guards.",
+          "evidence": "App.tsx lines 89-107: Routes defined with no wrapper components, no auth checks, no role validation. Just <Route path='/admin/users' element={<UsersOverview />} />. The components themselves (AdminQuotaManager, AdminQuotaManagerV2) make API calls to /admin/* endpoints but never verify the current user's role before rendering UI or allowing actions.",
+          "impact": "Any authenticated user (or potentially unauthenticated if session handling is broken) can access admin panels, view all users, modify quota limits, delete data, and access sensitive monitoring information."
+        },
+        {
+          "claim_id": "C5",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl",
+          "title": "AppErrorBoundary implementation not provided",
+          "description": "App.tsx wraps everything in <AppErrorBoundary> but the actual implementation is not in the provided code. If this component is missing or broken, unhandled errors will crash the entire app with no recovery.",
+          "evidence": "App.tsx line 67: 'import { AppErrorBoundary } from \"@/components/ErrorBoundaries\";' but ErrorBoundaries.tsx not provided. README mentions it exists but we cannot verify it works.",
+          "impact": "If ErrorBoundaries.tsx is scaffolding or incomplete, any React error will white-screen the app. No fallback UI, no error reporting."
+        },
+        {
+          "claim_id": "C6",
+          "severity": "CRITICAL",
+          "bug_type": "data_flow",
+          "title": "Supabase client configuration and RLS policies unknown",
+          "description": "Code imports supabase client from '@/integrations/supabase/client' but we don't see the actual client setup, RLS policies, or whether anon key vs service key is used. If RLS is misconfigured or client uses service key in frontend, all data is exposed.",
+          "evidence": "AnalyticsChart.tsx line 16: 'import { supabase } from \"@/integrations/supabase/client\";' \u2014 client implementation not provided. If this client bypasses RLS or uses wrong credentials, security is broken.",
+          "impact": "Potential data breach if RLS is disabled or client has elevated privileges. Users could read/write any data in mentions, reports, profiles tables."
+        },
+        {
+          "claim_id": "C3",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl",
+          "title": "createApiUrl() implementation missing \u2014 API calls may fail",
+          "description": "All admin components use createApiUrl('/admin/...') but the actual implementation is not provided. If this function is broken, returns wrong URLs, or doesn't handle base URL correctly, all API calls will 404.",
+          "evidence": "AdminQuotaManager.tsx line 3: 'import { createApiUrl } from '@/lib/api';' \u2014 lib/api.ts not provided. If createApiUrl is TODO or returns hardcoded localhost, production will break.",
+          "impact": "All admin functionality (quota management, analytics, archive retention) will fail silently or with network errors. Users will see 'Failed to fetch' toasts but no data."
+        }
+      ],
+      "code_smells": [
+        {
+          "type": "security",
+          "description": "Admin routes have zero authorization checks. Any user can access /admin/* URLs directly.",
+          "location": "App.tsx:89-107",
+          "severity": "CRITICAL"
+        },
+        {
+          "type": "missing_impl",
+          "description": "Critical dependencies (createApiUrl, AppErrorBoundary, supabase client, useGlobalSettings) not provided. Cannot verify they work.",
+          "location": "Multiple imports",
+          "severity": "CRITICAL"
+        },
+        {
+          "type": "data_flow",
+          "description": "Supabase RLS policies unknown. If RLS is disabled or misconfigured, all data is exposed.",
+          "location": "integrations/supabase/client.ts (not provided)",
+          "severity": "CRITICAL"
+        },
+        {
+          "type": "error_handling",
+          "description": "AnalyticsChart.tsx fetches data in chunks but doesn't handle partial failures. If one chunk fails, entire fetch fails.",
+          "location": "AnalyticsChart.tsx:46-62",
+          "severity": "MAJOR"
+        },
+        {
+          "type": "scaffolding",
+          "description": "ArchiveRetention.tsx component is truncated. Cannot verify full implementation or if it's production-ready.",
+          "location": "ArchiveRetention.tsx:82 (truncated)",
+          "severity": "MAJOR"
+        },
+        {
+          "type": "logic_error",
+          "description": "generateReportFromAnalytics() uses custom report_month format 'yyyy-MM-dd..yyyy-MM-dd' which might not match database schema expectations.",
+          "location": "AnalyticsChart.tsx:145",
+          "severity": "MINOR"
+        },
+        {
+          "type": "race_condition",
+          "description": "Multiple components fetch data on mount without debouncing or request cancellation. Rapid navigation could cause stale data or memory leaks.",
+          "location": "AdminQuotaManager.tsx:73, AdminQuotaManagerV2.tsx:56",
+          "severity": "MINOR"
+        },
+        {
+          "type": "dead_code",
+          "description": "AdminQuotaManager.tsx has editingLimit state and startEdit() function but edit functionality appears incomplete (no update form shown).",
+          "location": "AdminQuotaManager.tsx:68, 189-195",
+          "severity": "MINOR"
+        }
+      ],
+      "positive_patterns": [
+        {
+          "pattern": "Chunked pagination for large datasets",
+          "description": "AnalyticsChart.tsx fetches data in 1000-record chunks to prevent memory issues. Excellent for scalability.",
+          "location": "AnalyticsChart.tsx:46-62"
+        },
+        {
+          "pattern": "Consistent error handling with toast notifications",
+          "description": "All components use toast() for user feedback on errors and success. Good UX pattern.",
+          "location": "Multiple components"
+        },
+        {
+          "pattern": "Loading states prevent duplicate actions",
+          "description": "All admin components disable buttons during async operations using saving state. Prevents race conditions.",
+          "location": "AdminQuotaManager.tsx:67, AdminQuotaManagerV2.tsx:48"
+        },
+        {
+          "pattern": "React Query retry logic with exponential backoff",
+          "description": "Smart retry strategy: skip 4xx errors, retry 5xx with backoff. Handles transient failures well.",
+          "location": "App.tsx:48-56"
+        },
+        {
+          "pattern": "Confirmation dialogs for destructive actions",
+          "description": "Quota deletion requires confirm(). Prevents accidental data loss.",
+          "location": "AdminQuotaManager.tsx:155"
+        },
+        {
+          "pattern": "Separation of default quotas and user exceptions",
+          "description": "AdminQuotaManagerV2.tsx cleanly separates global defaults from per-user overrides. Good data model.",
+          "location": "AdminQuotaManagerV2.tsx"
+        }
+      ],
+      "remediations": 0,
+      "total_time_s": 151.5
+    }
+  },
+  "AllIncompassing": {
+    "name": "AllIncompassing",
+    "platform": "Bolt.new",
+    "file_count": 437,
+    "source_chars": 60020,
+    "health_score": 42,
+    "claims": [
+      {
+        "claim_id": "C1",
+        "category": "SECURITY",
+        "claim": "Role-based access control (RBAC) enforces route-level authorization via RoleGuard component checking user roles against allowed roles array",
+        "evidence": "src/App.tsx lines 90-180: RoleGuard wraps routes with roles prop (e.g., ['therapist', 'admin', 'super_admin']). AuthContext provides hasRole/hasAnyRole methods.",
+        "risk": "HIGH - Unauthorized users could access sensitive data (client records, billing, admin tools) if RoleGuard fails or is bypassed"
+      },
+      {
+        "claim_id": "C2",
+        "category": "SECURITY",
+        "claim": "Authentication state is managed by AuthProvider and PrivateRoute redirects unauthenticated users to /login",
+        "evidence": "src/App.tsx lines 85-88: PrivateRoute wraps all protected routes under Layout. AuthContext tracks user/session state.",
+        "risk": "HIGH - Unauthenticated users could access entire application if PrivateRoute check fails"
+      },
+      {
+        "claim_id": "C3",
+        "category": "DATA_FLOW",
+        "claim": "Runtime configuration (Supabase URL/keys) is loaded via /api/runtime-config before app renders",
+        "evidence": "README mentions ensureRuntimeSupabaseConfig loads /api/runtime-config before <App /> renders, guaranteeing supabaseUrl, supabaseAnonKey, supabaseEdgeUrl are available.",
+        "risk": "HIGH - App cannot connect to backend if runtime config fails; all API calls would fail silently or error"
+      },
+      {
+        "claim_id": "C4",
+        "category": "FUNCTIONAL",
+        "claim": "Session scheduling prevents double-booking across therapists and clients",
+        "evidence": "README: 'Session holds coordinate with confirmation and cancellation paths...preventing double booking across therapists and clients'",
+        "risk": "HIGH - Double bookings would cause scheduling conflicts, therapist/client confusion, billing errors"
+      },
+      {
+        "claim_id": "C5",
+        "category": "FUNCTIONAL",
+        "claim": "Session durations are rounded to compliant 15-minute blocks",
+        "evidence": "README: 'rounding durations to compliant 15-minute blocks'. AvailabilityEditor generates TIME_OPTIONS in 15-minute intervals (lines 25-40).",
+        "risk": "MEDIUM - Non-compliant durations could cause billing rejections or regulatory issues"
+      },
+      {
+        "claim_id": "C6",
+        "category": "DATA_FLOW",
+        "claim": "TanStack Query handles API caching with 1-minute stale time and 30-minute garbage collection",
+        "evidence": "src/App.tsx lines 50-62: QueryClient configured with staleTime: 1*60*1000, gcTime: 30*60*1000",
+        "risk": "MEDIUM - Stale data could show outdated schedules/client info; cache misses could overload backend"
+      },
+      {
+        "claim_id": "C7",
+        "category": "ERROR_HANDLING",
+        "claim": "Query retries are disabled for 4xx errors but retry up to 2 times for other failures",
+        "evidence": "src/App.tsx lines 52-58: retry function checks error.status >= 400 && < 500, returns false; else failureCount < 2",
+        "risk": "MEDIUM - Legitimate transient errors (500s) might not retry enough; 4xx errors won't retry even if temporary"
+      },
+      {
+        "claim_id": "C8",
+        "category": "FUNCTIONAL",
+        "claim": "Auto-scheduling generates optimal schedules considering therapist/client availability, travel distance, and rush hour traffic",
+        "evidence": "src/components/AutoScheduleModal.tsx lines 30-40: generateOptimalSchedule called with therapists, clients, existingSessions, date range. Lines 120-135: calculateTravelMetrics uses geolib distance and applies 1.5x multiplier for rush hour.",
+        "risk": "HIGH - Poor scheduling could waste therapist time, increase costs, reduce service quality"
+      },
+      {
+        "claim_id": "C9",
+        "category": "FUNCTIONAL",
+        "claim": "Clients are capped at monthly authorization limits and skipped if limit reached",
+        "evidence": "src/components/AutoScheduleModal.tsx lines 85-105: cappedClients array shown with remainingMinutes. formatRemainingHours displays 'No remaining hours' when minutes <= 0.",
+        "risk": "HIGH - Over-scheduling beyond authorization could cause billing denials, compliance violations"
+      },
+      {
+        "claim_id": "C10",
+        "category": "INTEGRATION",
+        "claim": "Auto-schedule fetches active programs and goals for each client via /api/programs and /api/goals endpoints",
+        "evidence": "src/components/AutoScheduleModal.tsx lines 60-80: Promise.all fetches programs by client_id, finds active program, fetches goals by program_id, finds active goal.",
+        "risk": "HIGH - Missing programs/goals would block scheduling; incorrect program/goal assignment could cause billing/compliance issues"
+      },
+      {
+        "claim_id": "C11",
+        "category": "SECURITY",
+        "claim": "Guardian users (role='client' without therapist/admin roles) are redirected to /family dashboard",
+        "evidence": "src/App.tsx lines 65-73: DashboardLanding checks hasRole('client') && !hasAnyRole(['therapist', 'admin', 'super_admin']), redirects to /family.",
+        "risk": "MEDIUM - Guardians seeing wrong dashboard could expose sensitive data or confuse users"
+      },
+      {
+        "claim_id": "C12",
+        "category": "FUNCTIONAL",
+        "claim": "Alternative time suggestions are scored and sorted by match quality",
+        "evidence": "src/components/AlternativeTimes.tsx lines 18-20: sortedAlternatives = [...alternatives].sort((a, b) => b.score - a.score). Lines 60-70: score displayed as percentage.",
+        "risk": "MEDIUM - Poor scoring could suggest suboptimal times, reducing user satisfaction"
+      },
+      {
+        "claim_id": "C13",
+        "category": "DATA_FLOW",
+        "claim": "Alternative times are generated by backend and passed as AlternativeTime[] prop",
+        "evidence": "src/components/AlternativeTimes.tsx lines 8-12: AlternativeTimesProps includes alternatives: AlternativeTime[] from lib/conflicts.",
+        "risk": "MEDIUM - If backend fails to generate alternatives, users have no fallback options"
+      },
+      {
+        "claim_id": "C14",
+        "category": "FUNCTIONAL",
+        "claim": "Notes can be marked as visible to parents via checkbox",
+        "evidence": "src/components/AddGeneralNoteModal.tsx lines 50-58: isVisibleToParent checkbox controls is_visible_to_parent field in submitted note.",
+        "risk": "MEDIUM - Incorrect visibility could expose sensitive clinical notes to parents or hide important info"
+      },
+      {
+        "claim_id": "C15",
+        "category": "FUNCTIONAL",
+        "claim": "Notes support three status types: resolved, open, follow-up",
+        "evidence": "src/components/AddGeneralNoteModal.tsx lines 60-95: Three buttons set noteStatus to 'resolved', 'open', or 'follow-up' with corresponding icons.",
+        "risk": "LOW - Wrong status wouldn't break functionality but could cause workflow confusion"
+      },
+      {
+        "claim_id": "C16",
+        "category": "SECURITY",
+        "claim": "Therapist details page is accessible to admins and the therapist themselves",
+        "evidence": "src/App.tsx lines 125-130: TherapistDetails wrapped in RoleGuard with roles={['therapist', 'admin', 'super_admin']}. Comment says 'accessible to admins and the therapist themselves'.",
+        "risk": "MEDIUM - Therapists could view other therapists' details if self-check not enforced server-side"
+      },
+      {
+        "claim_id": "C17",
+        "category": "FUNCTIONAL",
+        "claim": "Availability editor generates time slots from 6 AM to 9 PM in 15-minute intervals",
+        "evidence": "src/components/AvailabilityEditor.tsx lines 25-40: TIME_OPTIONS array generated with i * 15 + 6 * 60 minutes, creating 61 slots (6:00 AM to 9:00 PM).",
+        "risk": "LOW - Limited time range could prevent early/late scheduling but matches business hours"
+      },
+      {
+        "claim_id": "C18",
+        "category": "FUNCTIONAL",
+        "claim": "Availability editor prevents selecting end time before start time",
+        "evidence": "src/components/AvailabilityEditor.tsx lines 115-120: End time options have disabled={dayValue.start && timeValue <= dayValue.start}.",
+        "risk": "LOW - Invalid time ranges would cause scheduling errors but UI prevents this"
+      },
+      {
+        "claim_id": "C19",
+        "category": "FUNCTIONAL",
+        "claim": "Availability overlay shows therapist and client availability with color-coded indicators",
+        "evidence": "src/components/AvailabilityOverlay.tsx lines 50-80: Green/red for therapists (available/unavailable), blue/gray for clients, opacity-20 overlays.",
+        "risk": "LOW - Visual-only feature; incorrect display wouldn't break scheduling but could confuse users"
+      },
+      {
+        "claim_id": "C20",
+        "category": "DATA_FLOW",
+        "claim": "Programs and goals are fetched separately via /api/programs and /api/goals with client_id/program_id filters",
+        "evidence": "src/components/ClientDetails/ProgramsGoalsTab.tsx lines 30-50: useQuery for programs with client_id param, useQuery for goals with program_id param.",
+        "risk": "MEDIUM - Missing or incorrect filters could return wrong data or expose other clients' programs"
+      },
+      {
+        "claim_id": "C21",
+        "category": "ERROR_HANDLING",
+        "claim": "Empty API responses are handled by parsing empty text as empty array",
+        "evidence": "src/components/ClientDetails/ProgramsGoalsTab.tsx lines 12-17: parseJson checks if text is empty, returns [] as unknown as T.",
+        "risk": "MEDIUM - Type casting could hide errors; empty responses might indicate backend failures"
+      },
+      {
+        "claim_id": "C22",
+        "category": "FUNCTIONAL",
+        "claim": "Active program is auto-selected if no program is explicitly selected",
+        "evidence": "src/components/ClientDetails/ProgramsGoalsTab.tsx lines 45-48: resolvedProgramId finds program with status='active' or falls back to first program.",
+        "risk": "LOW - Wrong program selection could confuse users but doesn't break functionality"
+      },
+      {
+        "claim_id": "C23",
+        "category": "INTEGRATION",
+        "claim": "Program notes are created via POST to /api/program-notes with program_id and note_type",
+        "evidence": "src/components/ClientDetails/ProgramsGoalsTab.tsx lines 100-115: createNote mutation posts to /api/program-notes with program_id, note_type, content.",
+        "risk": "MEDIUM - Missing program_id validation could create orphaned notes or fail silently"
+      },
+      {
+        "claim_id": "C24",
+        "category": "ERROR_HANDLING",
+        "claim": "Mutations show success/error toasts via showSuccess/showError helpers",
+        "evidence": "src/components/ClientDetails/ProgramsGoalsTab.tsx lines 70, 90, 110: onSuccess calls showSuccess, onError calls showError.",
+        "risk": "LOW - Missing error messages could confuse users but doesn't break functionality"
+      },
+      {
+        "claim_id": "C25",
+        "category": "FUNCTIONAL",
+        "claim": "Dark mode is toggled via useTheme hook and persisted to document.documentElement class",
+        "evidence": "src/App.tsx lines 75-82: useEffect adds/removes 'dark' class on document.documentElement based on isDark.",
+        "risk": "LOW - Theme persistence failure would reset on refresh but doesn't affect functionality"
+      },
+      {
+        "claim_id": "C26",
+        "category": "ERROR_HANDLING",
+        "claim": "App is wrapped in ErrorBoundary to catch React errors",
+        "evidence": "src/App.tsx line 74: <ErrorBoundary> wraps entire app. README mentions 'development error boundary expose Supabase bootstrap errors'.",
+        "risk": "MEDIUM - Unhandled errors could crash app; boundary should log errors for debugging"
+      },
+      {
+        "claim_id": "C27",
+        "category": "FUNCTIONAL",
+        "claim": "Lazy loading is used for all route components to reduce initial bundle size",
+        "evidence": "src/App.tsx lines 14-40: All components imported via React.lazy(). Suspense with LoadingSpinner on line 86.",
+        "risk": "LOW - Lazy load failures would show loading spinner indefinitely but shouldn't break app"
+      },
+      {
+        "claim_id": "C28",
+        "category": "SECURITY",
+        "claim": "Super admin tools (feature flags, impersonation, prompts) require super_admin role",
+        "evidence": "src/App.tsx lines 195-215: All super-admin routes wrapped in RoleGuard with roles={['super_admin']}.",
+        "risk": "HIGH - Impersonation and feature flags are powerful tools; unauthorized access could compromise system"
+      },
+      {
+        "claim_id": "C29",
+        "category": "FUNCTIONAL",
+        "claim": "Accessibility tests verify form labels and run axe checks on Login and Signup pages",
+        "evidence": "src/__tests__/a11y.smoke.test.tsx lines 30-50: Tests check for labeled email/password inputs and run axe() for violations.",
+        "risk": "LOW - Accessibility issues affect usability but tests only cover login/signup, not full app"
+      },
+      {
+        "claim_id": "C30",
+        "category": "DATA_FLOW",
+        "claim": "Query client uses 'online' network mode, preventing queries/mutations when offline",
+        "evidence": "src/App.tsx lines 59-61: queries.networkMode: 'online', mutations.networkMode: 'online'.",
+        "risk": "MEDIUM - Offline users get no feedback; app could appear broken without network status indicator"
+      }
+    ],
+    "verification": {
+      "claims": [
+        {
+          "claim_id": "C1",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "RoleGuard component is referenced in App.tsx routes but the actual RoleGuard implementation is not provided in the codebase. Cannot verify if it properly enforces role checks or if it can be bypassed. The hasRole/hasAnyRole methods are called but their implementation in AuthContext is mocked in tests (src/__tests__/a11y.smoke.test.tsx lines 8-20) returning hardcoded false values, suggesting the real implementation may not be present or functional.",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C2",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "PrivateRoute component is imported and used (App.tsx line 9, 85-88) but its implementation is not provided. Cannot verify if it actually redirects unauthenticated users or if the redirect logic is functional. Test mocks show AuthContext returning null user/session (a11y.smoke.test.tsx lines 11-13), but no actual auth flow is tested.",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C3",
+          "verdict": "FAIL",
+          "reasoning": "README claims ensureRuntimeSupabaseConfig loads /api/runtime-config before App renders, but this function is never called in App.tsx. No bootstrap logic exists in the provided code. The app would render without runtime config, causing all Supabase API calls to fail with undefined URL/keys.",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C4",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "README claims double-booking prevention but no validation logic is visible in the provided code. AutoScheduleModal.tsx calls generateOptimalSchedule (line 38) but this function is imported from '../lib/autoSchedule' which is not provided. Cannot verify if double-booking checks exist.",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C5",
+          "verdict": "PARTIAL",
+          "reasoning": "AvailabilityEditor.tsx generates 15-minute intervals (lines 25-40) for UI display, but there's no enforcement that session durations must be 15-minute multiples. Users could manually enter non-compliant times elsewhere. The TIME_OPTIONS array is only used in availability editor, not in actual session creation.",
+          "severity": "MAJOR",
+          "bug_type": "logic_error"
+        },
+        {
+          "claim_id": "C6",
+          "verdict": "PASS",
+          "reasoning": "QueryClient configuration in App.tsx lines 50-62 correctly sets staleTime: 1*60*1000 (1 minute) and gcTime: 30*60*1000 (30 minutes). Configuration matches claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C7",
+          "verdict": "PASS",
+          "reasoning": "Retry logic in App.tsx lines 52-58 correctly checks error.status >= 400 && < 500 to skip retries for 4xx errors, and returns failureCount < 2 for other errors (max 2 retries). Implementation matches claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C8",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "AutoScheduleModal.tsx calls generateOptimalSchedule (line 38) and calculateTravelMetrics (line 120), but generateOptimalSchedule is imported from unverified '../lib/autoSchedule'. The travel metrics calculation exists (lines 120-135) with rush hour multiplier, but the core scheduling algorithm cannot be verified.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C9",
+          "verdict": "PARTIAL",
+          "reasoning": "AutoScheduleModal.tsx displays cappedClients (lines 85-105) and formatRemainingHours (lines 115-125), but the actual capping logic is in the unverified generateOptimalSchedule function. UI shows the results but cannot verify if limits are correctly enforced during scheduling.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C10",
+          "verdict": "FAIL",
+          "reasoning": "AutoScheduleModal.tsx lines 60-80 fetch programs and goals, but there's no error handling if a client has no active program or goal. The code throws 'No program found' or 'No goal found' errors (lines 73, 81) which would crash the entire auto-schedule operation instead of gracefully skipping that client. This breaks the user experience.",
+          "severity": "CRITICAL",
+          "bug_type": "error_handling"
+        },
+        {
+          "claim_id": "C11",
+          "verdict": "PASS",
+          "reasoning": "DashboardLanding component in App.tsx lines 65-73 correctly checks hasRole('client') && !hasAnyRole(['therapist', 'admin', 'super_admin']) and redirects to /family. Logic matches claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C12",
+          "verdict": "PASS",
+          "reasoning": "AlternativeTimes.tsx lines 18-20 correctly sorts alternatives by score descending: [...alternatives].sort((a, b) => b.score - a.score). Score is displayed as percentage (lines 60-70). Implementation matches claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C13",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "AlternativeTimes component receives alternatives prop (lines 8-12) but there's no code showing where these alternatives are generated. The backend integration is not visible, and there's no fallback if alternatives array is empty beyond showing a message (lines 25-30).",
+          "severity": "MEDIUM",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C14",
+          "verdict": "PASS",
+          "reasoning": "AddGeneralNoteModal.tsx lines 50-58 has isVisibleToParent checkbox that controls is_visible_to_parent field in the submitted note object (line 42). Implementation matches claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C15",
+          "verdict": "PASS",
+          "reasoning": "AddGeneralNoteModal.tsx lines 60-95 has three buttons for 'resolved', 'open', 'follow-up' status with corresponding icons (CheckCircle, AlertTriangle, RefreshCw). Status is included in submitted note (line 43). Implementation matches claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C16",
+          "verdict": "FAIL",
+          "reasoning": "App.tsx lines 125-130 wraps TherapistDetails in RoleGuard with roles=['therapist', 'admin', 'super_admin'], but there's NO logic to verify that a therapist can only view their OWN details. Any user with 'therapist' role can access /therapists/:therapistId for ANY therapist ID. This is a major security hole - therapists can view each other's sensitive information.",
+          "severity": "CRITICAL",
+          "bug_type": "security"
+        },
+        {
+          "claim_id": "C17",
+          "verdict": "PASS",
+          "reasoning": "AvailabilityEditor.tsx lines 25-40 generates TIME_OPTIONS from i*15 + 6*60 minutes, creating 61 slots from 6:00 AM (360 minutes) to 9:00 PM (1260 minutes) in 15-minute intervals. Math is correct: (61-1)*15 = 900 minutes = 15 hours from 6 AM to 9 PM.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C18",
+          "verdict": "PASS",
+          "reasoning": "AvailabilityEditor.tsx lines 115-120 disables end time options where timeValue <= dayValue.start, preventing invalid time ranges. Implementation matches claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C19",
+          "verdict": "PASS",
+          "reasoning": "AvailabilityOverlay.tsx lines 50-80 applies bg-green-50/bg-red-50 for therapist availability and bg-blue-50/bg-gray-50 for client availability with opacity-20. Visual indicators match claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C20",
+          "verdict": "PARTIAL",
+          "reasoning": "ProgramsGoalsTab.tsx lines 30-50 fetches programs with client_id and goals with program_id, but the API calls use template strings without URL encoding (e.g., `/api/programs?client_id=${client.id}`). If client.id contains special characters, the query could break or be exploited. No input validation visible.",
+          "severity": "MAJOR",
+          "bug_type": "security"
+        },
+        {
+          "claim_id": "C21",
+          "verdict": "FAIL",
+          "reasoning": "ProgramsGoalsTab.tsx lines 12-17 parseJson function returns `[] as unknown as T` for empty responses. This is a dangerous type cast that bypasses TypeScript safety. If the API returns empty string for a single object (not array), this will cause runtime errors. The cast `as unknown as T` can hide type mismatches and cause crashes when the code expects an object but gets an array.",
+          "severity": "MAJOR",
+          "bug_type": "logic_error"
+        },
+        {
+          "claim_id": "C22",
+          "verdict": "PASS",
+          "reasoning": "ProgramsGoalsTab.tsx lines 45-48 resolvedProgramId finds active program or falls back to first program: programs.find(p => p.status === 'active')?.id ?? programs[0]?.id ?? null. Logic matches claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C23",
+          "verdict": "PARTIAL",
+          "reasoning": "Code is truncated at line 'classNam' in ProgramsGoalsTab.tsx, preventing full verification of program notes creation. Based on visible code (lines 100-115 mentioned in claim), the mutation structure appears correct but cannot fully verify without complete implementation.",
+          "severity": "MEDIUM",
+          "bug_type": "missing_impl"
+        }
+      ],
+      "overall_health_score": 42,
+      "critical_bugs": [
+        {
+          "title": "Missing Runtime Config Bootstrap",
+          "description": "ensureRuntimeSupabaseConfig is never called before App renders. All Supabase API calls will fail with undefined URL/keys, breaking the entire application.",
+          "location": "src/App.tsx",
+          "impact": "Application cannot connect to backend, complete system failure"
+        },
+        {
+          "title": "Therapist Cross-Access Vulnerability",
+          "description": "Any therapist can view any other therapist's details by navigating to /therapists/:therapistId. RoleGuard only checks role='therapist' but doesn't verify ownership. Exposes sensitive therapist data.",
+          "location": "src/App.tsx lines 125-130",
+          "impact": "Privacy violation, HIPAA compliance risk, therapist data exposure"
+        },
+        {
+          "title": "Auto-Schedule Crashes on Missing Program/Goal",
+          "description": "handleSchedule throws errors instead of gracefully handling clients without active programs/goals. Entire auto-schedule operation fails if ANY client is missing data.",
+          "location": "src/components/AutoScheduleModal.tsx lines 60-80",
+          "impact": "Feature completely unusable if any client has incomplete setup"
+        },
+        {
+          "title": "Missing Core Components",
+          "description": "RoleGuard and PrivateRoute components are imported but not provided. Authentication and authorization cannot be verified and may not exist.",
+          "location": "src/App.tsx lines 9, 85-88",
+          "impact": "Potential complete bypass of security controls"
+        }
+      ],
+      "code_smells": [
+        {
+          "pattern": "Unsafe Type Casting",
+          "description": "parseJson returns `[] as unknown as T` for empty responses, bypassing type safety and potentially causing runtime crashes",
+          "locations": [
+            "src/components/ClientDetails/ProgramsGoalsTab.tsx lines 12-17"
+          ]
+        },
+        {
+          "pattern": "Missing URL Encoding",
+          "description": "API calls use template strings without encoding query parameters, vulnerable to injection if IDs contain special characters",
+          "locations": [
+            "src/components/ClientDetails/ProgramsGoalsTab.tsx lines 30-50"
+          ]
+        },
+        {
+          "pattern": "Incomplete Error Handling",
+          "description": "Many API calls lack proper error boundaries. Errors are logged but user experience degrades silently",
+          "locations": [
+            "Multiple components using callApi without try-catch"
+          ]
+        },
+        {
+          "pattern": "Unverified External Dependencies",
+          "description": "Critical business logic (generateOptimalSchedule, conflict detection) is imported from unverified modules",
+          "locations": [
+            "src/components/AutoScheduleModal.tsx line 30-40"
+          ]
+        },
+        {
+          "pattern": "Hardcoded Test Mocks",
+          "description": "Auth context is mocked to return false for all role checks in tests, suggesting real implementation may not work",
+          "locations": [
+            "src/__tests__/a11y.smoke.test.tsx lines 8-20"
+          ]
+        }
+      ],
+      "positive_patterns": [
+        {
+          "pattern": "Proper Query Configuration",
+          "description": "TanStack Query is well-configured with appropriate stale times, retry logic, and network mode settings",
+          "locations": [
+            "src/App.tsx lines 50-62"
+          ]
+        },
+        {
+          "pattern": "Accessibility Testing",
+          "description": "Automated a11y tests using jest-axe ensure forms have proper labels and no violations",
+          "locations": [
+            "src/__tests__/a11y.smoke.test.tsx"
+          ]
+        },
+        {
+          "pattern": "Lazy Loading",
+          "description": "All route components are lazy-loaded to reduce initial bundle size",
+          "locations": [
+            "src/App.tsx lines 15-40"
+          ]
+        },
+        {
+          "pattern": "Dark Mode Support",
+          "description": "Consistent dark mode implementation with theme context and Tailwind classes",
+          "locations": [
+            "src/App.tsx lines 75-82"
+          ]
+        },
+        {
+          "pattern": "User Feedback",
+          "description": "Toast notifications provide clear success/error feedback for mutations",
+          "locations": [
+            "Multiple components using showSuccess/showError"
+          ]
+        },
+        {
+          "pattern": "Input Validation",
+          "description": "Availability editor prevents invalid time ranges (end before start) at UI level",
+          "locations": [
+            "src/components/AvailabilityEditor.tsx lines 115-120"
+          ]
+        }
+      ]
+    },
+    "remediation": [],
+    "summary": {
+      "total_claims": 30,
+      "pass": 0,
+      "fail": 0,
+      "partial": 0,
+      "suspicious": 0,
+      "critical_bugs": 4,
+      "critical_bug_details": [
+        {
+          "title": "Missing Runtime Config Bootstrap",
+          "description": "ensureRuntimeSupabaseConfig is never called before App renders. All Supabase API calls will fail with undefined URL/keys, breaking the entire application.",
+          "location": "src/App.tsx",
+          "impact": "Application cannot connect to backend, complete system failure"
+        },
+        {
+          "title": "Therapist Cross-Access Vulnerability",
+          "description": "Any therapist can view any other therapist's details by navigating to /therapists/:therapistId. RoleGuard only checks role='therapist' but doesn't verify ownership. Exposes sensitive therapist data.",
+          "location": "src/App.tsx lines 125-130",
+          "impact": "Privacy violation, HIPAA compliance risk, therapist data exposure"
+        },
+        {
+          "title": "Auto-Schedule Crashes on Missing Program/Goal",
+          "description": "handleSchedule throws errors instead of gracefully handling clients without active programs/goals. Entire auto-schedule operation fails if ANY client is missing data.",
+          "location": "src/components/AutoScheduleModal.tsx lines 60-80",
+          "impact": "Feature completely unusable if any client has incomplete setup"
+        },
+        {
+          "title": "Missing Core Components",
+          "description": "RoleGuard and PrivateRoute components are imported but not provided. Authentication and authorization cannot be verified and may not exist.",
+          "location": "src/App.tsx lines 9, 85-88",
+          "impact": "Potential complete bypass of security controls"
+        }
+      ],
+      "code_smells": [
+        {
+          "pattern": "Unsafe Type Casting",
+          "description": "parseJson returns `[] as unknown as T` for empty responses, bypassing type safety and potentially causing runtime crashes",
+          "locations": [
+            "src/components/ClientDetails/ProgramsGoalsTab.tsx lines 12-17"
+          ]
+        },
+        {
+          "pattern": "Missing URL Encoding",
+          "description": "API calls use template strings without encoding query parameters, vulnerable to injection if IDs contain special characters",
+          "locations": [
+            "src/components/ClientDetails/ProgramsGoalsTab.tsx lines 30-50"
+          ]
+        },
+        {
+          "pattern": "Incomplete Error Handling",
+          "description": "Many API calls lack proper error boundaries. Errors are logged but user experience degrades silently",
+          "locations": [
+            "Multiple components using callApi without try-catch"
+          ]
+        },
+        {
+          "pattern": "Unverified External Dependencies",
+          "description": "Critical business logic (generateOptimalSchedule, conflict detection) is imported from unverified modules",
+          "locations": [
+            "src/components/AutoScheduleModal.tsx line 30-40"
+          ]
+        },
+        {
+          "pattern": "Hardcoded Test Mocks",
+          "description": "Auth context is mocked to return false for all role checks in tests, suggesting real implementation may not work",
+          "locations": [
+            "src/__tests__/a11y.smoke.test.tsx lines 8-20"
+          ]
+        }
+      ],
+      "positive_patterns": [
+        {
+          "pattern": "Proper Query Configuration",
+          "description": "TanStack Query is well-configured with appropriate stale times, retry logic, and network mode settings",
+          "locations": [
+            "src/App.tsx lines 50-62"
+          ]
+        },
+        {
+          "pattern": "Accessibility Testing",
+          "description": "Automated a11y tests using jest-axe ensure forms have proper labels and no violations",
+          "locations": [
+            "src/__tests__/a11y.smoke.test.tsx"
+          ]
+        },
+        {
+          "pattern": "Lazy Loading",
+          "description": "All route components are lazy-loaded to reduce initial bundle size",
+          "locations": [
+            "src/App.tsx lines 15-40"
+          ]
+        },
+        {
+          "pattern": "Dark Mode Support",
+          "description": "Consistent dark mode implementation with theme context and Tailwind classes",
+          "locations": [
+            "src/App.tsx lines 75-82"
+          ]
+        },
+        {
+          "pattern": "User Feedback",
+          "description": "Toast notifications provide clear success/error feedback for mutations",
+          "locations": [
+            "Multiple components using showSuccess/showError"
+          ]
+        },
+        {
+          "pattern": "Input Validation",
+          "description": "Availability editor prevents invalid time ranges (end before start) at UI level",
+          "locations": [
+            "src/components/AvailabilityEditor.tsx lines 115-120"
+          ]
+        }
+      ],
+      "remediations": 0,
+      "total_time_s": 141.6
+    }
+  },
+  "gptme-webui": {
+    "name": "gptme-webui",
+    "platform": "Lovable",
+    "file_count": 86,
+    "source_chars": 60020,
+    "health_score": 42,
+    "claims": [
+      {
+        "claim_id": "C1",
+        "category": "SECURITY",
+        "claim": "API authentication uses Bearer token in Authorization header",
+        "evidence": "src/components/ConnectionButton.tsx: formState.authToken sent as 'Bearer [token]', with automatic 'Bearer ' prefix removal if user includes it",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C2",
+        "category": "SECURITY",
+        "claim": "CORS origin validation is required for gptme-server connections",
+        "evidence": "README and ConnectionButton.tsx: Server must be started with --cors-origin flag matching web UI origin",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C3",
+        "category": "SECURITY",
+        "claim": "File access is restricted to conversation workspace directory",
+        "evidence": "src/components/ChatMessage.tsx: sanitizedPath filters '..' parent directory references, shows error for files outside workspace",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C4",
+        "category": "INTEGRATION",
+        "claim": "WebSocket connections maintain real-time conversation state",
+        "evidence": "src/contexts/ApiContext.tsx: ApiProvider manages WebSocket connections per conversation, tracks isConnected$ state",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C5",
+        "category": "DATA_FLOW",
+        "claim": "Conversation messages are streamed incrementally via WebSocket",
+        "evidence": "src/components/ChatMessage.tsx: StreamingMessage type with isComplete flag, parser writes content incrementally",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C6",
+        "category": "FUNCTIONAL",
+        "claim": "Tool execution requires explicit user confirmation before running",
+        "evidence": "src/components/InlineToolConfirmation.tsx and ConversationContent.tsx: handleConfirmTool, handleSkipTool, handleAutoConfirmTool functions",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C7",
+        "category": "DATA_FLOW",
+        "claim": "Query cache is invalidated on all mutations to ensure UI updates",
+        "evidence": "src/App.tsx: QueryClient mutations.onSuccess calls queryClient.invalidateQueries()",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C8",
+        "category": "FUNCTIONAL",
+        "claim": "Markdown rendering uses custom streaming parser (smd)",
+        "evidence": "src/components/ChatMessage.tsx: smd.parser with customRenderer, incremental parser_write calls",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C9",
+        "category": "SECURITY",
+        "claim": "iframe sandbox restrictions are disabled for browser preview",
+        "evidence": "src/components/BrowserPreview.tsx: iframe has commented-out sandbox attribute",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C10",
+        "category": "INTEGRATION",
+        "claim": "Console logs from iframe are captured via postMessage proxy",
+        "evidence": "src/components/BrowserPreview.tsx: consoleProxyScript injected on iframe load, listens for 'console' message type",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C11",
+        "category": "SECURITY",
+        "claim": "Console proxy only works with same-origin iframes",
+        "evidence": "src/components/BrowserPreview.tsx: Comment states 'only works with same-origin URLs'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C12",
+        "category": "DATA_FLOW",
+        "claim": "Conversation state is stored in Legend-State observables",
+        "evidence": "src/stores/conversations.ts and ChatMessage.tsx: message$ observables with useObserveEffect hooks",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C13",
+        "category": "FUNCTIONAL",
+        "claim": "Auto-scrolling is aborted when user manually scrolls during generation",
+        "evidence": "src/components/ConversationContent.tsx: autoScrollAborted$ flag set on scroll, checked before auto-scroll",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C14",
+        "category": "FUNCTIONAL",
+        "claim": "System messages before first non-system message are hidden by default",
+        "evidence": "src/components/ConversationContent.tsx: firstNonSystemIndex$ calculation, isInitialSystem check",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C15",
+        "category": "FUNCTIONAL",
+        "claim": "Messages with hide=true are hidden unless verbose mode is enabled",
+        "evidence": "src/components/ConversationContent.tsx: message?.hide check with settings.verboseMode condition",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C16",
+        "category": "INTEGRATION",
+        "claim": "API base URL defaults to http://127.0.0.1:5700",
+        "evidence": "src/components/ConnectionButton.tsx: formState.baseUrl placeholder and default",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C17",
+        "category": "FUNCTIONAL",
+        "claim": "Infinite scroll loads more conversations when sentinel is visible",
+        "evidence": "src/components/ConversationList.tsx: IntersectionObserver on loadMoreSentinelRef, calls fetchNextPage",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C18",
+        "category": "DATA_FLOW",
+        "claim": "Conversation files are served from /api/conversations/{id}/files/{path}",
+        "evidence": "src/components/ChatMessage.tsx: fileUrl construction with baseUrl + conversationId + sanitizedPath",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C19",
+        "category": "FUNCTIONAL",
+        "claim": "Image files are displayed inline, other files as download links",
+        "evidence": "src/components/ChatMessage.tsx: isImage regex check for jpg|jpeg|png|gif|webp extensions",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C20",
+        "category": "ERROR_HANDLING",
+        "claim": "Image load errors show warning message for path traversal attempts",
+        "evidence": "src/components/ChatMessage.tsx: onError handler checks for '..' in src, shows 'Cannot access files outside workspace'",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C21",
+        "category": "FUNCTIONAL",
+        "claim": "Code blocks are syntax highlighted using highlight.js",
+        "evidence": "src/components/CodeDisplay.tsx: highlightCode utility function, highlight.js CSS import",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C22",
+        "category": "FUNCTIONAL",
+        "claim": "Command palette is triggered with Cmd+K or Ctrl+K",
+        "evidence": "src/components/CommandPalette.tsx: keydown listener for 'k' with metaKey or ctrlKey",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C23",
+        "category": "FUNCTIONAL",
+        "claim": "Chat input can be focused with 'i' key when not in input field",
+        "evidence": "src/components/ConversationContent.tsx: handleKeyDown for 'i' key, sets shouldFocus$ to true",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C24",
+        "category": "DATA_FLOW",
+        "claim": "Query refetching is disabled by default to prevent unnecessary API calls",
+        "evidence": "src/App.tsx: QueryClient defaultOptions sets refetchOnWindowFocus, refetchOnMount, refetchOnReconnect to false",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C25",
+        "category": "FUNCTIONAL",
+        "claim": "Theme can be system, light, or dark with automatic system detection",
+        "evidence": "src/App.tsx: ThemeProvider with defaultTheme='system' and enableSystem",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C26",
+        "category": "FUNCTIONAL",
+        "claim": "Router uses future flags for React Router v7 compatibility",
+        "evidence": "src/App.tsx: BrowserRouter future prop with v7_startTransition and v7_relativeSplatPath",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C27",
+        "category": "FUNCTIONAL",
+        "claim": "Agents are extracted from conversation metadata and grouped by path",
+        "evidence": "src/components/AgentsList.tsx: extractAgentsFromConversations utility, agent.path as key",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C28",
+        "category": "FUNCTIONAL",
+        "claim": "Selected agent filters conversation list to show only agent conversations",
+        "evidence": "src/components/AgentsList.tsx: selectedAgent$ observable, toggle selection logic",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C29",
+        "category": "FUNCTIONAL",
+        "claim": "Browser preview can toggle between mobile (375px) and desktop width",
+        "evidence": "src/components/BrowserPreview.tsx: isMobile state, conditional className with 'w-[375px]'",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C30",
+        "category": "ERROR_HANDLING",
+        "claim": "Connection errors are handled in ApiContext without propagating to UI",
+        "evidence": "src/components/ConnectionButton.tsx: try-catch in handleConnect with console.error, comment 'Error handling is now done in the ApiContext'",
+        "risk": "MEDIUM"
+      }
+    ],
+    "verification": {
+      "verification_results": [
+        {
+          "claim_id": "C1",
+          "verdict": "PASS",
+          "reasoning": "ConnectionButton.tsx correctly implements Bearer token authentication. The onChangeAuthToken function strips 'Bearer ' prefix if present (lines handling value.startsWith('Bearer ')), and the token is stored in formState.authToken. The useAuthToken checkbox controls whether the token is sent.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C2",
+          "verdict": "PASS",
+          "reasoning": "README explicitly documents the --cors-origin flag requirement: 'gptme-server --cors-origin='http://localhost:5701''. ConnectionButton.tsx displays this command with dynamic origin substitution using window.location.origin. This is a deployment requirement, not a code bug.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C3",
+          "verdict": "PARTIAL",
+          "reasoning": "ChatMessage.tsx attempts path sanitization with 'filename.split('/').filter((part) => part !== '..').join('/')' but this is INSUFFICIENT. An attacker can use URL encoding (%2e%2e), double encoding, or other bypass techniques. The error message check 'if (img.src.includes('..'))' only catches literal '..' in the final URL, not the sanitized path. The server MUST validate paths, client-side filtering is not security.",
+          "severity": "MAJOR",
+          "bug_type": "security"
+        },
+        {
+          "claim_id": "C4",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "ApiContext.tsx is referenced but NOT PROVIDED in the source code. Cannot verify WebSocket implementation, connection management, or isConnected$ state tracking. This is a critical integration point that's missing from the codebase.",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C5",
+          "verdict": "PASS",
+          "reasoning": "ChatMessage.tsx implements incremental streaming correctly. The useObserveEffect on message$.content calculates newChars from previousContent, writes to parser with smd.parser_write(parser, newChars), then updates previousContent$. The StreamingMessage type with isComplete flag is properly handled.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C6",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "ConversationContent.tsx defines handleConfirmTool, handleEditTool, handleSkipTool, handleAutoConfirmTool functions that call confirmTool from useConversation hook. However, InlineToolConfirmation.tsx is NOT PROVIDED, so cannot verify the UI implementation. The useConversation hook is also not provided, so cannot verify the actual confirmation logic.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C7",
+          "verdict": "FAIL",
+          "reasoning": "App.tsx sets 'mutations.onSuccess: () => { queryClient.invalidateQueries(); }' which invalidates ALL queries on ANY mutation. This is a performance disaster - every mutation will refetch every query in the app. Should use targeted invalidation with query keys. Also conflicts with C24's claim that refetching is disabled.",
+          "severity": "MAJOR",
+          "bug_type": "logic_error"
+        },
+        {
+          "claim_id": "C8",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "ChatMessage.tsx imports smd utilities and customRenderer, uses smd.parser_write and smd.parser_end. However, the actual smd module (@/utils/smd) and customRenderer (@/utils/markdownRenderer) are NOT PROVIDED. Cannot verify parser implementation, memory leaks, or XSS vulnerabilities in the renderer.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C9",
+          "verdict": "FAIL",
+          "reasoning": "BrowserPreview.tsx has '// sandbox=\"allow-scripts allow-same-origin\"' commented out. This means the iframe has NO sandbox restrictions, allowing arbitrary script execution, same-origin access, form submission, etc. This is a CRITICAL security vulnerability if the iframe loads untrusted content.",
+          "severity": "CRITICAL",
+          "bug_type": "security"
+        },
+        {
+          "claim_id": "C10",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "BrowserPreview.tsx injects consoleProxyScript using 'new Function(consoleProxyScript)' and creates a script element. However, consoleProxyScript is imported from '@/utils/consoleProxy' which is NOT PROVIDED. Cannot verify if the proxy correctly sanitizes console output or if it introduces XSS vulnerabilities.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C11",
+          "verdict": "PASS",
+          "reasoning": "BrowserPreview.tsx has a comment 'NOTE: only works with same-origin URLs (we need a workaround to capture logs from cross-origin iframes)'. This is accurate - the handleIframeLoad function accesses iframe.contentWindow.document which will throw a SecurityError for cross-origin iframes.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C12",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "ChatMessage.tsx uses Legend-State observables (message$, log$, Observable types, useObserveEffect). However, the stores/conversations.ts file is NOT PROVIDED. Cannot verify observable initialization, memory leaks, or state synchronization bugs.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C13",
+          "verdict": "PASS",
+          "reasoning": "ConversationContent.tsx implements auto-scroll abort correctly. The onScroll handler checks if user scrolled away from bottom, sets autoScrollAborted$.set(true). The useObserveEffect on conversation$.data.log checks 'if (!autoScrollAborted$.get())' before scrolling. The flag is reset when generation starts/completes.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C14",
+          "verdict": "PASS",
+          "reasoning": "ConversationContent.tsx calculates firstNonSystemIndex$ as 'conversation$.get()?.data.log.findIndex((msg) => msg.role !== 'system')'. Messages are hidden if 'isInitialSystem && !settings.verboseMode' where isInitialSystem checks 'msg$.role.get() === 'system' && (firstNonSystemIndex === -1 || index < firstNonSystemIndex)'.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C15",
+          "verdict": "PASS",
+          "reasoning": "ConversationContent.tsx checks 'const message = msg$.get(); if (message?.hide && !settings.verboseMode) { return <div ... /> }'. The comment explains this hides 'auto-included lessons' unless verbose mode is enabled.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C16",
+          "verdict": "PASS",
+          "reasoning": "ConnectionButton.tsx initializes formState with 'baseUrl: connectionConfig.baseUrl' and the Input has placeholder='http://127.0.0.1:5700'. The default is likely set in connectionConfig (not provided), but the placeholder matches the claim.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C17",
+          "verdict": "PASS",
+          "reasoning": "ConversationList.tsx sets up IntersectionObserver on loadMoreSentinelRef. When entry.isIntersecting && hasNextPage && !isFetching, it checks if content is scrollable or near bottom, then calls fetchNextPage(). The implementation includes safeguards against premature loading.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C18",
+          "verdict": "PASS",
+          "reasoning": "ChatMessage.tsx constructs fileUrl as '`${connectionConfig.baseUrl}/api/conversations/${conversationId}/files/${sanitizedPath}`'. This matches the claimed URL pattern exactly.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C19",
+          "verdict": "PASS",
+          "reasoning": "ChatMessage.tsx checks 'const isImage = /\\.(jpg|jpeg|png|gif|webp)$/i.test(filename)'. If true, renders <img>, otherwise renders <a> link with '\ud83d\udcce {displayName}'. Logic is correct.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C20",
+          "verdict": "PARTIAL",
+          "reasoning": "ChatMessage.tsx onError handler checks 'if (img.src.includes('..'))' and shows 'Cannot access files outside the workspace'. However, this check happens AFTER the browser has already attempted to load the image from the server. The sanitization in C3 should prevent '..' from reaching the URL, making this check redundant or indicating the sanitization failed.",
+          "severity": "MINOR",
+          "bug_type": "logic_error"
+        },
+        {
+          "claim_id": "C21",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "CodeDisplay.tsx imports highlightCode from '@/utils/highlightUtils' and imports 'highlight.js/styles/github-dark.css'. However, highlightUtils.ts is NOT PROVIDED. Cannot verify if highlighting is actually implemented or if it's just a stub.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C22",
+          "verdict": "PASS",
+          "reasoning": "CommandPalette.tsx has useEffect with 'if (e.key === 'k' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setOpen((open) => !open); }'. This correctly implements Cmd+K/Ctrl+K toggle.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C23",
+          "verdict": "PASS",
+          "reasoning": "ConversationContent.tsx has handleKeyDown that checks 'if (e.key === 'i' && !isReadOnly && hasSession$.get() && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement))' then sets shouldFocus$.set(true). Logic is correct.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C24",
+          "verdict": "FAIL",
+          "reasoning": "App.tsx QueryClient sets 'refetchOnWindowFocus: false, refetchOnMount: false, refetchOnReconnect: false' BUT also sets 'staleTime: 0' which marks data as stale immediately. Combined with C7's invalidateQueries() on every mutation, this creates a contradictory configuration. Data is marked stale but won't auto-refetch, yet mutations force refetch everything.",
+          "severity": "MAJOR",
+          "bug_type": "logic_error"
+        },
+        {
+          "claim_id": "C25",
+          "verdict": "PASS",
+          "reasoning": "App.tsx has '<ThemeProvider attribute=\"class\" defaultTheme=\"system\" enableSystem disableTransitionOnChange>'. This correctly enables system theme detection with light/dark/system options.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C26",
+          "verdict": "PASS",
+          "reasoning": "App.tsx BrowserRouter has 'future={{ v7_startTransition: true, v7_relativeSplatPath: true }}'. These are the correct React Router v7 future flags for forward compatibility.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C27",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "AgentsList.tsx imports extractAgentsFromConversations from '@/utils/workspaceUtils' and uses agent.path as key. However, workspaceUtils.ts is NOT PROVIDED. Cannot verify agent extraction logic or if Agent type is correctly defined.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl"
+        },
+        {
+          "claim_id": "C28",
+          "verdict": "PASS",
+          "reasoning": "AgentsList.tsx uses selectedAgent$ from '@/stores/sidebar'. handleSelectAgent toggles selection: 'if (selectedAgent && selectedAgent.path === agent.path) { selectedAgent$.set(null); } else { selectedAgent$.set(agent); }'. Logic is correct for filtering.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C29",
+          "verdict": "PASS",
+          "reasoning": "BrowserPreview.tsx has isMobile state and toggleMode function. The iframe className includes '${isMobile ? 'mx-auto w-[375px]' : 'w-full'}'. This correctly implements mobile/desktop width toggle.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C30",
+          "verdict": "FAIL",
+          "reasoning": "ConnectionButton.tsx handleConnect has 'try { await connect(...); setOpen(false); } catch (error) { console.error('Connection error:', error); }'. The error is caught and logged but NOT shown to the user. The dialog closes on success but stays open on error with no feedback. The comment 'Error handling is now done in the ApiContext' suggests errors should be handled elsewhere, but there's no toast/alert shown.",
+          "severity": "MAJOR",
+          "bug_type": "error_handling"
+        }
+      ],
+      "overall_health_score": 42,
+      "critical_bugs": [
+        {
+          "claim_id": "C9",
+          "description": "iframe sandbox disabled - allows arbitrary script execution",
+          "severity": "CRITICAL",
+          "location": "src/components/BrowserPreview.tsx",
+          "recommendation": "Enable sandbox with minimal permissions: sandbox='allow-scripts allow-same-origin' or stricter"
+        },
+        {
+          "claim_id": "C4",
+          "description": "ApiContext.tsx missing - cannot verify WebSocket implementation",
+          "severity": "CRITICAL",
+          "location": "src/contexts/ApiContext.tsx",
+          "recommendation": "Provide ApiContext implementation to verify connection management and error handling"
+        },
+        {
+          "claim_id": "C3",
+          "description": "Path traversal protection is client-side only and bypassable",
+          "severity": "MAJOR",
+          "location": "src/components/ChatMessage.tsx",
+          "recommendation": "Server MUST validate file paths. Client-side filtering with .filter(part => part !== '..') can be bypassed with encoding"
+        },
+        {
+          "claim_id": "C7",
+          "description": "Global query invalidation on every mutation kills performance",
+          "severity": "MAJOR",
+          "location": "src/App.tsx",
+          "recommendation": "Use targeted invalidation: queryClient.invalidateQueries({ queryKey: ['specific-key'] })"
+        }
+      ],
+      "code_smells": [
+        {
+          "description": "Multiple critical utilities missing from codebase (ApiContext, smd, markdownRenderer, highlightUtils, workspaceUtils, consoleProxy)",
+          "location": "Various imports",
+          "impact": "Cannot verify 40% of claimed functionality"
+        },
+        {
+          "description": "Contradictory query configuration: staleTime=0 but refetch disabled, plus global invalidation",
+          "location": "src/App.tsx",
+          "impact": "Unpredictable cache behavior, potential stale data or over-fetching"
+        },
+        {
+          "description": "Error handling inconsistency: ConnectionButton catches errors but doesn't show them, relies on ApiContext",
+          "location": "src/components/ConnectionButton.tsx",
+          "impact": "Users get no feedback when connection fails"
+        },
+        {
+          "description": "Security checks after the fact: Image error handler checks for '..' after browser already tried to load",
+          "location": "src/components/ChatMessage.tsx",
+          "impact": "Indicates sanitization may not be working, or check is redundant"
+        },
+        {
+          "description": "Dangerous eval-like pattern: new Function(consoleProxyScript) for iframe injection",
+          "location": "src/components/BrowserPreview.tsx",
+          "impact": "Potential XSS if consoleProxyScript is not properly sanitized"
+        },
+        {
+          "description": "Legend-State observables used extensively but stores not provided",
+          "location": "Multiple components",
+          "impact": "Cannot verify memory leaks, subscription cleanup, or state synchronization"
+        }
+      ],
+      "positive_patterns": [
+        {
+          "description": "Proper React Router v7 future flags for forward compatibility",
+          "location": "src/App.tsx"
+        },
+        {
+          "description": "Incremental streaming parser with proper content tracking prevents lost data",
+          "location": "src/components/ChatMessage.tsx"
+        },
+        {
+          "description": "Auto-scroll abort on user interaction provides good UX",
+          "location": "src/components/ConversationContent.tsx"
+        },
+        {
+          "description": "Intersection Observer for infinite scroll with safeguards against premature loading",
+          "location": "src/components/ConversationList.tsx"
+        },
+        {
+          "description": "Keyboard shortcuts (Cmd+K, 'i' key) with proper input field detection",
+          "location": "src/components/CommandPalette.tsx, ConversationContent.tsx"
+        },
+        {
+          "description": "Theme system with automatic system detection",
+          "location": "src/App.tsx"
+        },
+        {
+          "description": "Bearer token prefix auto-removal with user notification",
+          "location": "src/components/ConnectionButton.tsx"
+        }
+      ]
+    },
+    "remediation": [],
+    "summary": {
+      "total_claims": 30,
+      "pass": 0,
+      "fail": 0,
+      "partial": 0,
+      "suspicious": 0,
+      "critical_bugs": 4,
+      "critical_bug_details": [
+        {
+          "claim_id": "C9",
+          "description": "iframe sandbox disabled - allows arbitrary script execution",
+          "severity": "CRITICAL",
+          "location": "src/components/BrowserPreview.tsx",
+          "recommendation": "Enable sandbox with minimal permissions: sandbox='allow-scripts allow-same-origin' or stricter"
+        },
+        {
+          "claim_id": "C4",
+          "description": "ApiContext.tsx missing - cannot verify WebSocket implementation",
+          "severity": "CRITICAL",
+          "location": "src/contexts/ApiContext.tsx",
+          "recommendation": "Provide ApiContext implementation to verify connection management and error handling"
+        },
+        {
+          "claim_id": "C3",
+          "description": "Path traversal protection is client-side only and bypassable",
+          "severity": "MAJOR",
+          "location": "src/components/ChatMessage.tsx",
+          "recommendation": "Server MUST validate file paths. Client-side filtering with .filter(part => part !== '..') can be bypassed with encoding"
+        },
+        {
+          "claim_id": "C7",
+          "description": "Global query invalidation on every mutation kills performance",
+          "severity": "MAJOR",
+          "location": "src/App.tsx",
+          "recommendation": "Use targeted invalidation: queryClient.invalidateQueries({ queryKey: ['specific-key'] })"
+        }
+      ],
+      "code_smells": [
+        {
+          "description": "Multiple critical utilities missing from codebase (ApiContext, smd, markdownRenderer, highlightUtils, workspaceUtils, consoleProxy)",
+          "location": "Various imports",
+          "impact": "Cannot verify 40% of claimed functionality"
+        },
+        {
+          "description": "Contradictory query configuration: staleTime=0 but refetch disabled, plus global invalidation",
+          "location": "src/App.tsx",
+          "impact": "Unpredictable cache behavior, potential stale data or over-fetching"
+        },
+        {
+          "description": "Error handling inconsistency: ConnectionButton catches errors but doesn't show them, relies on ApiContext",
+          "location": "src/components/ConnectionButton.tsx",
+          "impact": "Users get no feedback when connection fails"
+        },
+        {
+          "description": "Security checks after the fact: Image error handler checks for '..' after browser already tried to load",
+          "location": "src/components/ChatMessage.tsx",
+          "impact": "Indicates sanitization may not be working, or check is redundant"
+        },
+        {
+          "description": "Dangerous eval-like pattern: new Function(consoleProxyScript) for iframe injection",
+          "location": "src/components/BrowserPreview.tsx",
+          "impact": "Potential XSS if consoleProxyScript is not properly sanitized"
+        },
+        {
+          "description": "Legend-State observables used extensively but stores not provided",
+          "location": "Multiple components",
+          "impact": "Cannot verify memory leaks, subscription cleanup, or state synchronization"
+        }
+      ],
+      "positive_patterns": [
+        {
+          "description": "Proper React Router v7 future flags for forward compatibility",
+          "location": "src/App.tsx"
+        },
+        {
+          "description": "Incremental streaming parser with proper content tracking prevents lost data",
+          "location": "src/components/ChatMessage.tsx"
+        },
+        {
+          "description": "Auto-scroll abort on user interaction provides good UX",
+          "location": "src/components/ConversationContent.tsx"
+        },
+        {
+          "description": "Intersection Observer for infinite scroll with safeguards against premature loading",
+          "location": "src/components/ConversationList.tsx"
+        },
+        {
+          "description": "Keyboard shortcuts (Cmd+K, 'i' key) with proper input field detection",
+          "location": "src/components/CommandPalette.tsx, ConversationContent.tsx"
+        },
+        {
+          "description": "Theme system with automatic system detection",
+          "location": "src/App.tsx"
+        },
+        {
+          "description": "Bearer token prefix auto-removal with user notification",
+          "location": "src/components/ConnectionButton.tsx"
+        }
+      ],
+      "remediations": 0,
+      "total_time_s": 119.9
+    }
+  },
+  "vision-platform": {
+    "name": "vision-platform",
+    "platform": "Replit",
+    "file_count": 275,
+    "source_chars": 60020,
+    "health_score": 32,
+    "claims": [
+      {
+        "claim_id": "C1",
+        "category": "FUNCTIONAL",
+        "claim": "Mobile app provides bottom tab navigation with Home, Translator, Accessibility, and Profile screens",
+        "evidence": "apps/mobile/App.tsx: Tab.Navigator with 4 screens defined",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C2",
+        "category": "INTEGRATION",
+        "claim": "Scene analysis feature calls '/ai/analyze-scene' API endpoint with POST method",
+        "evidence": "apps/mobile/src/screens/AccessibilityScreen.tsx:28-35 - fetch('/ai/analyze-scene', {method: 'POST'})",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C3",
+        "category": "ERROR_HANDLING",
+        "claim": "Scene analysis has fallback mock data when API call fails",
+        "evidence": "apps/mobile/src/screens/AccessibilityScreen.tsx:40-43 - catch block sets mock description and objects",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C4",
+        "category": "INTEGRATION",
+        "claim": "Translation feature calls '/ai/translate' API endpoint with source/target language and text",
+        "evidence": "apps/mobile/src/screens/TranslatorScreen.tsx:27-37 - fetch('/ai/translate', {method: 'POST'})",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C5",
+        "category": "ERROR_HANDLING",
+        "claim": "Translation has fallback mock translation when API fails",
+        "evidence": "apps/mobile/src/screens/TranslatorScreen.tsx:42-43 - sets mock translated text on error",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C6",
+        "category": "DATA_FLOW",
+        "claim": "User profile data is stored in local component state (not persisted)",
+        "evidence": "apps/mobile/src/screens/ProfileScreen.tsx:14-20 - useState for userProfile with hardcoded defaults",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C7",
+        "category": "DATA_FLOW",
+        "claim": "Translation history is hardcoded mock data, not fetched from backend",
+        "evidence": "apps/mobile/src/screens/ProfileScreen.tsx:30-34 - static array of translation history",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C8",
+        "category": "DATA_FLOW",
+        "claim": "Personal glossary is hardcoded mock data, not persisted",
+        "evidence": "apps/mobile/src/screens/ProfileScreen.tsx:36-40 - static array of glossary terms",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C9",
+        "category": "FUNCTIONAL",
+        "claim": "Web app uses React Router for client-side routing with multiple pages",
+        "evidence": "apps/web/src/App.tsx:31-44 - Routes component with 11 route definitions",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C10",
+        "category": "INTEGRATION",
+        "claim": "Web app uses React Query for data fetching with retry and refetch configuration",
+        "evidence": "apps/web/src/App.tsx:24-30 - QueryClient with retry:1, refetchOnWindowFocus:false",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C11",
+        "category": "FUNCTIONAL",
+        "claim": "Web app provides toast notifications with different styles for success/error/loading",
+        "evidence": "apps/web/src/App.tsx:50-95 - Toaster component with custom styling for each type",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C12",
+        "category": "SECURITY",
+        "claim": "Header component uses authentication hook to check user login status",
+        "evidence": "apps/web/src/__tests__/components/Header.test.tsx:11-15 - mocked useAuth hook with user and logout",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C13",
+        "category": "DATA_FLOW",
+        "claim": "Analytics page displays hardcoded mock data for users, translations, OCR, speech, and accessibility reports",
+        "evidence": "apps/web/src/app/analytics/page.tsx:40-45 - stats array with hardcoded values, tables with static data",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C14",
+        "category": "FUNCTIONAL",
+        "claim": "Analytics page claims to show 'real-time insights' but data is static",
+        "evidence": "apps/web/src/app/analytics/page.tsx:51 - title says 'Real-time insights' but useEffect does nothing (line 37)",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C15",
+        "category": "INTEGRATION",
+        "claim": "Analytics page has external links to Grafana (port 3002) and MinIO (port 9001)",
+        "evidence": "apps/web/src/app/analytics/page.tsx:169-180 - window.open to localhost:3002 and localhost:9001",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C16",
+        "category": "ERROR_HANDLING",
+        "claim": "Mobile translator validates input text before translation",
+        "evidence": "apps/mobile/src/screens/TranslatorScreen.tsx:21-25 - checks sourceText.trim() and shows Alert",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C17",
+        "category": "FUNCTIONAL",
+        "claim": "Mobile translator supports language swapping between source and target",
+        "evidence": "apps/mobile/src/screens/TranslatorScreen.tsx:48-52 - swapLanguages function swaps languages and text",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C18",
+        "category": "FUNCTIONAL",
+        "claim": "Accessibility screen provides 6 features: Scene Description, Object Detection, Voice Commands, Audio Feedback, Navigation, Safety Features",
+        "evidence": "apps/mobile/src/screens/AccessibilityScreen.tsx:50-87 - features array with 6 items",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C19",
+        "category": "FUNCTIONAL",
+        "claim": "Most accessibility features show 'coming soon' alerts instead of actual functionality",
+        "evidence": "apps/mobile/src/screens/AccessibilityScreen.tsx:62,68,74,80,86 - Alert.alert('Info', '...coming soon')",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C20",
+        "category": "DATA_FLOW",
+        "claim": "Voice listening state is tracked but no actual voice processing occurs",
+        "evidence": "apps/mobile/src/screens/AccessibilityScreen.tsx:11,72 - isListening state toggled but no API call",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C21",
+        "category": "FUNCTIONAL",
+        "claim": "Mobile app supports voice, camera, and file input methods for translation",
+        "evidence": "apps/mobile/src/screens/TranslatorScreen.tsx:67-81 - three TouchableOpacity buttons for input methods",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C22",
+        "category": "FUNCTIONAL",
+        "claim": "Input method buttons (voice/camera/file) are non-functional placeholders",
+        "evidence": "apps/mobile/src/screens/TranslatorScreen.tsx:67-81 - TouchableOpacity with no onPress handlers",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C23",
+        "category": "FUNCTIONAL",
+        "claim": "Profile screen supports exporting translation history",
+        "evidence": "apps/mobile/src/screens/ProfileScreen.tsx:78-82 - Export button in history card header",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C24",
+        "category": "FUNCTIONAL",
+        "claim": "Export and Add Term buttons in profile are non-functional",
+        "evidence": "apps/mobile/src/screens/ProfileScreen.tsx:78-82,100-104 - TouchableOpacity with no onPress handlers",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C25",
+        "category": "DATA_FLOW",
+        "claim": "Profile settings changes (notifications toggle) only update local state, not persisted",
+        "evidence": "apps/mobile/src/screens/ProfileScreen.tsx:137-141 - toggleItem updates state but no API call",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C26",
+        "category": "FUNCTIONAL",
+        "claim": "Web app provides DNDProvider context for drag-and-drop functionality",
+        "evidence": "apps/web/src/App.tsx:23,33 - DNDProvider wrapping entire app",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C27",
+        "category": "FUNCTIONAL",
+        "claim": "Web app includes AccessibilityAnnouncer component for screen reader support",
+        "evidence": "apps/web/src/App.tsx:49 - AccessibilityAnnouncer component rendered",
+        "risk": "LOW"
+      },
+      {
+        "claim_id": "C28",
+        "category": "FUNCTIONAL",
+        "claim": "README claims platform is 'FULLY OPERATIONAL' with all infrastructure issues resolved",
+        "evidence": "README:9-11 - '## \ud83c\udfaf **Platform Status: FULLY OPERATIONAL** \u2705'",
+        "risk": "HIGH"
+      },
+      {
+        "claim_id": "C29",
+        "category": "FUNCTIONAL",
+        "claim": "README claims 27 tests passing out of 66 total tests",
+        "evidence": "README:24-28 - Test summary shows '27 passed, 39 failed, 66 total'",
+        "risk": "MEDIUM"
+      },
+      {
+        "claim_id": "C30",
+        "category": "INTEGRATION",
+        "claim": "Platform supports multiple translation providers: Azure, Google, OpenAI, Mock",
+        "evidence": "README:42 - 'Multi-provider translation (Azure, Google, OpenAI, Mock)'",
+        "risk": "HIGH"
+      }
+    ],
+    "verification": {
+      "layer": "FORMAL_VERIFICATION",
+      "overall_health_score": 32,
+      "critical_bugs": [
+        {
+          "claim_id": "C2",
+          "verdict": "FAIL",
+          "reasoning": "Scene analysis calls '/ai/analyze-scene' endpoint (AccessibilityScreen.tsx:28-35), but this endpoint is never defined in the backend. The mobile app makes a fetch() call to a relative path '/ai/analyze-scene', which will fail in production. The fallback mock data (lines 40-43) masks the broken integration during development.",
+          "severity": "CRITICAL",
+          "bug_type": "integration",
+          "code_evidence": "fetch('/ai/analyze-scene', {method: 'POST', ...}) - endpoint does not exist in backend routes"
+        },
+        {
+          "claim_id": "C4",
+          "verdict": "FAIL",
+          "reasoning": "Translation calls '/ai/translate' endpoint (TranslatorScreen.tsx:27-37), but this endpoint is not implemented. The mobile app will fail to translate in production. The fallback mock translation (line 42-43) hides the broken API integration.",
+          "severity": "CRITICAL",
+          "bug_type": "integration",
+          "code_evidence": "fetch('/ai/translate', {method: 'POST', ...}) - endpoint missing from backend"
+        },
+        {
+          "claim_id": "C6",
+          "verdict": "FAIL",
+          "reasoning": "User profile data is stored only in local component state (ProfileScreen.tsx:14-20) with hardcoded defaults. Changes to name, email, language, etc. are never persisted to backend. Users will lose all profile changes on app restart.",
+          "severity": "CRITICAL",
+          "bug_type": "data_flow",
+          "code_evidence": "useState({name: 'John Doe', email: 'john@example.com', ...}) - no API calls to save/load profile"
+        },
+        {
+          "claim_id": "C13",
+          "verdict": "FAIL",
+          "reasoning": "Analytics page displays entirely hardcoded mock data (analytics/page.tsx:40-45, tables at lines 80-180). The useEffect at line 37 does nothing (just setLoading(false)). No real data is fetched from backend. This is pure scaffolding masquerading as a functional analytics dashboard.",
+          "severity": "CRITICAL",
+          "bug_type": "scaffolding",
+          "code_evidence": "useEffect(() => { setLoading(false); }, []) - no API calls, all data is hardcoded static arrays"
+        },
+        {
+          "claim_id": "C14",
+          "verdict": "FAIL",
+          "reasoning": "Analytics page claims 'Real-time insights into your AI platform usage' (line 51) but shows static hardcoded data. This is false advertising - the page is non-functional scaffolding with no real-time capabilities.",
+          "severity": "CRITICAL",
+          "bug_type": "scaffolding",
+          "code_evidence": "Title says 'Real-time insights' but useEffect is empty and all data is static mock arrays"
+        },
+        {
+          "claim_id": "C19",
+          "verdict": "FAIL",
+          "reasoning": "5 out of 6 accessibility features show 'coming soon' alerts (AccessibilityScreen.tsx:62,68,74,80,86) instead of actual functionality. Only Scene Description has partial implementation. This is dead code - buttons that do nothing except show alerts.",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl",
+          "code_evidence": "onClick: () => Alert.alert('Info', '...feature coming soon') - 5 features are non-functional stubs"
+        },
+        {
+          "claim_id": "C22",
+          "verdict": "FAIL",
+          "reasoning": "Voice, camera, and file input buttons for translation (TranslatorScreen.tsx:67-81) have no onPress handlers. They are purely decorative UI elements that do nothing when tapped. This is dead code.",
+          "severity": "CRITICAL",
+          "bug_type": "dead_code",
+          "code_evidence": "<TouchableOpacity style={styles.inputMethod}> - no onPress prop, buttons are non-functional"
+        },
+        {
+          "claim_id": "C25",
+          "verdict": "FAIL",
+          "reasoning": "Profile settings changes (notifications toggle, language selection) only update local state (ProfileScreen.tsx:137-141) with no backend persistence. All settings are lost on app restart. This is broken data flow.",
+          "severity": "CRITICAL",
+          "bug_type": "data_flow",
+          "code_evidence": "onPress={() => setUserProfile({...userProfile, notifications: !userProfile.notifications})} - no API call to persist"
+        },
+        {
+          "claim_id": "C28",
+          "verdict": "FAIL",
+          "reasoning": "README claims 'Platform Status: FULLY OPERATIONAL \u2705' and 'all infrastructure issues resolved' (lines 9-11), but the codebase has critical broken integrations (missing API endpoints), non-functional features (5/6 accessibility features), and scaffolding masquerading as real functionality (analytics page). This is false documentation.",
+          "severity": "CRITICAL",
+          "bug_type": "scaffolding",
+          "code_evidence": "README claims operational but C2, C4, C13, C14, C19, C22, C25 show critical failures"
+        }
+      ],
+      "major_bugs": [
+        {
+          "claim_id": "C7",
+          "verdict": "FAIL",
+          "reasoning": "Translation history is hardcoded mock data (ProfileScreen.tsx:30-34), not fetched from backend. Users cannot see their actual translation history. This is scaffolding.",
+          "severity": "MAJOR",
+          "bug_type": "scaffolding",
+          "code_evidence": "const translationHistory = [{id: 1, from: 'Hello world', ...}] - static array, no API fetch"
+        },
+        {
+          "claim_id": "C8",
+          "verdict": "FAIL",
+          "reasoning": "Personal glossary is hardcoded mock data (ProfileScreen.tsx:36-40), not persisted. Users cannot add/edit/delete glossary terms. This is scaffolding.",
+          "severity": "MAJOR",
+          "bug_type": "scaffolding",
+          "code_evidence": "const personalGlossary = [{term: 'API', definition: '...'}] - static array, no backend integration"
+        },
+        {
+          "claim_id": "C20",
+          "verdict": "FAIL",
+          "reasoning": "Voice listening state is tracked (AccessibilityScreen.tsx:11,72) but no actual voice processing occurs. The isListening toggle does nothing except change button text. This is dead code.",
+          "severity": "MAJOR",
+          "bug_type": "dead_code",
+          "code_evidence": "setIsListening(!isListening) - state changes but no voice recognition API call"
+        },
+        {
+          "claim_id": "C24",
+          "verdict": "FAIL",
+          "reasoning": "Export history and Add Term buttons (ProfileScreen.tsx:78-82,100-104) have no onPress handlers. They are non-functional UI elements. This is dead code.",
+          "severity": "MAJOR",
+          "bug_type": "dead_code",
+          "code_evidence": "<TouchableOpacity style={styles.actionButton}> - no onPress prop, buttons do nothing"
+        },
+        {
+          "claim_id": "C30",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "README claims support for 'Azure, Google, OpenAI, Mock' translation providers (line 42), but the actual translation endpoint '/ai/translate' doesn't exist in the codebase. Cannot verify provider support without backend implementation.",
+          "severity": "MAJOR",
+          "bug_type": "missing_impl",
+          "code_evidence": "README claims multi-provider support but no backend translation service found in provided code"
+        }
+      ],
+      "minor_bugs": [
+        {
+          "claim_id": "C15",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "Analytics page links to Grafana (localhost:3002) and MinIO (localhost:9001) (analytics/page.tsx:169-180). These hardcoded localhost URLs will fail in production. Should use environment variables.",
+          "severity": "MINOR",
+          "bug_type": "integration",
+          "code_evidence": "window.open('http://localhost:3002', '_blank') - hardcoded localhost URL"
+        },
+        {
+          "claim_id": "C23",
+          "verdict": "FAIL",
+          "reasoning": "Profile screen claims to support exporting translation history (line 78-82) but the Export button has no onPress handler. Non-functional.",
+          "severity": "MINOR",
+          "bug_type": "dead_code",
+          "code_evidence": "Export button TouchableOpacity has no onPress prop"
+        },
+        {
+          "claim_id": "C29",
+          "verdict": "PASS",
+          "reasoning": "README accurately reports test status: '27 passed, 39 failed, 66 total' (lines 24-28). This matches the claim and is honest about test failures.",
+          "severity": "INFO",
+          "bug_type": null,
+          "code_evidence": "Test summary in README matches claim"
+        }
+      ],
+      "passing_claims": [
+        {
+          "claim_id": "C1",
+          "verdict": "PASS",
+          "reasoning": "Mobile app correctly implements bottom tab navigation with 4 screens (App.tsx:18-42). Tab.Navigator properly configured with Home, Translator, Accessibility, Profile screens.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C3",
+          "verdict": "PASS",
+          "reasoning": "Scene analysis has proper fallback mock data in catch block (AccessibilityScreen.tsx:40-43). Error handling is implemented correctly.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C5",
+          "verdict": "PASS",
+          "reasoning": "Translation has fallback mock translation in catch block (TranslatorScreen.tsx:42-43). Error handling is implemented correctly.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C9",
+          "verdict": "PASS",
+          "reasoning": "Web app correctly uses React Router with 11 route definitions (App.tsx:31-44). Routes component properly configured.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C10",
+          "verdict": "PASS",
+          "reasoning": "Web app correctly configures React Query with retry:1 and refetchOnWindowFocus:false (App.tsx:24-30). QueryClient properly initialized.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C11",
+          "verdict": "PASS",
+          "reasoning": "Web app implements toast notifications with custom styling for success/error/loading (App.tsx:50-95). Toaster component properly configured.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C16",
+          "verdict": "PASS",
+          "reasoning": "Mobile translator validates input text before translation (TranslatorScreen.tsx:21-25). Checks sourceText.trim() and shows Alert if empty.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C17",
+          "verdict": "PASS",
+          "reasoning": "Mobile translator correctly implements language swapping (TranslatorScreen.tsx:48-52). swapLanguages function properly swaps source/target languages and text.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C26",
+          "verdict": "PASS",
+          "reasoning": "Web app provides DNDProvider context wrapping entire app (App.tsx:23,33). Drag-and-drop context properly configured.",
+          "severity": "INFO",
+          "bug_type": null
+        },
+        {
+          "claim_id": "C27",
+          "verdict": "PASS",
+          "reasoning": "Web app includes AccessibilityAnnouncer component (App.tsx:49). Screen reader support component properly rendered.",
+          "severity": "INFO",
+          "bug_type": null
+        }
+      ],
+      "code_smells": [
+        {
+          "pattern": "Hardcoded localhost URLs",
+          "locations": [
+            "apps/web/src/app/analytics/page.tsx:169-180"
+          ],
+          "severity": "MINOR",
+          "description": "Grafana and MinIO URLs hardcoded to localhost:3002 and localhost:9001. Will fail in production."
+        },
+        {
+          "pattern": "Empty useEffect hooks",
+          "locations": [
+            "apps/web/src/app/analytics/page.tsx:37"
+          ],
+          "severity": "MAJOR",
+          "description": "useEffect that only sets loading to false with no actual data fetching. Indicates scaffolding code."
+        },
+        {
+          "pattern": "Buttons with no handlers",
+          "locations": [
+            "apps/mobile/src/screens/TranslatorScreen.tsx:67-81",
+            "apps/mobile/src/screens/ProfileScreen.tsx:78-82,100-104"
+          ],
+          "severity": "MAJOR",
+          "description": "TouchableOpacity components with no onPress handlers. Non-functional UI elements."
+        },
+        {
+          "pattern": "State updates with no persistence",
+          "locations": [
+            "apps/mobile/src/screens/ProfileScreen.tsx:14-20,137-141",
+            "apps/mobile/src/screens/AccessibilityScreen.tsx:11,72"
+          ],
+          "severity": "CRITICAL",
+          "description": "useState updates that never persist to backend. All changes lost on app restart."
+        },
+        {
+          "pattern": "Hardcoded mock data in production code",
+          "locations": [
+            "apps/mobile/src/screens/ProfileScreen.tsx:30-40",
+            "apps/web/src/app/analytics/page.tsx:40-180"
+          ],
+          "severity": "CRITICAL",
+          "description": "Static arrays of mock data instead of API calls. Scaffolding masquerading as real functionality."
+        },
+        {
+          "pattern": "Coming soon alerts",
+          "locations": [
+            "apps/mobile/src/screens/AccessibilityScreen.tsx:62,68,74,80,86"
+          ],
+          "severity": "MAJOR",
+          "description": "Alert.alert('Info', '...coming soon') for 5 out of 6 features. Indicates incomplete implementation."
+        },
+        {
+          "pattern": "Relative API paths in mobile app",
+          "locations": [
+            "apps/mobile/src/screens/AccessibilityScreen.tsx:28",
+            "apps/mobile/src/screens/TranslatorScreen.tsx:27"
+          ],
+          "severity": "CRITICAL",
+          "description": "fetch('/ai/analyze-scene') and fetch('/ai/translate') use relative paths. Will fail in React Native without proper base URL configuration."
+        }
+      ],
+      "positive_patterns": [
+        {
+          "pattern": "Proper error handling with fallbacks",
+          "locations": [
+            "apps/mobile/src/screens/AccessibilityScreen.tsx:40-47",
+            "apps/mobile/src/screens/TranslatorScreen.tsx:40-47"
+          ],
+          "description": "Try-catch blocks with fallback mock data prevent app crashes when API calls fail."
+        },
+        {
+          "pattern": "Input validation",
+          "locations": [
+            "apps/mobile/src/screens/TranslatorScreen.tsx:21-25"
+          ],
+          "description": "Validates sourceText.trim() before translation to prevent empty API calls."
+        },
+        {
+          "pattern": "Accessible UI components",
+          "locations": [
+            "apps/web/src/App.tsx:49"
+          ],
+          "description": "AccessibilityAnnouncer component for screen reader support shows attention to accessibility."
+        },
+        {
+          "pattern": "Comprehensive toast notifications",
+          "locations": [
+            "apps/web/src/App.tsx:50-95"
+          ],
+          "description": "Well-configured toast system with different styles for success/error/loading states."
+        },
+        {
+          "pattern": "React Query configuration",
+          "locations": [
+            "apps/web/src/App.tsx:24-30"
+          ],
+          "description": "Proper QueryClient setup with retry and refetch configuration for better UX."
+        }
+      ],
+      "security_concerns": [
+        {
+          "claim_id": "C12",
+          "verdict": "SUSPICIOUS",
+          "reasoning": "Header component test mocks useAuth hook (Header.test.tsx:11-15), but actual useAuth implementation is not provided in the code. Cannot verify authentication security without seeing the actual hook implementation.",
+          "severity": "MAJOR",
+          "bug_type": "security",
+          "code_evidence": "jest.mock('@/hooks/useAuth') - mocked in tests but actual implementation not provided"
+        }
+      ],
+      "summary": {
+        "total_claims_verified": 30,
+        "passed": 10,
+        "failed": 15,
+        "suspicious": 3,
+        "partial": 0,
+        "critical_issues": 9,
+        "major_issues": 6,
+        "minor_issues": 3,
+        "primary_concerns": [
+          "Missing backend API endpoints for core features (translation, scene analysis)",
+          "Extensive scaffolding code masquerading as functional features (analytics page, accessibility features)",
+          "No data persistence for user profiles, settings, history, or glossary",
+          "Non-functional UI elements (buttons with no handlers, coming soon alerts)",
+          "False documentation claiming platform is 'FULLY OPERATIONAL' when critical features are broken"
+        ],
+        "recommendation": "MAJOR REFACTORING REQUIRED. The platform has a polished UI but lacks functional backend integration. Approximately 60% of user-facing features are non-functional scaffolding. Priority fixes: (1) Implement missing API endpoints, (2) Add data persistence for all user data, (3) Remove or implement 'coming soon' features, (4) Update README to accurately reflect platform status."
+      }
+    },
+    "remediation": [],
+    "summary": {
+      "total_claims": 30,
+      "pass": 0,
+      "fail": 0,
+      "partial": 0,
+      "suspicious": 0,
+      "critical_bugs": 9,
+      "critical_bug_details": [
+        {
+          "claim_id": "C2",
+          "verdict": "FAIL",
+          "reasoning": "Scene analysis calls '/ai/analyze-scene' endpoint (AccessibilityScreen.tsx:28-35), but this endpoint is never defined in the backend. The mobile app makes a fetch() call to a relative path '/ai/analyze-scene', which will fail in production. The fallback mock data (lines 40-43) masks the broken integration during development.",
+          "severity": "CRITICAL",
+          "bug_type": "integration",
+          "code_evidence": "fetch('/ai/analyze-scene', {method: 'POST', ...}) - endpoint does not exist in backend routes"
+        },
+        {
+          "claim_id": "C4",
+          "verdict": "FAIL",
+          "reasoning": "Translation calls '/ai/translate' endpoint (TranslatorScreen.tsx:27-37), but this endpoint is not implemented. The mobile app will fail to translate in production. The fallback mock translation (line 42-43) hides the broken API integration.",
+          "severity": "CRITICAL",
+          "bug_type": "integration",
+          "code_evidence": "fetch('/ai/translate', {method: 'POST', ...}) - endpoint missing from backend"
+        },
+        {
+          "claim_id": "C6",
+          "verdict": "FAIL",
+          "reasoning": "User profile data is stored only in local component state (ProfileScreen.tsx:14-20) with hardcoded defaults. Changes to name, email, language, etc. are never persisted to backend. Users will lose all profile changes on app restart.",
+          "severity": "CRITICAL",
+          "bug_type": "data_flow",
+          "code_evidence": "useState({name: 'John Doe', email: 'john@example.com', ...}) - no API calls to save/load profile"
+        },
+        {
+          "claim_id": "C13",
+          "verdict": "FAIL",
+          "reasoning": "Analytics page displays entirely hardcoded mock data (analytics/page.tsx:40-45, tables at lines 80-180). The useEffect at line 37 does nothing (just setLoading(false)). No real data is fetched from backend. This is pure scaffolding masquerading as a functional analytics dashboard.",
+          "severity": "CRITICAL",
+          "bug_type": "scaffolding",
+          "code_evidence": "useEffect(() => { setLoading(false); }, []) - no API calls, all data is hardcoded static arrays"
+        },
+        {
+          "claim_id": "C14",
+          "verdict": "FAIL",
+          "reasoning": "Analytics page claims 'Real-time insights into your AI platform usage' (line 51) but shows static hardcoded data. This is false advertising - the page is non-functional scaffolding with no real-time capabilities.",
+          "severity": "CRITICAL",
+          "bug_type": "scaffolding",
+          "code_evidence": "Title says 'Real-time insights' but useEffect is empty and all data is static mock arrays"
+        },
+        {
+          "claim_id": "C19",
+          "verdict": "FAIL",
+          "reasoning": "5 out of 6 accessibility features show 'coming soon' alerts (AccessibilityScreen.tsx:62,68,74,80,86) instead of actual functionality. Only Scene Description has partial implementation. This is dead code - buttons that do nothing except show alerts.",
+          "severity": "CRITICAL",
+          "bug_type": "missing_impl",
+          "code_evidence": "onClick: () => Alert.alert('Info', '...feature coming soon') - 5 features are non-functional stubs"
+        },
+        {
+          "claim_id": "C22",
+          "verdict": "FAIL",
+          "reasoning": "Voice, camera, and file input buttons for translation (TranslatorScreen.tsx:67-81) have no onPress handlers. They are purely decorative UI elements that do nothing when tapped. This is dead code.",
+          "severity": "CRITICAL",
+          "bug_type": "dead_code",
+          "code_evidence": "<TouchableOpacity style={styles.inputMethod}> - no onPress prop, buttons are non-functional"
+        },
+        {
+          "claim_id": "C25",
+          "verdict": "FAIL",
+          "reasoning": "Profile settings changes (notifications toggle, language selection) only update local state (ProfileScreen.tsx:137-141) with no backend persistence. All settings are lost on app restart. This is broken data flow.",
+          "severity": "CRITICAL",
+          "bug_type": "data_flow",
+          "code_evidence": "onPress={() => setUserProfile({...userProfile, notifications: !userProfile.notifications})} - no API call to persist"
+        },
+        {
+          "claim_id": "C28",
+          "verdict": "FAIL",
+          "reasoning": "README claims 'Platform Status: FULLY OPERATIONAL \u2705' and 'all infrastructure issues resolved' (lines 9-11), but the codebase has critical broken integrations (missing API endpoints), non-functional features (5/6 accessibility features), and scaffolding masquerading as real functionality (analytics page). This is false documentation.",
+          "severity": "CRITICAL",
+          "bug_type": "scaffolding",
+          "code_evidence": "README claims operational but C2, C4, C13, C14, C19, C22, C25 show critical failures"
+        }
+      ],
+      "code_smells": [
+        {
+          "pattern": "Hardcoded localhost URLs",
+          "locations": [
+            "apps/web/src/app/analytics/page.tsx:169-180"
+          ],
+          "severity": "MINOR",
+          "description": "Grafana and MinIO URLs hardcoded to localhost:3002 and localhost:9001. Will fail in production."
+        },
+        {
+          "pattern": "Empty useEffect hooks",
+          "locations": [
+            "apps/web/src/app/analytics/page.tsx:37"
+          ],
+          "severity": "MAJOR",
+          "description": "useEffect that only sets loading to false with no actual data fetching. Indicates scaffolding code."
+        },
+        {
+          "pattern": "Buttons with no handlers",
+          "locations": [
+            "apps/mobile/src/screens/TranslatorScreen.tsx:67-81",
+            "apps/mobile/src/screens/ProfileScreen.tsx:78-82,100-104"
+          ],
+          "severity": "MAJOR",
+          "description": "TouchableOpacity components with no onPress handlers. Non-functional UI elements."
+        },
+        {
+          "pattern": "State updates with no persistence",
+          "locations": [
+            "apps/mobile/src/screens/ProfileScreen.tsx:14-20,137-141",
+            "apps/mobile/src/screens/AccessibilityScreen.tsx:11,72"
+          ],
+          "severity": "CRITICAL",
+          "description": "useState updates that never persist to backend. All changes lost on app restart."
+        },
+        {
+          "pattern": "Hardcoded mock data in production code",
+          "locations": [
+            "apps/mobile/src/screens/ProfileScreen.tsx:30-40",
+            "apps/web/src/app/analytics/page.tsx:40-180"
+          ],
+          "severity": "CRITICAL",
+          "description": "Static arrays of mock data instead of API calls. Scaffolding masquerading as real functionality."
+        },
+        {
+          "pattern": "Coming soon alerts",
+          "locations": [
+            "apps/mobile/src/screens/AccessibilityScreen.tsx:62,68,74,80,86"
+          ],
+          "severity": "MAJOR",
+          "description": "Alert.alert('Info', '...coming soon') for 5 out of 6 features. Indicates incomplete implementation."
+        },
+        {
+          "pattern": "Relative API paths in mobile app",
+          "locations": [
+            "apps/mobile/src/screens/AccessibilityScreen.tsx:28",
+            "apps/mobile/src/screens/TranslatorScreen.tsx:27"
+          ],
+          "severity": "CRITICAL",
+          "description": "fetch('/ai/analyze-scene') and fetch('/ai/translate') use relative paths. Will fail in React Native without proper base URL configuration."
+        }
+      ],
+      "positive_patterns": [
+        {
+          "pattern": "Proper error handling with fallbacks",
+          "locations": [
+            "apps/mobile/src/screens/AccessibilityScreen.tsx:40-47",
+            "apps/mobile/src/screens/TranslatorScreen.tsx:40-47"
+          ],
+          "description": "Try-catch blocks with fallback mock data prevent app crashes when API calls fail."
+        },
+        {
+          "pattern": "Input validation",
+          "locations": [
+            "apps/mobile/src/screens/TranslatorScreen.tsx:21-25"
+          ],
+          "description": "Validates sourceText.trim() before translation to prevent empty API calls."
+        },
+        {
+          "pattern": "Accessible UI components",
+          "locations": [
+            "apps/web/src/App.tsx:49"
+          ],
+          "description": "AccessibilityAnnouncer component for screen reader support shows attention to accessibility."
+        },
+        {
+          "pattern": "Comprehensive toast notifications",
+          "locations": [
+            "apps/web/src/App.tsx:50-95"
+          ],
+          "description": "Well-configured toast system with different styles for success/error/loading states."
+        },
+        {
+          "pattern": "React Query configuration",
+          "locations": [
+            "apps/web/src/App.tsx:24-30"
+          ],
+          "description": "Proper QueryClient setup with retry and refetch configuration for better UX."
+        }
+      ],
+      "remediations": 0,
+      "total_time_s": 109.9
+    }
+  }
+}

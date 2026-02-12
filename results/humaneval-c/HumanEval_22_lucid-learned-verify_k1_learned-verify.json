@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/22",
+  "condition": "lucid-learned-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "```json\n[\n  {\n    \"claim\": \"Function filters out non-integer values from the input list\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation uses isinstance(x, int) to check for integers, which correctly filters out strings, floats, dicts, lists, and other non-integer types\"\n  },\n  {\n    \"claim\": \"Function returns a list containing only integers\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The list comprehension returns a new list containing only values that pass the integer type check\"\n  },\n  {\n    \"claim\": \"Function handles the example ['a', 3.14, 5] correctly, returning [5]\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The function filters out 'a' (string) and 3.14 (float), keeping only 5 (integer)\"\n  },\n  {\n    \"claim\": \"Function handles the example [1, 2, 3, 'abc', {}, []] correctly, returning [1, 2, 3]\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The function keeps 1, 2, 3 (integers) and filters out 'abc' (string), {} (dict), and [] (list)\"\n  },\n  {\n    \"claim\": \"Function excludes boolean values\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation explicitly checks 'not isinstance(x, bool)' which is important because in Python, bool is a subclass of int. This prevents True/False from being included in the result, which aligns with the intent to filter only integers\"\n  }\n]\n```",
+      "remediation": "Based on the test results, **no fix is needed**. All test cases pass successfully.\n\nThe current implementation is correct:\n\n```python\nreturn [x for x in values if isinstance(x, int) and not isinstance(x, bool)]\n```\n\n**Why this implementation is correct:**\n\n1. **`isinstance(x, int)`** - Filters for integer types\n2. **`not isinstance(x, bool)`** - Excludes booleans (which are technically a subclass of `int` in Python)\n3. The combination correctly handles all edge cases:\n   - Filters out strings, floats, dicts, lists, and other non-integer types\n   - Excludes `True` and `False` (booleans)\n   - Keeps only actual integers\n\n**No changes required** - the function works as specified.",
+      "passed": true
+    }
+  ],
+  "ablation": "learned-verify"
+}

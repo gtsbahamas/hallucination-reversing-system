@@ -1,0 +1,14 @@
+{
+  "task_id": "django__django-16046",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "resolved": true,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": true,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [\n        \"test_empty (utils_tests.test_numberformat.TestNumberFormat)\"\n      ],\n      \"failure\": []\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_decimal_numbers (utils_tests.test_numberformat.TestNumberFormat)\",\n        \"test_decimal_subclass (utils_tests.test_numberformat.TestNumberFormat)\",\n        \"test_float_numbers (utils_tests.test_numberformat.TestNumberFormat)\",\n        \"test_format_number (utils_tests.test_numberformat.TestNumberFormat)\",\n        \"test_format_string (utils_tests.test_numberformat.TestNumberFormat)\",\n        \"test_large_number (utils_tests.test_numberformat.TestNumberFormat)\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/django/utils/numberformat.py\n+++ b/django/utils/numberformat.py\n@@ -77,7 +77,7 @@ def format(\n             return \"{}e{}\".format(coefficient, exponent)\n         else:\n             str_number = \"{:f}\".format(number)\n     else:\n         str_number = str(number)\n-    if str_number[0] == \"-\":\n+    if str_number and str_number[0] == \"-\":\n         sign = \"-\"\n         str_number = str_number[1:]\n     # decimal part"
+}

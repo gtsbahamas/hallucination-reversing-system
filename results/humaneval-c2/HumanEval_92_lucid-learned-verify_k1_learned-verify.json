@@ -1,0 +1,23 @@
+{
+  "task_id": "HumanEval/92",
+  "condition": "lucid-learned-verify",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": true,
+  "final_test_output": {
+    "all_passed": true,
+    "stdout": "",
+    "stderr": "",
+    "returncode": 0,
+    "error_type": null
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "verification": "```json\n[\n  {\n    \"claim\": \"Returns true if one of the numbers is equal to the sum of the other two, and all numbers are integers\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation correctly checks if all three inputs are integers using isinstance(x, int) and then verifies if any one number equals the sum of the other two using the conditions x == y + z or y == x + z or z == x + y\"\n  },\n  {\n    \"claim\": \"Returns false in any other cases\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"The implementation returns False when either not all numbers are integers or when no number equals the sum of the other two\"\n  },\n  {\n    \"claim\": \"Example: any_int(5, 2, 7) \u279e True\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"All are integers and 7 == 5 + 2, so returns True\"\n  },\n  {\n    \"claim\": \"Example: any_int(3, 2, 2) \u279e False\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"All are integers but no number equals the sum of the other two (3 \u2260 2+2, 2 \u2260 3+2, 2 \u2260 3+2), so returns False\"\n  },\n  {\n    \"claim\": \"Example: any_int(3, -2, 1) \u279e True\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"All are integers and 1 == 3 + (-2), so returns True\"\n  },\n  {\n    \"claim\": \"Example: any_int(3.6, -2.2, 2) \u279e False\",\n    \"verdict\": \"PASS\",\n    \"reasoning\": \"Not all inputs are integers (3.6 and -2.2 are floats), so returns False\"\n  }\n]\n```",
+      "remediation": "## Fix Plan\n\n**Issue:** The implementation uses `isinstance(x, int)` which returns `False` for boolean values in Python should be considered. However, looking at the test results, all tests pass. Let me reconsider...\n\nActually, upon closer inspection, there's a subtle bug: **In Python, `bool` is a subclass of `int`**, so `isinstance(True, int)` returns `True`. This means the function would incorrectly accept boolean inputs.\n\n**Lines to change:** Line 18 (the isinstance check)\n\n**The fix:**\n```python\nif not (isinstance(x, int) and isinstance(y, int) and isinstance(z, int) and \n        not isinstance(x, bool) and not isinstance(y, bool) and not isinstance(z, bool)):\n    return False\n```\n\n**Why this fixes the issue:**\n- Explicitly excludes boolean values, which are technically integers in Python but shouldn't be accepted based on the specification's intent (it asks for \"numbers\", and the examples only show numeric integers and floats)\n- Ensures that only true integer types are accepted, not their boolean subclass\n\n**Alternative fix (cleaner):**\n```python\nif not (type(x) == int and type(y) == int and type(z) == int):\n    return False\n```\n\nThis uses `type()` instead of `isinstance()`, which checks for exact type match and naturally excludes booleans since `type(True) == bool`, not `int`.",
+      "passed": true
+    }
+  ],
+  "ablation": "learned-verify"
+}

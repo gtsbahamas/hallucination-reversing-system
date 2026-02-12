@@ -1,0 +1,14 @@
+{
+  "task_id": "astropy__astropy-14182",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "resolved": false,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"astropy/io/ascii/tests/test_rst.py::test_rst_with_header_rows\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal_names\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal_names_include\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_normal_exclude\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_unbounded_right_column_header\",\n        \"astropy/io/ascii/tests/test_rst.py::test_read_right_indented_table\",\n        \"astropy/io/ascii/tests/test_rst.py::test_trailing_spaces_in_row_definition\",\n        \"astropy/io/ascii/tests/test_rst.py::test_write_normal\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/astropy/io/ascii/rst.py\n+++ b/astropy/io/ascii/rst.py\n@@ -59,11 +59,25 @@ class RST(FixedWidth):\n     data_class = SimpleRSTData\n     header_class = SimpleRSTHeader\n \n-    def __init__(self):\n-        super().__init__(delimiter_pad=None, bookend=False)\n+    def __init__(self, header_rows=None):\n+        super().__init__(delimiter_pad=None, bookend=False, header_rows=header_rows)\n \n     def write(self, lines):\n         lines = super().write(lines)\n-        lines = [lines[1]] + lines + [lines[1]]\n+        # lines[1] is the header separator line (e.g., \"==== ===== ======\")\n+        separator_line = lines[1]\n+        \n+        if self.header_rows:\n+            # When header_rows is specified, we need to add separator lines:\n+            # 1. At the top (before all headers)\n+            # 2. After all header rows (before data)\n+            # 3. At the bottom (after all data)\n+            # The number of header lines is len(self.header_rows)\n+            n_header_lines = len(self.header_rows)\n+            lines = [separator_line] + lines[:n_header_lines] + [separator_line] + lines[n_header_lines:] + [separator_line]\n+        else:\n+            # Default behavior: separator at top and bottom\n+            lines = [separator_line] + lines + [separator_line]\n+        \n         return lines"
+}

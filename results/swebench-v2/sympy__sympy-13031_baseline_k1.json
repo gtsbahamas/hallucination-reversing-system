@@ -1,0 +1,14 @@
+{
+  "task_id": "sympy__sympy-13031",
+  "condition": "baseline",
+  "max_iterations": 1,
+  "model": "claude-sonnet-4-5-20250929",
+  "final_passed": false,
+  "final_test_output": {
+    "resolved": false,
+    "test_output": "{\n  \"patch_is_None\": false,\n  \"patch_exists\": true,\n  \"patch_successfully_applied\": true,\n  \"resolved\": false,\n  \"tests_status\": {\n    \"FAIL_TO_PASS\": {\n      \"success\": [],\n      \"failure\": [\n        \"test_sparse_matrix\"\n      ]\n    },\n    \"PASS_TO_PASS\": {\n      \"success\": [\n        \"test_transpose\",\n        \"test_trace\",\n        \"test_CL_RL\",\n        \"test_add\",\n        \"test_errors\",\n        \"test_len\",\n        \"test_sparse_zeros_sparse_eye\",\n        \"test_copyin\",\n        \"test_sparse_solve\"\n      ],\n      \"failure\": []\n    },\n    \"FAIL_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    },\n    \"PASS_TO_FAIL\": {\n      \"success\": [],\n      \"failure\": []\n    }\n  }\n}"
+  },
+  "iterations": [],
+  "ablation": null,
+  "solution": "--- a/sympy/matrices/sparse.py\n+++ b/sympy/matrices/sparse.py\n@@ -519,6 +519,23 @@ class SparseMatrix(MatrixBase):\n                     rv = rv.col_insert(i, rv.col(i_previous))\n         return rv\n \n+    def _eval_col_join(self, other):\n+        if not isinstance(other, SparseMatrix):\n+            other = SparseMatrix(other)\n+        new_smat = {}\n+        # copy self's entries\n+        for key, val in self._smat.items():\n+            new_smat[key] = val\n+        # add other's entries, shifted by self.rows\n+        for key, val in other._smat.items():\n+            row, col = key\n+            new_smat[(row + self.rows, col)] = val\n+        return self._new(self.rows + other.rows, self.cols, new_smat)\n+\n+    def col_join(self, other):\n+        # Needed to maintain subclass\n+        return self._eval_col_join(other)\n+\n     @classmethod\n     def _eval_eye(cls, rows, cols):\n         entries = {(i,i): S.One for i in range(min(rows, cols))}"
+}
