@@ -9,6 +9,7 @@ import { verifyCommand } from './commands/verify.js';
 import { reportCommand } from './commands/report.js';
 import { regenerateCommand } from './commands/regenerate.js';
 import { remediateCommand } from './commands/remediate.js';
+import { reverseCommand } from './commands/reverse.js';
 
 const program = new Command();
 
@@ -67,5 +68,15 @@ program
   .option('-r, --repo <path>', 'Path to the codebase to remediate', '.')
   .option('-t, --threshold <number>', 'Compliance threshold (default: 95)', '95')
   .action(remediateCommand);
+
+program
+  .command('reverse')
+  .description('Reverse LUCID — generate code with hallucination prevention')
+  .option('-t, --task <task>', 'Coding task description')
+  .option('-f, --task-file <path>', 'Read task from file')
+  .option('-l, --lang <language>', 'Target language', 'typescript')
+  .option('-o, --output <path>', 'Output file path')
+  .option('-v, --verbose', 'Show detailed progress')
+  .action(reverseCommand);
 
 program.parse();

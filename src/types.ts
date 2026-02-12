@@ -108,3 +108,91 @@ export interface RemediationPlan {
   outputTokens: number;
   durationMs: number;
 }
+
+// ============================================================
+// Reverse LUCID types — generation-time hallucination prevention
+// ============================================================
+
+export type SpecCategory =
+  | 'correctness'
+  | 'security'
+  | 'performance'
+  | 'error-handling'
+  | 'edge-case'
+  | 'type-safety';
+
+/** A formal specification that generated code must satisfy */
+export interface CodeSpec {
+  id: string;
+  category: SpecCategory;
+  severity: ClaimSeverity;
+  description: string;
+  assertion: string;
+  rationale: string;
+}
+
+export interface SpecSynthesisResult {
+  task: string;
+  language: string;
+  specs: CodeSpec[];
+  totalSpecs: number;
+  synthesizedAt: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export type ConstraintType = 'must' | 'must-not' | 'prefer';
+export type ConstraintSource = 'benchmark' | 'spec' | 'domain';
+
+/** A constraint that guides code generation */
+export interface GenerationConstraint {
+  id: string;
+  type: ConstraintType;
+  description: string;
+  pattern?: string;
+  source: ConstraintSource;
+}
+
+export interface ConstraintSet {
+  task: string;
+  constraints: GenerationConstraint[];
+  totalConstraints: number;
+  generatedAt: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export type SelfVerificationStatus = 'satisfied' | 'partial' | 'unsatisfied' | 'unknown';
+
+export interface SelfVerificationResult {
+  specId: string;
+  status: SelfVerificationStatus;
+  reasoning: string;
+}
+
+/** The output of guided generation */
+export interface GeneratedCode {
+  task: string;
+  code: string;
+  language: string;
+  specs: CodeSpec[];
+  constraints: GenerationConstraint[];
+  selfVerification: SelfVerificationResult[];
+  satisfiedCount: number;
+  totalSpecs: number;
+  generatedAt: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** Full reverse pipeline result */
+export interface ReverseLucidResult {
+  task: string;
+  language: string;
+  specSynthesis: SpecSynthesisResult;
+  constraintSet: ConstraintSet;
+  generatedCode: GeneratedCode;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalDurationMs: number;
+}
