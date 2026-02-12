@@ -1,0 +1,195 @@
+{
+  "task_id": "task_10",
+  "task": "Write an input sanitization library that prevents XSS, SQL injection, and path traversal while preserving legitimate content",
+  "model": "claude-sonnet-4-5-20250929",
+  "verification": {
+    "claims": [
+      {
+        "id": "C1",
+        "claim": "Prevents XSS attacks",
+        "verdict": "PARTIAL",
+        "reasoning": "The code attempts to prevent XSS through pattern matching and HTML escaping, but has significant gaps: 1) Regex patterns can be bypassed with encoding variations (e.g., '<ScRiPt>', HTML entities like '&lt;script&gt;'), 2) The whitelist approach in _whitelist_html_tags is vulnerable to tag mutation attacks, 3) Event handlers can be injected through variations like 'onclick' vs 'onClick' or with whitespace, 4) Missing checks for SVG-based XSS vectors."
+      },
+      {
+        "id": "C2",
+        "claim": "Prevents SQL injection",
+        "verdict": "FAIL",
+        "reasoning": "The SQL injection prevention is fundamentally flawed: 1) Simple quote escaping ('' replacement) doesn't protect against all SQL injection - it only works for string literals, not for numeric contexts or LIKE patterns, 2) Pattern-based removal of SQL keywords is easily bypassed with comments (/**/ between letters), hex encoding, or case variations, 3) The code doesn't use parameterized queries which is the only proper defense, 4) Backslash escaping may cause double-escaping issues in some databases."
+      },
+      {
+        "id": "C3",
+        "claim": "Prevents path traversal attacks",
+        "verdict": "FAIL",
+        "reasoning": "Path traversal prevention has critical flaws: 1) Only checks for '..' pattern but misses encodings like '%5c%5c', URL encoding variations, and Unicode variations (U+2215 DIVISION SLASH), 2) Path().resolve() is called AFTER pattern removal, meaning '/foo/..%2f../' might pass through partially sanitized, 3) Returns only filename (.name), which breaks legitimate nested paths, 4) Double URL decoding can bypass checks (e.g., '%252e%252e' becomes '%2e%2e' after first decode, then '..' after second)."
+      },
+      {
+        "id": "C4",
+        "claim": "Preserves legitimate content",
+        "verdict": "PARTIAL",
+        "reasoning": "While the code attempts to preserve content through whitelisting and context-specific sanitization, it has issues: 1) Unicode normalization with NFKC can alter legitimate content in some languages, 2) Aggressive regex removal may catch false positives (e.g., 'onclick' in regular text), 3) Path sanitization returning only filename breaks legitimate paths, 4) Null byte removal is good but doesn't handle other control characters."
+      },
+      {
+        "id": "C5",
+        "claim": "Handles multiple data types (strings, lists, dicts)",
+        "verdict": "PASS",
+        "reasoning": "The sanitize method correctly handles recursive sanitization of lists, tuples, and dictionaries, preserving structure while sanitizing leaf values."
+      },
+      {
+        "id": "C6",
+        "claim": "Supports context-specific sanitization",
+        "verdict": "PASS",
+        "reasoning": "The code provides different sanitization contexts (general, html, sql, path, url, email) and dispatches to appropriate methods. The sanitize_dict method allows field-specific contexts."
+      },
+      {
+        "id": "C7",
+        "claim": "Provides safety validation through is_safe method",
+        "verdict": "PARTIAL",
+        "reasoning": "The is_safe method checks for patterns but returns false positives/negatives due to the flawed regex patterns. It's also inconsistent with sanitization logic - text marked unsafe might still pass through sanitization."
+      },
+      {
+        "id": "C8",
+        "claim": "URL sanitization prevents malicious URLs",
+        "verdict": "PARTIAL",
+        "reasoning": "Blocks obvious dangerous protocols but misses: 1) Mixed case protocols (e.g., 'JaVaScRiPt:'), 2) Protocol obfuscation with tabs/newlines, 3) Data URLs with HTML content that aren't caught before protocol check, 4) URL parsing can fail on malformed URLs causing silent failures."
+      },
+      {
+        "id": "C9",
+        "claim": "Email validation and sanitization",
+        "verdict": "PARTIAL",
+        "reasoning": "Basic email validation works for simple cases but: 1) Regex is overly simplistic and doesn't follow RFC 5322, 2) Rejects valid internationalized emails, 3) Doesn't check for dangerous content within email addresses that might be used in SMTP injection."
+      }
+    ],
+    "issues": [
+      {
+        "id": "I1",
+        "severity": "critical",
+        "category": "SECURITY",
+        "description": "SQL injection prevention relies on string escaping instead of parameterized queries. The _sanitize_sql method only escapes quotes, which doesn't protect against numeric injection contexts (e.g., 'SELECT * FROM users WHERE id = ' + sanitize(user_input)). An attacker could input '1 OR 1=1' and it would pass through.",
+        "fix": "Remove SQL sanitization entirely and document that parameterized queries/prepared statements MUST be used. This library cannot safely sanitize SQL input for direct string concatenation. Add a warning that _sanitize_sql should NOT be used for building SQL queries."
+      },
+      {
+        "id": "I2",
+        "severity": "critical",
+        "category": "SECURITY",
+        "description": "Path traversal can be bypassed through multiple encoding layers. The code calls unquote() once but path traversal sequences can be double-encoded (%252e%252e%252f -> %2e%2e%2f -> ../). Additionally, Windows paths using backslashes (\\..\\) aren't properly handled, and Unicode lookalikes for path separators (U+2215, U+2216) bypass the regex.",
+        "fix": "Implement iterative decoding until no more changes occur, use os.path.normpath() before Path().resolve(), add checks for Unicode path separator lookalikes, and validate that resolved path stays within allowed base directory using startswith() comparison."
+      },
+      {
+        "id": "I3",
+        "severity": "critical",
+        "category": "SECURITY",
+        "description": "XSS patterns can be bypassed through case variations, HTML entity encoding, and incomplete tag matching. For example, '<ScRiPt>' bypasses the case-insensitive regex because of how regex flags interact, '&lt;script&gt;' bypasses the tag check entirely, and event handlers like 'on\\x0aclick' (with newline) may bypass the on\\w+=pattern.",
+        "fix": "Use a proper HTML parser like html.parser or bleach library instead of regex. Implement recursive decoding of HTML entities before checking. Use a proper whitelist-based sanitizer that parses HTML into a DOM tree and rebuilds from whitelisted elements."
+      },
+      {
+        "id": "I4",
+        "severity": "high",
+        "category": "SECURITY",
+        "description": "The _whitelist_html_tags method uses a simple regex that doesn't properly parse HTML. It can be confused by: 1) Comments containing fake tags, 2) CDATA sections, 3) Malformed HTML that browsers still interpret, 4) Tag attributes without quotes that break the attribute regex.",
+        "fix": "Replace the regex-based HTML parsing with a real HTML parser. Use a library like bleach or html5lib that handles all HTML edge cases correctly. The current approach cannot safely handle adversarial HTML."
+      },
+      {
+        "id": "I5",
+        "severity": "high",
+        "category": "SECURITY",
+        "description": "The URL sanitizer checks for dangerous protocols with startswith() on lowercase string, but protocols can be obfuscated with URL encoding ('%6a%61%76%61%73%63%72%69%70%74:'), tabs/newlines ('jav\\tascript:'), or null bytes ('java\\x00script:'). The check happens after .lower() but before URL decoding.",
+        "fix": "Decode URL first (repeatedly until no changes), remove all whitespace and control characters, then check protocol. Consider using a URL parsing library that handles these edge cases. Implement a strict allowlist of schemes rather than a denylist."
+      },
+      {
+        "id": "I6",
+        "severity": "high",
+        "category": "CORRECTNESS",
+        "description": "The _sanitize_path method returns only the filename component (normalized.name), which breaks any legitimate use case requiring paths with directories. If input is 'uploads/user123/avatar.jpg', it returns only 'avatar.jpg', losing directory structure.",
+        "fix": "Change approach to validate that the resolved path is within an allowed base directory using path.resolve().is_relative_to(base_path) (Python 3.9+) or startswith comparison. Return the full sanitized path relative to the base directory, not just the filename."
+      },
+      {
+        "id": "I7",
+        "severity": "high",
+        "category": "SECURITY",
+        "description": "Unicode normalization with NFKC can introduce security issues. For example, some characters normalize to dangerous characters (\u2100 normalizes to 'a/c', potentially creating path traversal), and it may cause legitimate multi-byte characters to become ASCII equivalents that trigger false positives.",
+        "fix": "Use NFC normalization instead of NFKC to preserve character semantics. NFKC's compatibility decomposition is too aggressive for security-sensitive input. Add separate checks for homograph attacks if needed."
+      },
+      {
+        "id": "I8",
+        "severity": "medium",
+        "category": "SECURITY",
+        "description": "The SQL pattern matching looks for keywords but doesn't account for: 1) Comments within keywords (SEL/**/ECT), 2) Alternative syntax (using || for concatenation instead of UNION), 3) Database-specific functions and syntax, 4) Encoded keywords (hex, unicode).",
+        "fix": "Document that this library CANNOT prevent SQL injection through input sanitization. Remove the false sense of security. SQL injection can only be prevented with parameterized queries at the database layer."
+      },
+      {
+        "id": "I9",
+        "severity": "medium",
+        "category": "CORRECTNESS",
+        "description": "The is_safe method checks for patterns but doesn't apply the same normalization as sanitize methods. Text might pass is_safe() but contain threats after Unicode normalization or URL decoding. This creates an inconsistent security boundary.",
+        "fix": "Make is_safe() apply the same preprocessing (Unicode normalization, URL decoding) before pattern checks. Better yet, remove is_safe() and only provide sanitize(), since partial safety checking is misleading."
+      },
+      {
+        "id": "I10",
+        "severity": "medium",
+        "category": "ROBUSTNESS",
+        "description": "Exception handling in _sanitize_path and _sanitize_url returns empty strings on errors, which silently fails and may cause application logic errors. Callers have no way to distinguish between empty valid input and error conditions.",
+        "fix": "Add logging for exceptions. Consider raising exceptions or returning a Result type that indicates success/failure. At minimum, log the exception with details so security teams can investigate potential attacks."
+      },
+      {
+        "id": "I11",
+        "severity": "medium",
+        "category": "TYPE_SAFETY",
+        "description": "The validate_and_sanitize method returns tuple[bool, Any] but the type checker cannot narrow the Any type based on the input type. If you pass a str, you get tuple[bool, Any] back, not tuple[bool, str].",
+        "fix": "Use TypeVar with overloads or generic types: @overload def validate_and_sanitize(self, data: str, ...) -> tuple[bool, str]: ... This provides proper type safety for callers."
+      },
+      {
+        "id": "I12",
+        "severity": "low",
+        "category": "SECURITY",
+        "description": "Email regex allows potentially dangerous characters in local part (e.g., backticks, semicolons) that could be used in email header injection attacks if the email is used in SMTP commands.",
+        "fix": "Either use a more restrictive regex that only allows safe characters, or add additional validation when emails are used in security-sensitive contexts like SMTP. Consider using a dedicated email validation library."
+      },
+      {
+        "id": "I13",
+        "severity": "low",
+        "category": "ROBUSTNESS",
+        "description": "The code removes null bytes (\\x00) but doesn't handle other control characters (\\x01-\\x1F) that could cause issues in some contexts or be used for obfuscation.",
+        "fix": "Add filtering for other control characters: text = ''.join(char for char in text if char >= ' ' or char in '\\t\\n\\r'). Be careful not to break legitimate uses of tabs and newlines."
+      },
+      {
+        "id": "I14",
+        "severity": "low",
+        "category": "CORRECTNESS",
+        "description": "The _sanitize_attributes method uses html.escape on attribute values but doesn't handle unquoted attributes properly. If an attacker finds a way to inject an unquoted attribute, the validation fails.",
+        "fix": "Always quote attributes in output even if they were unquoted in input. The current regex only catches quoted attributes, so unquoted attributes are silently dropped (which is actually safer than trying to parse them)."
+      },
+      {
+        "id": "I15",
+        "severity": "low",
+        "category": "COMPLETENESS",
+        "description": "The create_sanitizer factory function is declared but not implemented - it only has a docstring and ends abruptly. This is incomplete stub code.",
+        "fix": "Complete the factory function: return InputSanitizer(strict_mode=strict_mode, allow_html=allow_html, custom_allowed_tags=custom_allowed_tags)"
+      },
+      {
+        "id": "I16",
+        "severity": "low",
+        "category": "SECURITY",
+        "description": "The XSS pattern for onclick handlers 'on\\w+\\s*=' doesn't catch variations with newlines or tabs between 'on' and the event name (on\\nclick), or with Unicode whitespace characters.",
+        "fix": "Use \\s* between 'on' and the handler name: r'on\\s*\\w+\\s*='. Also normalize all whitespace to regular spaces before pattern matching."
+      }
+    ],
+    "summary": {
+      "total_claims": 9,
+      "pass": 2,
+      "partial": 5,
+      "fail": 2,
+      "critical_issues": 5,
+      "high_issues": 5,
+      "medium_issues": 5,
+      "low_issues": 5,
+      "total_issues": 20
+    }
+  },
+  "verify_input_tokens": 4357,
+  "verify_output_tokens": 3630,
+  "remediate_input_tokens": 7802,
+  "remediate_output_tokens": 5252,
+  "total_input_tokens": 12159,
+  "total_output_tokens": 8882,
+  "duration_s": 138.8
+}

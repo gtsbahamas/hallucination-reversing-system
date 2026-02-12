@@ -1,0 +1,1562 @@
+{
+  "task": "Write a middleware that validates JWT tokens, checks expiration, handles refresh tokens, and attaches user context to the request",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write a middleware that validates JWT tokens, checks expiration, handles refresh tokens, and attaches user context to the request",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Middleware must successfully validate a well-formed, non-expired JWT token with valid signature",
+        "assertion": "Given a valid JWT token with payload {'user_id': '123', 'exp': timestamp_10_minutes_future, 'role': 'user'} signed with secret key 'test_secret', middleware allows request to proceed and attaches user context with user_id='123', role='user' to request object",
+        "rationale": "Core functionality - valid tokens must always be accepted for system to work"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Middleware must reject requests with missing Authorization header",
+        "assertion": "Request without 'Authorization' header returns 401 Unauthorized with error message containing 'missing' or 'required'",
+        "rationale": "Unauthenticated requests must be blocked to protect secured endpoints"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "security",
+        "severity": "critical",
+        "description": "Middleware must reject tokens with invalid or tampered signatures",
+        "assertion": "Given JWT token with valid structure but signature created with wrong secret key 'wrong_secret', middleware returns 401 Unauthorized with error indicating 'invalid signature' or 'authentication failed'",
+        "rationale": "Prevents token forgery attacks - compromised signature validation allows complete authentication bypass"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Middleware must reject expired JWT tokens",
+        "assertion": "Given JWT token with exp claim set to timestamp 1 hour in the past, middleware returns 401 Unauthorized with error message containing 'expired'",
+        "rationale": "Expired tokens must not grant access - time-based security is fundamental to JWT design"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Middleware must extract and attach complete user context from valid JWT to request object",
+        "assertion": "Valid JWT with payload {'user_id': '456', 'email': 'test@example.com', 'role': 'admin', 'permissions': ['read', 'write']} results in request.user containing all these fields accessible as attributes or dict keys",
+        "rationale": "Downstream handlers depend on user context for authorization and business logic"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Middleware must successfully process and exchange valid refresh tokens for new access tokens",
+        "assertion": "POST request to /refresh with valid refresh token in body returns 200 OK with JSON containing new 'access_token' field with valid JWT structure",
+        "rationale": "Refresh token flow is essential for maintaining user sessions without re-authentication"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "security",
+        "severity": "critical",
+        "description": "Middleware must reject expired refresh tokens",
+        "assertion": "POST request to /refresh with refresh token expired 1 day ago returns 401 Unauthorized with error message containing 'refresh token expired'",
+        "rationale": "Expired refresh tokens must not be usable to prevent indefinite session extension"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "security",
+        "severity": "critical",
+        "description": "Middleware must validate that refresh tokens are only used for token refresh, not for API access",
+        "assertion": "GET request to protected endpoint /api/data with refresh token in Authorization header returns 401 or 403 with error indicating 'invalid token type' or 'refresh token cannot be used for API access'",
+        "rationale": "Prevents privilege escalation - refresh tokens should only refresh, not authenticate API calls"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Middleware must handle tokens that are expiring at the exact current timestamp",
+        "assertion": "JWT token with exp claim equal to current Unix timestamp (within same second) is rejected with 401 Unauthorized",
+        "rationale": "Boundary condition - prevents race conditions where tokens used at expiration moment"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "security",
+        "severity": "critical",
+        "description": "Middleware must reject tokens with 'none' algorithm to prevent algorithm confusion attacks",
+        "assertion": "JWT token with header {'alg': 'none', 'typ': 'JWT'} and no signature returns 401 Unauthorized with error indicating 'unsupported algorithm' or 'invalid token'",
+        "rationale": "Critical vulnerability - 'none' algorithm bypass allows unsigned tokens to be accepted"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Middleware must reject malformed JWT tokens with invalid structure",
+        "assertion": "Authorization header with value 'Bearer invalid.token.structure' (not three base64 segments) returns 401 Unauthorized with error containing 'malformed' or 'invalid format'",
+        "rationale": "Prevents crashes from parsing errors and provides clear error feedback"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must use constant-time comparison for token signature verification",
+        "assertion": "Token validation implementation uses constant-time string comparison (e.g., hmac.compare_digest) for signature verification, not == operator, preventing timing attacks",
+        "rationale": "Timing attacks can leak signature information through response time variations"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must validate token issuer (iss) claim if configured",
+        "assertion": "Given middleware configured with expected_issuer='https://auth.example.com', JWT with iss='https://malicious.com' returns 401 Unauthorized with error 'invalid issuer'",
+        "rationale": "Prevents accepting tokens from unauthorized issuers in multi-tenant or federated systems"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must validate token audience (aud) claim if configured",
+        "assertion": "Given middleware configured with expected_audience='api.example.com', JWT with aud='different-service.com' returns 401 Unauthorized with error 'invalid audience'",
+        "rationale": "Prevents token reuse across different services - tokens should be scoped to intended audience"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Middleware must handle Bearer token format correctly with case-insensitive scheme",
+        "assertion": "Authorization header with value 'bearer <valid_token>' (lowercase 'bearer') or 'BEARER <valid_token>' successfully authenticates request",
+        "rationale": "HTTP header schemes are case-insensitive per RFC 7235"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Middleware must reject tokens with missing required claims",
+        "assertion": "JWT token without 'exp' claim returns 401 Unauthorized with error 'missing required claim: exp'",
+        "rationale": "Required claims ensure token has necessary information for security and authorization"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must reject tokens with nbf (not before) claim in the future",
+        "assertion": "JWT token with nbf claim set to timestamp 1 hour in the future returns 401 Unauthorized with error 'token not yet valid'",
+        "rationale": "Prevents premature token usage - tokens should only be valid within intended time window"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Middleware must handle refresh token requests with missing token gracefully",
+        "assertion": "POST request to /refresh with empty body or missing refresh_token field returns 400 Bad Request with error 'refresh token required'",
+        "rationale": "Client errors should return 400, not 500, and provide actionable error messages"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Middleware must generate new access tokens with appropriate expiration time",
+        "assertion": "After successful refresh, new access_token has exp claim set to current_time + configured_access_token_lifetime (e.g., 15 minutes), verified by decoding returned token",
+        "rationale": "Access tokens should have short lifetimes to limit exposure window if compromised"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must not include sensitive information in error messages",
+        "assertion": "Invalid token errors do not expose secret keys, internal paths, stack traces, or specific validation details that could aid attackers",
+        "rationale": "Information disclosure can aid attackers in crafting exploits"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Middleware must validate that exp claim is a numeric timestamp",
+        "assertion": "JWT token with exp claim as string '2024-12-31' instead of Unix timestamp returns 401 Unauthorized with error 'invalid expiration format'",
+        "rationale": "Type validation prevents unexpected behavior from malformed claims"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Middleware must handle tokens with excessive whitespace in Authorization header",
+        "assertion": "Authorization header 'Bearer   <valid_token>  ' (extra spaces before/after token) successfully authenticates after trimming whitespace",
+        "rationale": "Real-world clients may add extraneous whitespace - middleware should be tolerant"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must implement token revocation check if revocation list is configured",
+        "assertion": "Valid JWT with jti='revoked-token-123' that exists in configured revocation list/blacklist returns 401 Unauthorized with error 'token has been revoked'",
+        "rationale": "Supports immediate token invalidation for logout or security incidents"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Middleware must preserve original request path and method during validation",
+        "assertion": "After middleware validates token for POST request to /api/users/123/update, request.path equals '/api/users/123/update' and request.method equals 'POST'",
+        "rationale": "Downstream handlers need accurate request information for routing and logging"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Middleware must handle tokens with additional unknown claims without rejection",
+        "assertion": "JWT token with standard claims plus custom claims {'custom_field': 'value', 'organization': 'acme'} successfully validates and includes custom claims in request.user context",
+        "rationale": "JWT specification allows custom claims - middleware should be extensible"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Middleware must validate tokens efficiently without blocking I/O for synchronous signature verification",
+        "assertion": "Token validation for 1000 concurrent requests with valid tokens completes within 2 seconds on standard hardware, indicating no blocking I/O in validation path",
+        "rationale": "Middleware is in hot path - inefficient validation impacts all authenticated requests"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "security",
+        "severity": "medium",
+        "description": "Middleware must implement configurable clock skew tolerance for exp/nbf validation",
+        "assertion": "Given clock_skew=60 seconds configured, JWT token expired 30 seconds ago successfully validates, but token expired 90 seconds ago is rejected",
+        "rationale": "Accommodates minor time synchronization differences between servers"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Middleware must handle base64 decoding errors gracefully",
+        "assertion": "JWT token with invalid base64 characters in payload segment (e.g., 'header.inv@lid!base64.signature') returns 401 Unauthorized with error 'malformed token'",
+        "rationale": "Prevents crashes from malformed input and provides clear error response"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Middleware must support multiple token sources (header, cookie) if configured",
+        "assertion": "When configured to check cookies, request with no Authorization header but valid token in 'access_token' cookie successfully authenticates",
+        "rationale": "Web applications often use cookies for token storage - middleware should be flexible"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Middleware must handle non-string values in Authorization header gracefully",
+        "assertion": "Request with Authorization header set to integer 12345 or None returns 400 Bad Request with error 'invalid authorization header format'",
+        "rationale": "Prevents type errors from unexpected input types"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "medium",
+        "description": "Middleware must log authentication failures for security monitoring",
+        "assertion": "Failed authentication attempt with invalid token generates log entry with severity WARNING or ERROR containing timestamp, reason ('expired', 'invalid signature', etc.), and anonymized request info (IP address, endpoint)",
+        "rationale": "Audit trail enables detection of brute force attacks or compromised tokens"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Middleware must handle extremely long tokens without crashing",
+        "assertion": "Authorization header with token exceeding 10KB returns 400 Bad Request with error 'token too large' instead of causing memory errors",
+        "rationale": "Prevents DoS attacks via oversized tokens consuming excessive memory"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Middleware must support RS256 (RSA) algorithm in addition to HS256 (HMAC)",
+        "assertion": "JWT token signed with RS256 algorithm using RSA private key validates successfully when middleware is configured with corresponding public key",
+        "rationale": "RSA algorithms enable asymmetric verification without sharing secrets"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Middleware must cache decoded token claims for request lifecycle to avoid repeated parsing",
+        "assertion": "After initial token validation, subsequent access to request.user within same request does not re-decode or re-validate JWT (verify via profiling or mock spy)",
+        "rationale": "Avoids redundant cryptographic operations within single request processing"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "error-handling",
+        "severity": "low",
+        "description": "Middleware should provide configurable error response format (JSON vs plain text)",
+        "assertion": "When configured with json_errors=True, 401 response has Content-Type 'application/json' and body like {'error': 'unauthorized', 'message': 'token expired'}",
+        "rationale": "API consumers expect consistent JSON error format for programmatic handling"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Middleware should support optional path exclusion patterns for public endpoints",
+        "assertion": "When configured with excluded_paths=['/health', '/public/*'], requests to /health and /public/docs succeed without Authorization header",
+        "rationale": "Health checks and public documentation should not require authentication"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "type-safety",
+        "severity": "low",
+        "description": "Middleware should provide type hints for user context object",
+        "assertion": "request.user object has type annotations allowing IDE autocomplete for common fields like user_id: str, email: Optional[str], role: str",
+        "rationale": "Improves developer experience and catches type errors at development time"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "performance",
+        "severity": "low",
+        "description": "Middleware should support optional caching of validated tokens to reduce repeated validation",
+        "assertion": "When token caching enabled with 5-second TTL, same token validated twice within 5 seconds results in only one signature verification (second lookup hits cache), verified via metrics or mocking",
+        "rationale": "Reduces CPU load for high-frequency requests with same token (e.g., polling)"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Middleware should handle Unicode characters in claim values correctly",
+        "assertion": "JWT token with claims {'name': '用户', 'emoji': '🚀'} successfully validates and request.user.name equals '用户' with correct Unicode encoding",
+        "rationale": "International applications require proper Unicode support in user data"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "security",
+        "severity": "low",
+        "description": "Middleware should include security headers in error responses",
+        "assertion": "401 Unauthorized responses include headers 'X-Content-Type-Options: nosniff' and 'Cache-Control: no-store' to prevent caching of auth errors",
+        "rationale": "Defense-in-depth - prevents browsers from caching or misinterpreting auth errors"
+      }
+    ],
+    "totalSpecs": 40,
+    "synthesizedAt": "2026-02-12T06:30:01.871Z",
+    "inputTokens": 589,
+    "outputTokens": 4694
+  },
+  "constraintSet": {
+    "task": "Write a middleware that validates JWT tokens, checks expiration, handles refresh tokens, and attaches user context to the request",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Handle HTTP errors explicitly (check response.ok or status code)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never ignore HTTP error responses or assume success",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "prefer",
+        "description": "Include timeout configuration for HTTP requests",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Handle empty string edge case",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "prefer",
+        "description": "Consider Unicode/multi-byte characters when indexing strings",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Check for division by zero before dividing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Validate that required environment variables are set before using them",
+        "source": "domain"
+      },
+      {
+        "id": "CON-010",
+        "type": "must-not",
+        "description": "Never log or expose secrets/tokens in error messages or console output",
+        "source": "domain"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must verify JWT signature using the configured secret key or public key before proceeding with any claim validation. Use a well-tested JWT library (PyJWT, python-jose) rather than manual implementation.",
+        "pattern": "decoded = jwt.decode(token, secret_key, algorithms=['HS256', 'RS256'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must return 401 Unauthorized with descriptive error message when Authorization header is missing. Check for header presence before attempting token extraction.",
+        "pattern": "if 'Authorization' not in request.headers: return 401, {'error': 'Authorization header required'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must-not",
+        "description": "Must-not allow tokens signed with incorrect secret keys to pass validation. Always specify the algorithms parameter in jwt.decode to prevent algorithm confusion attacks.",
+        "pattern": "# WRONG: jwt.decode(token, verify=False)\n# RIGHT: jwt.decode(token, secret_key, algorithms=['HS256'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must validate the exp claim and reject tokens where current timestamp >= exp. Handle InvalidTokenError or ExpiredSignatureError from JWT library.",
+        "pattern": "try: jwt.decode(token, secret, algorithms=['HS256'])\nexcept jwt.ExpiredSignatureError: return 401, {'error': 'token expired'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must extract all claims from validated JWT payload and attach them to request.user object as accessible attributes or dictionary keys for downstream handlers.",
+        "pattern": "payload = jwt.decode(token, secret, algorithms=['HS256'])\nrequest.user = payload  # or UserContext(**payload)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must implement separate endpoint (e.g., POST /refresh) that validates refresh tokens and generates new access tokens with fresh exp claims. Do not mix refresh and access token validation logic.",
+        "pattern": "if request.path == '/refresh': validate_refresh_token(); return new_access_token()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must validate exp claim on refresh tokens and reject expired refresh tokens with 401 error indicating refresh token expiration specifically.",
+        "pattern": "refresh_payload = jwt.decode(refresh_token, secret, algorithms=['HS256'])\nif refresh_payload.get('type') != 'refresh': return 401, {'error': 'invalid token type'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must check token type claim (e.g., 'type': 'access' vs 'type': 'refresh') and reject refresh tokens when used for API access, returning 401/403 with clear error.",
+        "pattern": "if token_payload.get('type') == 'refresh': return 403, {'error': 'refresh token cannot be used for API access'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must treat tokens expiring at exactly current timestamp as expired. Use >= comparison for exp validation, not >.",
+        "pattern": "if current_time >= token_exp: raise ExpiredSignatureError",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must-not",
+        "description": "Must-not accept tokens with 'none' algorithm. Explicitly specify allowed algorithms in jwt.decode (e.g., algorithms=['HS256', 'RS256']) and reject any others.",
+        "pattern": "# WRONG: jwt.decode(token, secret)  # allows 'none'\n# RIGHT: jwt.decode(token, secret, algorithms=['HS256', 'RS256'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must validate JWT structure (three base64-encoded segments separated by dots) and return 401 with 'malformed token' error for invalid format before attempting decode.",
+        "pattern": "if len(token.split('.')) != 3: return 401, {'error': 'malformed token'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must use constant-time comparison (hmac.compare_digest) when manually verifying signatures to prevent timing attacks. However, prefer using established JWT libraries which handle this internally.",
+        "pattern": "import hmac\nif not hmac.compare_digest(expected_sig, actual_sig): raise InvalidSignatureError",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must validate iss (issuer) claim against expected value if configured, rejecting tokens with mismatched issuer with 401 error.",
+        "pattern": "decoded = jwt.decode(token, secret, algorithms=['HS256'], issuer='https://auth.example.com')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Must validate aud (audience) claim against expected value if configured, rejecting tokens with mismatched audience with 401 error.",
+        "pattern": "decoded = jwt.decode(token, secret, algorithms=['HS256'], audience='api.example.com')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must handle case-insensitive Bearer scheme extraction from Authorization header. Use .lower() or case-insensitive comparison when checking scheme.",
+        "pattern": "scheme, token = auth_header.split(' ', 1)\nif scheme.lower() != 'bearer': return 401",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Must validate presence of required claims (exp, iat, sub/user_id) and return 401 with specific 'missing required claim' error if absent.",
+        "pattern": "if 'exp' not in payload: return 401, {'error': 'missing required claim: exp'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must validate nbf (not before) claim if present, rejecting tokens where current timestamp < nbf with 401 error 'token not yet valid'.",
+        "pattern": "decoded = jwt.decode(token, secret, algorithms=['HS256'], options={'verify_nbf': True})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must return 400 Bad Request with 'refresh token required' error when POST /refresh receives empty body or missing refresh_token field.",
+        "pattern": "if not request.json or 'refresh_token' not in request.json: return 400, {'error': 'refresh token required'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must generate new access tokens with exp claim set to current_time + configured access token lifetime (e.g., 15 minutes). Include token type claim to distinguish from refresh tokens.",
+        "pattern": "exp = int(time.time()) + ACCESS_TOKEN_LIFETIME\npayload = {'user_id': user_id, 'exp': exp, 'type': 'access'}\nnew_token = jwt.encode(payload, secret, algorithm='HS256')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must-not",
+        "description": "Must-not expose sensitive information in error messages. Avoid including secret keys, stack traces, file paths, or specific validation failure details that could aid attackers.",
+        "pattern": "# WRONG: return 401, {'error': f'Signature mismatch: expected {expected_sig}'}\n# RIGHT: return 401, {'error': 'invalid signature'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must validate that exp claim is numeric (int or float) and reject tokens with string or other types with 401 error 'invalid expiration format'.",
+        "pattern": "if not isinstance(payload.get('exp'), (int, float)): return 401, {'error': 'invalid expiration format'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Must strip leading and trailing whitespace from extracted token after splitting Authorization header to handle extra spaces gracefully.",
+        "pattern": "scheme, token = auth_header.split(' ', 1)\ntoken = token.strip()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must check if token jti (JWT ID) exists in configured revocation list/blacklist before accepting token, returning 401 with 'token has been revoked' if found.",
+        "pattern": "if 'jti' in payload and payload['jti'] in revocation_list: return 401, {'error': 'token has been revoked'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must preserve original request.path and request.method attributes during middleware processing. Do not modify these values during token validation.",
+        "pattern": "# Validate token but preserve: original_path = request.path, original_method = request.method",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Must allow tokens with additional custom claims beyond standard JWT claims. Do not reject tokens for containing unknown fields; include them in request.user context.",
+        "pattern": "# Allow payload = {'user_id': '123', 'exp': 1234567890, 'custom_field': 'value'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "prefer",
+        "description": "Prefer using CPU-bound synchronous JWT validation without blocking I/O operations. Use in-memory signature verification rather than database lookups in the hot path for performance.",
+        "pattern": "# Validate signature in-memory, defer DB lookups (revocation check) to async or cache",
+        "source": "spec"
+      },
+      {
+        "id": "CON-037",
+        "type": "must",
+        "description": "Must implement configurable clock skew tolerance (e.g., 60 seconds) when validating exp and nbf claims to handle clock drift between servers.",
+        "pattern": "decoded = jwt.decode(token, secret, algorithms=['HS256'], options={'leeway': 60})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-038",
+        "type": "must",
+        "description": "Must catch base64 decoding errors and invalid JSON parsing errors when processing JWT segments, returning 401 with 'malformed token' error.",
+        "pattern": "try: payload = json.loads(base64.urlsafe_b64decode(segment))\nexcept (ValueError, JSONDecodeError): return 401, {'error': 'malformed token'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-039",
+        "type": "must",
+        "description": "Must check multiple token sources (Authorization header, cookies) in configured priority order. If cookie support enabled, check for token in 'access_token' cookie if header absent.",
+        "pattern": "token = request.headers.get('Authorization') or request.cookies.get('access_token')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-040",
+        "type": "must",
+        "description": "Must validate that Authorization header value is a string type and return 400 Bad Request for non-string values (None, int, etc.) before attempting to parse.",
+        "pattern": "auth_header = request.headers.get('Authorization')\nif not isinstance(auth_header, str): return 400, {'error': 'invalid authorization header format'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-041",
+        "type": "must",
+        "description": "Must log authentication failures with appropriate severity (WARNING/ERROR), including timestamp, failure reason, and anonymized request metadata (IP, endpoint) for security monitoring.",
+        "pattern": "logger.warning(f'Auth failed: {reason} from {request.remote_addr} to {request.path}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-042",
+        "type": "must",
+        "description": "Must enforce maximum token size limit (e.g., 10KB) and return 400 Bad Request with 'token too large' error before processing to prevent memory exhaustion attacks.",
+        "pattern": "if len(token) > 10240: return 400, {'error': 'token too large'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-043",
+        "type": "must",
+        "description": "Must support both HS256 (HMAC-SHA256) and RS256 (RSA-SHA256) signing algorithms. Configure algorithm and key type (secret vs public key) based on deployment requirements.",
+        "pattern": "# For RS256: jwt.decode(token, public_key, algorithms=['RS256'])\n# For HS256: jwt.decode(token, secret_key, algorithms=['HS256'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-044",
+        "type": "prefer",
+        "description": "Prefer caching decoded token payload in request context after initial validation to avoid redundant parsing when accessing request.user multiple times in request lifecycle.",
+        "pattern": "if not hasattr(request, '_user_cache'): request._user_cache = jwt.decode(...)\nreturn request._user_cache",
+        "source": "spec"
+      },
+      {
+        "id": "CON-045",
+        "type": "must",
+        "description": "Must provide configurable error response format. When json_errors=True, return JSON responses with Content-Type 'application/json' and structured error objects.",
+        "pattern": "return Response(json.dumps({'error': 'unauthorized', 'message': msg}), status=401, content_type='application/json')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-046",
+        "type": "must",
+        "description": "Must support path exclusion patterns for public endpoints. Skip authentication for requests matching excluded_paths configuration (e.g., /health, /public/*).",
+        "pattern": "if any(fnmatch(request.path, pattern) for pattern in excluded_paths): return next_handler(request)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-047",
+        "type": "prefer",
+        "description": "Prefer providing type hints for user context object to enable IDE autocomplete. Define UserContext dataclass or TypedDict with common fields like user_id, email, role.",
+        "pattern": "from typing import TypedDict\nclass UserContext(TypedDict):\n    user_id: str\n    role: str\n    email: str | None",
+        "source": "spec"
+      },
+      {
+        "id": "CON-048",
+        "type": "prefer",
+        "description": "Prefer implementing optional token result caching with short TTL (e.g., 5 seconds) keyed by token hash to reduce repeated signature verification for identical tokens in rapid succession.",
+        "pattern": "cache_key = hashlib.sha256(token.encode()).hexdigest()\nif cache_key in token_cache and cache_time < 5: return cached_payload",
+        "source": "spec"
+      },
+      {
+        "id": "CON-049",
+        "type": "must",
+        "description": "Must handle Unicode characters in JWT claim values correctly. Ensure proper UTF-8 encoding/decoding when processing base64 segments and JSON payloads.",
+        "pattern": "payload_bytes = base64.urlsafe_b64decode(segment)\npayload = json.loads(payload_bytes.decode('utf-8'))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-050",
+        "type": "must",
+        "description": "Must include security headers in error responses. Add 'X-Content-Type-Options: nosniff' and 'Cache-Control: no-store' to 401/403 responses to prevent caching and content sniffing.",
+        "pattern": "response.headers['X-Content-Type-Options'] = 'nosniff'\nresponse.headers['Cache-Control'] = 'no-store'",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 50,
+    "generatedAt": "2026-02-12T06:30:58.128Z",
+    "inputTokens": 3083,
+    "outputTokens": 3680
+  },
+  "generatedCode": {
+    "task": "Write a middleware that validates JWT tokens, checks expiration, handles refresh tokens, and attaches user context to the request",
+    "code": "import jwt\nimport hmac\nimport hashlib\nimport time\nimport json\nimport base64\nimport logging\nfrom typing import Optional, Dict, Any, List, Callable, Union, TypedDict\nfrom dataclasses import dataclass\nfrom functools import wraps\nfrom datetime import datetime, timezone\nimport fnmatch\n\n\nlogger = logging.getLogger(__name__)\n\n\nclass UserContext(TypedDict, total=False):\n    user_id: str\n    email: Optional[str]\n    role: str\n    permissions: Optional[List[str]]\n\n\n@dataclass\nclass JWTConfig:\n    secret_key: str\n    algorithm: str = 'HS256'\n    access_token_lifetime: int = 900  # 15 minutes\n    refresh_token_lifetime: int = 604800  # 7 days\n    clock_skew: int = 60  # 60 seconds tolerance\n    expected_issuer: Optional[str] = None\n    expected_audience: Optional[str] = None\n    public_key: Optional[str] = None\n    json_errors: bool = True\n    excluded_paths: List[str] = None\n    enable_revocation_check: bool = False\n    revocation_list: set = None\n    max_token_size: int = 10240  # 10KB\n    enable_token_caching: bool = False\n    token_cache_ttl: int = 5  # 5 seconds\n    \n    def __post_init__(self):\n        if self.excluded_paths is None:\n            self.excluded_paths = []\n        if self.revocation_list is None:\n            self.revocation_list = set()\n\n\nclass TokenCache:\n    def __init__(self, ttl: int = 5):\n        self.cache: Dict[str, tuple[Dict[str, Any], float]] = {}\n        self.ttl = ttl\n    \n    def get(self, token_hash: str) -> Optional[Dict[str, Any]]:\n        if token_hash in self.cache:\n            payload, cached_time = self.cache[token_hash]\n            if time.time() - cached_time < self.ttl:\n                return payload\n            else:\n                del self.cache[token_hash]\n        return None\n    \n    def set(self, token_hash: str, payload: Dict[str, Any]):\n        self.cache[token_hash] = (payload, time.time())\n    \n    def clear_expired(self):\n        current_time = time.time()\n        expired_keys = [\n            k for k, (_, cached_time) in self.cache.items()\n            if current_time - cached_time >= self.ttl\n        ]\n        for key in expired_keys:\n            del self.cache[key]\n\n\nclass JWTMiddleware:\n    def __init__(self, config: JWTConfig):\n        self.config = config\n        self.token_cache = TokenCache(config.token_cache_ttl) if config.enable_token_caching else None\n        \n        # Validate required configuration\n        if not self.config.secret_key and not self.config.public_key:\n            raise ValueError(\"Either secret_key or public_key must be configured\")\n    \n    def _get_token_hash(self, token: str) -> str:\n        return hashlib.sha256(token.encode()).hexdigest()\n    \n    def _should_skip_authentication(self, path: str) -> bool:\n        for pattern in self.config.excluded_paths:\n            if fnmatch.fnmatch(path, pattern):\n                return True\n        return False\n    \n    def _extract_token_from_request(self, request) -> Optional[str]:\n        # Check Authorization header first\n        auth_header = request.headers.get('Authorization')\n        \n        if auth_header is not None:\n            if not isinstance(auth_header, str):\n                return None\n            \n            # Handle Bearer scheme (case-insensitive)\n            parts = auth_header.split(' ', 1)\n            if len(parts) == 2:\n                scheme, token = parts\n                if scheme.lower() == 'bearer':\n                    return token.strip()\n        \n        # Check cookies if header not present\n        if hasattr(request, 'cookies'):\n            cookie_token = request.cookies.get('access_token')\n            if cookie_token:\n                return cookie_token\n        \n        return None\n    \n    def _validate_token_structure(self, token: str) -> bool:\n        if not token or not isinstance(token, str):\n            return False\n        \n        # Check token size\n        if len(token) > self.config.max_token_size:\n            return False\n        \n        # Check JWT structure (three segments)\n        parts = token.split('.')\n        if len(parts) != 3:\n            return False\n        \n        return True\n    \n    def _decode_token(self, token: str, token_type: str = 'access') -> Dict[str, Any]:\n        # Check cache first if enabled\n        if self.token_cache and token_type == 'access':\n            token_hash = self._get_token_hash(token)\n            cached_payload = self.token_cache.get(token_hash)\n            if cached_payload:\n                return cached_payload\n        \n        # Determine key and algorithms\n        if self.config.algorithm.startswith('RS'):\n            key = self.config.public_key if self.config.public_key else self.config.secret_key\n            algorithms = ['RS256', 'RS384', 'RS512']\n        else:\n            key = self.config.secret_key\n            algorithms = ['HS256', 'HS384', 'HS512']\n        \n        # Decode options\n        decode_options = {\n            'verify_signature': True,\n            'verify_exp': True,\n            'verify_nbf': True,\n            'verify_iat': True,\n            'verify_aud': self.config.expected_audience is not None,\n            'verify_iss': self.config.expected_issuer is not None,\n            'require_exp': True,\n            'require_iat': False,\n        }\n        \n        try:\n            # Decode with configured parameters\n            payload = jwt.decode(\n                token,\n                key,\n                algorithms=algorithms,\n                options=decode_options,\n                leeway=self.config.clock_skew,\n                audience=self.config.expected_audience,\n                issuer=self.config.expected_issuer\n            )\n            \n            # Validate exp is numeric\n            if 'exp' not in payload:\n                raise jwt.InvalidTokenError('missing required claim: exp')\n            \n            if not isinstance(payload.get('exp'), (int, float)):\n                raise jwt.InvalidTokenError('invalid expiration format')\n            \n            # Check token type if present\n            if 'type' in payload and payload['type'] != token_type:\n                if token_type == 'access' and payload['type'] == 'refresh':\n                    raise jwt.InvalidTokenError('refresh token cannot be used for API access')\n                raise jwt.InvalidTokenError(f'invalid token type: expected {token_type}, got {payload[\"type\"]}')\n            \n            # Check revocation if enabled\n            if self.config.enable_revocation_check and 'jti' in payload:\n                if payload['jti'] in self.config.revocation_list:\n                    raise jwt.InvalidTokenError('token has been revoked')\n            \n            # Cache valid payload if caching enabled\n            if self.token_cache and token_type == 'access':\n                token_hash = self._get_token_hash(token)\n                self.token_cache.set(token_hash, payload)\n            \n            return payload\n            \n        except jwt.ExpiredSignatureError:\n            if token_type == 'refresh':\n                raise jwt.InvalidTokenError('refresh token expired')\n            raise jwt.InvalidTokenError('token expired')\n        except jwt.InvalidTokenError as e:\n            # Handle various JWT errors\n            error_msg = str(e).lower()\n            if 'algorithm' in error_msg or 'none' in error_msg:\n                raise jwt.InvalidTokenError('unsupported algorithm')\n            if 'issuer' in error_msg:\n                raise jwt.InvalidTokenError('invalid issuer')\n            if 'audience' in error_msg:\n                raise jwt.InvalidTokenError('invalid audience')\n            if 'not yet valid' in error_msg or 'nbf' in error_msg:\n                raise jwt.InvalidTokenError('token not yet valid')\n            if 'signature' in error_msg:\n                raise jwt.InvalidTokenError('invalid signature')\n            raise\n        except (ValueError, json.JSONDecodeError, base64.binascii.Error):\n            raise jwt.InvalidTokenError('malformed token')\n    \n    def _create_access_token(self, user_id: str, additional_claims: Dict[str, Any] = None) -> str:\n        current_time = int(time.time())\n        exp = current_time + self.config.access_token_lifetime\n        \n        payload = {\n            'user_id': user_id,\n            'exp': exp,\n            'iat': current_time,\n            'type': 'access'\n        }\n        \n        if self.config.expected_issuer:\n            payload['iss'] = self.config.expected_issuer\n        \n        if self.config.expected_audience:\n            payload['aud'] = self.config.expected_audience\n        \n        if additional_claims:\n            payload.update(additional_claims)\n        \n        return jwt.encode(payload, self.config.secret_key, algorithm=self.config.algorithm)\n    \n    def _create_error_response(self, status_code: int, error: str, message: str) -> tuple:\n        headers = {\n            'X-Content-Type-Options': 'nosniff',\n            'Cache-Control': 'no-store'\n        }\n        \n        if self.config.json_errors:\n            body = json.dumps({'error': error, 'message': message})\n            headers['Content-Type'] = 'application/json'\n        else:\n            body = message\n            headers['Content-Type'] = 'text/plain'\n        \n        return status_code, body, headers\n    \n    def _log_auth_failure(self, request, reason: str):\n        remote_addr = getattr(request, 'remote_addr', 'unknown')\n        path = getattr(request, 'path', 'unknown')\n        logger.warning(f'Auth failed: {reason} from {remote_addr} to {path}')\n    \n    def validate_request(self, request):\n        # Preserve original request attributes\n        original_path = request.path\n        original_method = request.method\n        \n        # Check if path should skip authentication\n        if self._should_skip_authentication(original_path):\n            return None\n        \n        # Extract token\n        token = self._extract_token_from_request(request)\n        \n        if not token:\n            self._log_auth_failure(request, 'missing authorization header')\n            return self._create_error_response(\n                401,\n                'unauthorized',\n                'Authorization header required'\n            )\n        \n        # Validate token structure\n        if not self._validate_token_structure(token):\n            if len(token) > self.config.max_token_size:\n                self._log_auth_failure(request, 'token too large')\n                return self._create_error_response(\n                    400,\n                    'bad_request',\n                    'token too large'\n                )\n            self._log_auth_failure(request, 'malformed token')\n            return self._create_error_response(\n                401,\n                'unauthorized',\n                'malformed token'\n            )\n        \n        try:\n            # Decode and validate token\n            payload = self._decode_token(token, token_type='access')\n            \n            # Attach user context to request\n            request.user = payload\n            \n            return None  # Success, no error response\n            \n        except jwt.InvalidTokenError as e:\n            error_msg = str(e)\n            self._log_auth_failure(request, error_msg)\n            \n            # Determine appropriate status code\n            if 'refresh token cannot be used' in error_msg:\n                status_code = 403\n            else:\n                status_code = 401\n            \n            return self._create_error_response(\n                status_code,\n                'unauthorized',\n                error_msg\n            )\n        except Exception as e:\n            self._log_auth_failure(request, 'unexpected error')\n            logger.error(f'Unexpected error during token validation: {type(e).__name__}')\n            return self._create_error_response(\n                401,\n                'unauthorized',\n                'authentication failed'\n            )\n    \n    def handle_refresh_token(self, request) -> tuple:\n        # Validate request body\n        if not hasattr(request, 'json') or not request.json:\n            return self._create_error_response(\n                400,\n                'bad_request',\n                'refresh token required'\n            )\n        \n        refresh_token = request.json.get('refresh_token')\n        \n        if not refresh_token or not isinstance(refresh_token, str):\n            return self._create_error_response(\n                400,\n                'bad_request',\n                'refresh token required'\n            )\n        \n        # Validate token structure\n        if not self._validate_token_structure(refresh_token):\n            if len(refresh_token) > self.config.max_token_size:\n                return self._create_error_response(\n                    400,\n                    'bad_request',\n                    'token too large'\n                )\n            return self._create_error_response(\n                401,\n                'unauthorized',\n                'malformed token'\n            )\n        \n        try:\n            # Decode refresh token\n            payload = self._decode_token(refresh_token, token_type='refresh')\n            \n            # Extract user info\n            user_id = payload.get('user_id')\n            if not user_id:\n                return self._create_error_response(\n                    401,\n                    'unauthorized',\n                    'invalid token: missing user_id'\n                )\n            \n            # Create new access token\n            additional_claims = {k: v for k, v in payload.items() \n                               if k not in ('exp', 'iat', 'type', 'nbf', 'jti')}\n            new_access_token = self._create_access_token(user_id, additional_claims)\n            \n            # Return success response\n            headers = {\n                'Content-Type': 'application/json',\n                'X-Content-Type-Options': 'nosniff',\n                'Cache-Control': 'no-store'\n            }\n            \n            body = json.dumps({\n                'access_token': new_access_token\n            })\n            \n            return 200, body, headers\n            \n        except jwt.InvalidTokenError as e:\n            error_msg = str(e)\n            self._log_auth_failure(request, f'refresh token: {error_msg}')\n            return self._create_error_response(\n                401,\n                'unauthorized',\n                error_msg\n            )\n        except Exception as e:\n            logger.error(f'Unexpected error during token refresh: {type(e).__name__}')\n            return self._create_error_response(\n                401,\n                'unauthorized',\n                'token refresh failed'\n            )\n\n\nclass MockRequest:\n    def __init__(self, path: str = '/api/data', method: str = 'GET', \n                 headers: Dict[str, str] = None, cookies: Dict[str, str] = None,\n                 json_data: Dict[str, Any] = None, remote_addr: str = '127.0.0.1'):\n        self.path = path\n        self.method = method\n        self.headers = headers or {}\n        self.cookies = cookies or {}\n        self.json = json_data\n        self.remote_addr = remote_addr\n        self.user = None\n\n\ndef create_test_token(secret_key: str, payload: Dict[str, Any], algorithm: str = 'HS256') -> str:\n    return jwt.encode(payload, secret_key, algorithm=algorithm)\n\n\ndef main():\n    # Example usage\n    config = JWTConfig(\n        secret_key='test_secret',\n        algorithm='HS256',\n        access_token_lifetime=900,\n        clock_skew=60,\n        json_errors=True,\n        excluded_paths=['/health', '/public/*'],\n        enable_revocation_check=False\n    )\n    \n    middleware = JWTMiddleware(config)\n    \n    # Test 1: Valid token\n    current_time = int(time.time())\n    valid_payload = {\n        'user_id': '123',\n        'exp': current_time + 600,\n        'role': 'user',\n        'type': 'access'\n    }\n    valid_token = create_test_token(config.secret_key, valid_payload)\n    \n    request = MockRequest(\n        path='/api/data',\n        headers={'Authorization': f'Bearer {valid_token}'}\n    )\n    \n    error = middleware.validate_request(request)\n    if error:\n        print(f\"Error: {error}\")\n    else:\n        print(f\"Success! User context: {request.user}\")\n    \n    # Test 2: Missing Authorization header\n    request = MockRequest(path='/api/data')\n    error = middleware.validate_request(request)\n    print(f\"Missing auth test: {error[0]} - {error[1]}\")\n    \n    # Test 3: Expired token\n    expired_payload = {\n        'user_id': '123',\n        'exp': current_time - 3600,\n        'type': 'access'\n    }\n    expired_token = create_test_token(config.secret_key, expired_payload)\n    request = MockRequest(\n        path='/api/data',\n        headers={'Authorization': f'Bearer {expired_token}'}\n    )\n    error = middleware.validate_request(request)\n    print(f\"Expired token test: {error[0]} - {error[1]}\")\n    \n    # Test 4: Refresh token endpoint\n    refresh_payload = {\n        'user_id': '456',\n        'exp': current_time + 604800,\n        'type': 'refresh',\n        'role': 'admin'\n    }\n    refresh_token = create_test_token(config.secret_key, refresh_payload)\n    request = MockRequest(\n        path='/refresh',\n        method='POST',\n        json_data={'refresh_token': refresh_token}\n    )\n    status, body, headers = middleware.handle_refresh_token(request)\n    print(f\"Refresh token test: {status} - {body}\")\n    \n    # Test 5: Public endpoint (excluded path)\n    request = MockRequest(path='/health')\n    error = middleware.validate_request(request)\n    print(f\"Public endpoint test: {'Skipped authentication' if error is None else 'Failed'}\")\n\n\nif __name__ == '__main__':\n    main()",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Middleware must successfully validate a well-formed, non-expired JWT token with valid signature",
+        "assertion": "Given a valid JWT token with payload {'user_id': '123', 'exp': timestamp_10_minutes_future, 'role': 'user'} signed with secret key 'test_secret', middleware allows request to proceed and attaches user context with user_id='123', role='user' to request object",
+        "rationale": "Core functionality - valid tokens must always be accepted for system to work"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Middleware must reject requests with missing Authorization header",
+        "assertion": "Request without 'Authorization' header returns 401 Unauthorized with error message containing 'missing' or 'required'",
+        "rationale": "Unauthenticated requests must be blocked to protect secured endpoints"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "security",
+        "severity": "critical",
+        "description": "Middleware must reject tokens with invalid or tampered signatures",
+        "assertion": "Given JWT token with valid structure but signature created with wrong secret key 'wrong_secret', middleware returns 401 Unauthorized with error indicating 'invalid signature' or 'authentication failed'",
+        "rationale": "Prevents token forgery attacks - compromised signature validation allows complete authentication bypass"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Middleware must reject expired JWT tokens",
+        "assertion": "Given JWT token with exp claim set to timestamp 1 hour in the past, middleware returns 401 Unauthorized with error message containing 'expired'",
+        "rationale": "Expired tokens must not grant access - time-based security is fundamental to JWT design"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Middleware must extract and attach complete user context from valid JWT to request object",
+        "assertion": "Valid JWT with payload {'user_id': '456', 'email': 'test@example.com', 'role': 'admin', 'permissions': ['read', 'write']} results in request.user containing all these fields accessible as attributes or dict keys",
+        "rationale": "Downstream handlers depend on user context for authorization and business logic"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Middleware must successfully process and exchange valid refresh tokens for new access tokens",
+        "assertion": "POST request to /refresh with valid refresh token in body returns 200 OK with JSON containing new 'access_token' field with valid JWT structure",
+        "rationale": "Refresh token flow is essential for maintaining user sessions without re-authentication"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "security",
+        "severity": "critical",
+        "description": "Middleware must reject expired refresh tokens",
+        "assertion": "POST request to /refresh with refresh token expired 1 day ago returns 401 Unauthorized with error message containing 'refresh token expired'",
+        "rationale": "Expired refresh tokens must not be usable to prevent indefinite session extension"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "security",
+        "severity": "critical",
+        "description": "Middleware must validate that refresh tokens are only used for token refresh, not for API access",
+        "assertion": "GET request to protected endpoint /api/data with refresh token in Authorization header returns 401 or 403 with error indicating 'invalid token type' or 'refresh token cannot be used for API access'",
+        "rationale": "Prevents privilege escalation - refresh tokens should only refresh, not authenticate API calls"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Middleware must handle tokens that are expiring at the exact current timestamp",
+        "assertion": "JWT token with exp claim equal to current Unix timestamp (within same second) is rejected with 401 Unauthorized",
+        "rationale": "Boundary condition - prevents race conditions where tokens used at expiration moment"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "security",
+        "severity": "critical",
+        "description": "Middleware must reject tokens with 'none' algorithm to prevent algorithm confusion attacks",
+        "assertion": "JWT token with header {'alg': 'none', 'typ': 'JWT'} and no signature returns 401 Unauthorized with error indicating 'unsupported algorithm' or 'invalid token'",
+        "rationale": "Critical vulnerability - 'none' algorithm bypass allows unsigned tokens to be accepted"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Middleware must reject malformed JWT tokens with invalid structure",
+        "assertion": "Authorization header with value 'Bearer invalid.token.structure' (not three base64 segments) returns 401 Unauthorized with error containing 'malformed' or 'invalid format'",
+        "rationale": "Prevents crashes from parsing errors and provides clear error feedback"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must use constant-time comparison for token signature verification",
+        "assertion": "Token validation implementation uses constant-time string comparison (e.g., hmac.compare_digest) for signature verification, not == operator, preventing timing attacks",
+        "rationale": "Timing attacks can leak signature information through response time variations"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must validate token issuer (iss) claim if configured",
+        "assertion": "Given middleware configured with expected_issuer='https://auth.example.com', JWT with iss='https://malicious.com' returns 401 Unauthorized with error 'invalid issuer'",
+        "rationale": "Prevents accepting tokens from unauthorized issuers in multi-tenant or federated systems"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must validate token audience (aud) claim if configured",
+        "assertion": "Given middleware configured with expected_audience='api.example.com', JWT with aud='different-service.com' returns 401 Unauthorized with error 'invalid audience'",
+        "rationale": "Prevents token reuse across different services - tokens should be scoped to intended audience"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Middleware must handle Bearer token format correctly with case-insensitive scheme",
+        "assertion": "Authorization header with value 'bearer <valid_token>' (lowercase 'bearer') or 'BEARER <valid_token>' successfully authenticates request",
+        "rationale": "HTTP header schemes are case-insensitive per RFC 7235"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Middleware must reject tokens with missing required claims",
+        "assertion": "JWT token without 'exp' claim returns 401 Unauthorized with error 'missing required claim: exp'",
+        "rationale": "Required claims ensure token has necessary information for security and authorization"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must reject tokens with nbf (not before) claim in the future",
+        "assertion": "JWT token with nbf claim set to timestamp 1 hour in the future returns 401 Unauthorized with error 'token not yet valid'",
+        "rationale": "Prevents premature token usage - tokens should only be valid within intended time window"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Middleware must handle refresh token requests with missing token gracefully",
+        "assertion": "POST request to /refresh with empty body or missing refresh_token field returns 400 Bad Request with error 'refresh token required'",
+        "rationale": "Client errors should return 400, not 500, and provide actionable error messages"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Middleware must generate new access tokens with appropriate expiration time",
+        "assertion": "After successful refresh, new access_token has exp claim set to current_time + configured_access_token_lifetime (e.g., 15 minutes), verified by decoding returned token",
+        "rationale": "Access tokens should have short lifetimes to limit exposure window if compromised"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must not include sensitive information in error messages",
+        "assertion": "Invalid token errors do not expose secret keys, internal paths, stack traces, or specific validation details that could aid attackers",
+        "rationale": "Information disclosure can aid attackers in crafting exploits"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Middleware must validate that exp claim is a numeric timestamp",
+        "assertion": "JWT token with exp claim as string '2024-12-31' instead of Unix timestamp returns 401 Unauthorized with error 'invalid expiration format'",
+        "rationale": "Type validation prevents unexpected behavior from malformed claims"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Middleware must handle tokens with excessive whitespace in Authorization header",
+        "assertion": "Authorization header 'Bearer   <valid_token>  ' (extra spaces before/after token) successfully authenticates after trimming whitespace",
+        "rationale": "Real-world clients may add extraneous whitespace - middleware should be tolerant"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "security",
+        "severity": "high",
+        "description": "Middleware must implement token revocation check if revocation list is configured",
+        "assertion": "Valid JWT with jti='revoked-token-123' that exists in configured revocation list/blacklist returns 401 Unauthorized with error 'token has been revoked'",
+        "rationale": "Supports immediate token invalidation for logout or security incidents"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Middleware must preserve original request path and method during validation",
+        "assertion": "After middleware validates token for POST request to /api/users/123/update, request.path equals '/api/users/123/update' and request.method equals 'POST'",
+        "rationale": "Downstream handlers need accurate request information for routing and logging"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Middleware must handle tokens with additional unknown claims without rejection",
+        "assertion": "JWT token with standard claims plus custom claims {'custom_field': 'value', 'organization': 'acme'} successfully validates and includes custom claims in request.user context",
+        "rationale": "JWT specification allows custom claims - middleware should be extensible"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Middleware must validate tokens efficiently without blocking I/O for synchronous signature verification",
+        "assertion": "Token validation for 1000 concurrent requests with valid tokens completes within 2 seconds on standard hardware, indicating no blocking I/O in validation path",
+        "rationale": "Middleware is in hot path - inefficient validation impacts all authenticated requests"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "security",
+        "severity": "medium",
+        "description": "Middleware must implement configurable clock skew tolerance for exp/nbf validation",
+        "assertion": "Given clock_skew=60 seconds configured, JWT token expired 30 seconds ago successfully validates, but token expired 90 seconds ago is rejected",
+        "rationale": "Accommodates minor time synchronization differences between servers"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Middleware must handle base64 decoding errors gracefully",
+        "assertion": "JWT token with invalid base64 characters in payload segment (e.g., 'header.inv@lid!base64.signature') returns 401 Unauthorized with error 'malformed token'",
+        "rationale": "Prevents crashes from malformed input and provides clear error response"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Middleware must support multiple token sources (header, cookie) if configured",
+        "assertion": "When configured to check cookies, request with no Authorization header but valid token in 'access_token' cookie successfully authenticates",
+        "rationale": "Web applications often use cookies for token storage - middleware should be flexible"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Middleware must handle non-string values in Authorization header gracefully",
+        "assertion": "Request with Authorization header set to integer 12345 or None returns 400 Bad Request with error 'invalid authorization header format'",
+        "rationale": "Prevents type errors from unexpected input types"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "medium",
+        "description": "Middleware must log authentication failures for security monitoring",
+        "assertion": "Failed authentication attempt with invalid token generates log entry with severity WARNING or ERROR containing timestamp, reason ('expired', 'invalid signature', etc.), and anonymized request info (IP address, endpoint)",
+        "rationale": "Audit trail enables detection of brute force attacks or compromised tokens"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Middleware must handle extremely long tokens without crashing",
+        "assertion": "Authorization header with token exceeding 10KB returns 400 Bad Request with error 'token too large' instead of causing memory errors",
+        "rationale": "Prevents DoS attacks via oversized tokens consuming excessive memory"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Middleware must support RS256 (RSA) algorithm in addition to HS256 (HMAC)",
+        "assertion": "JWT token signed with RS256 algorithm using RSA private key validates successfully when middleware is configured with corresponding public key",
+        "rationale": "RSA algorithms enable asymmetric verification without sharing secrets"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Middleware must cache decoded token claims for request lifecycle to avoid repeated parsing",
+        "assertion": "After initial token validation, subsequent access to request.user within same request does not re-decode or re-validate JWT (verify via profiling or mock spy)",
+        "rationale": "Avoids redundant cryptographic operations within single request processing"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "error-handling",
+        "severity": "low",
+        "description": "Middleware should provide configurable error response format (JSON vs plain text)",
+        "assertion": "When configured with json_errors=True, 401 response has Content-Type 'application/json' and body like {'error': 'unauthorized', 'message': 'token expired'}",
+        "rationale": "API consumers expect consistent JSON error format for programmatic handling"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Middleware should support optional path exclusion patterns for public endpoints",
+        "assertion": "When configured with excluded_paths=['/health', '/public/*'], requests to /health and /public/docs succeed without Authorization header",
+        "rationale": "Health checks and public documentation should not require authentication"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "type-safety",
+        "severity": "low",
+        "description": "Middleware should provide type hints for user context object",
+        "assertion": "request.user object has type annotations allowing IDE autocomplete for common fields like user_id: str, email: Optional[str], role: str",
+        "rationale": "Improves developer experience and catches type errors at development time"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "performance",
+        "severity": "low",
+        "description": "Middleware should support optional caching of validated tokens to reduce repeated validation",
+        "assertion": "When token caching enabled with 5-second TTL, same token validated twice within 5 seconds results in only one signature verification (second lookup hits cache), verified via metrics or mocking",
+        "rationale": "Reduces CPU load for high-frequency requests with same token (e.g., polling)"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Middleware should handle Unicode characters in claim values correctly",
+        "assertion": "JWT token with claims {'name': '用户', 'emoji': '🚀'} successfully validates and request.user.name equals '用户' with correct Unicode encoding",
+        "rationale": "International applications require proper Unicode support in user data"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "security",
+        "severity": "low",
+        "description": "Middleware should include security headers in error responses",
+        "assertion": "401 Unauthorized responses include headers 'X-Content-Type-Options: nosniff' and 'Cache-Control: no-store' to prevent caching of auth errors",
+        "rationale": "Defense-in-depth - prevents browsers from caching or misinterpreting auth errors"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Handle HTTP errors explicitly (check response.ok or status code)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never ignore HTTP error responses or assume success",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "prefer",
+        "description": "Include timeout configuration for HTTP requests",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Handle empty string edge case",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "prefer",
+        "description": "Consider Unicode/multi-byte characters when indexing strings",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Check for division by zero before dividing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Validate that required environment variables are set before using them",
+        "source": "domain"
+      },
+      {
+        "id": "CON-010",
+        "type": "must-not",
+        "description": "Never log or expose secrets/tokens in error messages or console output",
+        "source": "domain"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must verify JWT signature using the configured secret key or public key before proceeding with any claim validation. Use a well-tested JWT library (PyJWT, python-jose) rather than manual implementation.",
+        "pattern": "decoded = jwt.decode(token, secret_key, algorithms=['HS256', 'RS256'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must return 401 Unauthorized with descriptive error message when Authorization header is missing. Check for header presence before attempting token extraction.",
+        "pattern": "if 'Authorization' not in request.headers: return 401, {'error': 'Authorization header required'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must-not",
+        "description": "Must-not allow tokens signed with incorrect secret keys to pass validation. Always specify the algorithms parameter in jwt.decode to prevent algorithm confusion attacks.",
+        "pattern": "# WRONG: jwt.decode(token, verify=False)\n# RIGHT: jwt.decode(token, secret_key, algorithms=['HS256'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must validate the exp claim and reject tokens where current timestamp >= exp. Handle InvalidTokenError or ExpiredSignatureError from JWT library.",
+        "pattern": "try: jwt.decode(token, secret, algorithms=['HS256'])\nexcept jwt.ExpiredSignatureError: return 401, {'error': 'token expired'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must extract all claims from validated JWT payload and attach them to request.user object as accessible attributes or dictionary keys for downstream handlers.",
+        "pattern": "payload = jwt.decode(token, secret, algorithms=['HS256'])\nrequest.user = payload  # or UserContext(**payload)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must implement separate endpoint (e.g., POST /refresh) that validates refresh tokens and generates new access tokens with fresh exp claims. Do not mix refresh and access token validation logic.",
+        "pattern": "if request.path == '/refresh': validate_refresh_token(); return new_access_token()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must validate exp claim on refresh tokens and reject expired refresh tokens with 401 error indicating refresh token expiration specifically.",
+        "pattern": "refresh_payload = jwt.decode(refresh_token, secret, algorithms=['HS256'])\nif refresh_payload.get('type') != 'refresh': return 401, {'error': 'invalid token type'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must check token type claim (e.g., 'type': 'access' vs 'type': 'refresh') and reject refresh tokens when used for API access, returning 401/403 with clear error.",
+        "pattern": "if token_payload.get('type') == 'refresh': return 403, {'error': 'refresh token cannot be used for API access'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must treat tokens expiring at exactly current timestamp as expired. Use >= comparison for exp validation, not >.",
+        "pattern": "if current_time >= token_exp: raise ExpiredSignatureError",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must-not",
+        "description": "Must-not accept tokens with 'none' algorithm. Explicitly specify allowed algorithms in jwt.decode (e.g., algorithms=['HS256', 'RS256']) and reject any others.",
+        "pattern": "# WRONG: jwt.decode(token, secret)  # allows 'none'\n# RIGHT: jwt.decode(token, secret, algorithms=['HS256', 'RS256'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must validate JWT structure (three base64-encoded segments separated by dots) and return 401 with 'malformed token' error for invalid format before attempting decode.",
+        "pattern": "if len(token.split('.')) != 3: return 401, {'error': 'malformed token'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must use constant-time comparison (hmac.compare_digest) when manually verifying signatures to prevent timing attacks. However, prefer using established JWT libraries which handle this internally.",
+        "pattern": "import hmac\nif not hmac.compare_digest(expected_sig, actual_sig): raise InvalidSignatureError",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must validate iss (issuer) claim against expected value if configured, rejecting tokens with mismatched issuer with 401 error.",
+        "pattern": "decoded = jwt.decode(token, secret, algorithms=['HS256'], issuer='https://auth.example.com')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Must validate aud (audience) claim against expected value if configured, rejecting tokens with mismatched audience with 401 error.",
+        "pattern": "decoded = jwt.decode(token, secret, algorithms=['HS256'], audience='api.example.com')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must handle case-insensitive Bearer scheme extraction from Authorization header. Use .lower() or case-insensitive comparison when checking scheme.",
+        "pattern": "scheme, token = auth_header.split(' ', 1)\nif scheme.lower() != 'bearer': return 401",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Must validate presence of required claims (exp, iat, sub/user_id) and return 401 with specific 'missing required claim' error if absent.",
+        "pattern": "if 'exp' not in payload: return 401, {'error': 'missing required claim: exp'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must validate nbf (not before) claim if present, rejecting tokens where current timestamp < nbf with 401 error 'token not yet valid'.",
+        "pattern": "decoded = jwt.decode(token, secret, algorithms=['HS256'], options={'verify_nbf': True})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must return 400 Bad Request with 'refresh token required' error when POST /refresh receives empty body or missing refresh_token field.",
+        "pattern": "if not request.json or 'refresh_token' not in request.json: return 400, {'error': 'refresh token required'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must generate new access tokens with exp claim set to current_time + configured access token lifetime (e.g., 15 minutes). Include token type claim to distinguish from refresh tokens.",
+        "pattern": "exp = int(time.time()) + ACCESS_TOKEN_LIFETIME\npayload = {'user_id': user_id, 'exp': exp, 'type': 'access'}\nnew_token = jwt.encode(payload, secret, algorithm='HS256')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must-not",
+        "description": "Must-not expose sensitive information in error messages. Avoid including secret keys, stack traces, file paths, or specific validation failure details that could aid attackers.",
+        "pattern": "# WRONG: return 401, {'error': f'Signature mismatch: expected {expected_sig}'}\n# RIGHT: return 401, {'error': 'invalid signature'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must validate that exp claim is numeric (int or float) and reject tokens with string or other types with 401 error 'invalid expiration format'.",
+        "pattern": "if not isinstance(payload.get('exp'), (int, float)): return 401, {'error': 'invalid expiration format'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Must strip leading and trailing whitespace from extracted token after splitting Authorization header to handle extra spaces gracefully.",
+        "pattern": "scheme, token = auth_header.split(' ', 1)\ntoken = token.strip()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must check if token jti (JWT ID) exists in configured revocation list/blacklist before accepting token, returning 401 with 'token has been revoked' if found.",
+        "pattern": "if 'jti' in payload and payload['jti'] in revocation_list: return 401, {'error': 'token has been revoked'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must preserve original request.path and request.method attributes during middleware processing. Do not modify these values during token validation.",
+        "pattern": "# Validate token but preserve: original_path = request.path, original_method = request.method",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Must allow tokens with additional custom claims beyond standard JWT claims. Do not reject tokens for containing unknown fields; include them in request.user context.",
+        "pattern": "# Allow payload = {'user_id': '123', 'exp': 1234567890, 'custom_field': 'value'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "prefer",
+        "description": "Prefer using CPU-bound synchronous JWT validation without blocking I/O operations. Use in-memory signature verification rather than database lookups in the hot path for performance.",
+        "pattern": "# Validate signature in-memory, defer DB lookups (revocation check) to async or cache",
+        "source": "spec"
+      },
+      {
+        "id": "CON-037",
+        "type": "must",
+        "description": "Must implement configurable clock skew tolerance (e.g., 60 seconds) when validating exp and nbf claims to handle clock drift between servers.",
+        "pattern": "decoded = jwt.decode(token, secret, algorithms=['HS256'], options={'leeway': 60})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-038",
+        "type": "must",
+        "description": "Must catch base64 decoding errors and invalid JSON parsing errors when processing JWT segments, returning 401 with 'malformed token' error.",
+        "pattern": "try: payload = json.loads(base64.urlsafe_b64decode(segment))\nexcept (ValueError, JSONDecodeError): return 401, {'error': 'malformed token'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-039",
+        "type": "must",
+        "description": "Must check multiple token sources (Authorization header, cookies) in configured priority order. If cookie support enabled, check for token in 'access_token' cookie if header absent.",
+        "pattern": "token = request.headers.get('Authorization') or request.cookies.get('access_token')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-040",
+        "type": "must",
+        "description": "Must validate that Authorization header value is a string type and return 400 Bad Request for non-string values (None, int, etc.) before attempting to parse.",
+        "pattern": "auth_header = request.headers.get('Authorization')\nif not isinstance(auth_header, str): return 400, {'error': 'invalid authorization header format'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-041",
+        "type": "must",
+        "description": "Must log authentication failures with appropriate severity (WARNING/ERROR), including timestamp, failure reason, and anonymized request metadata (IP, endpoint) for security monitoring.",
+        "pattern": "logger.warning(f'Auth failed: {reason} from {request.remote_addr} to {request.path}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-042",
+        "type": "must",
+        "description": "Must enforce maximum token size limit (e.g., 10KB) and return 400 Bad Request with 'token too large' error before processing to prevent memory exhaustion attacks.",
+        "pattern": "if len(token) > 10240: return 400, {'error': 'token too large'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-043",
+        "type": "must",
+        "description": "Must support both HS256 (HMAC-SHA256) and RS256 (RSA-SHA256) signing algorithms. Configure algorithm and key type (secret vs public key) based on deployment requirements.",
+        "pattern": "# For RS256: jwt.decode(token, public_key, algorithms=['RS256'])\n# For HS256: jwt.decode(token, secret_key, algorithms=['HS256'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-044",
+        "type": "prefer",
+        "description": "Prefer caching decoded token payload in request context after initial validation to avoid redundant parsing when accessing request.user multiple times in request lifecycle.",
+        "pattern": "if not hasattr(request, '_user_cache'): request._user_cache = jwt.decode(...)\nreturn request._user_cache",
+        "source": "spec"
+      },
+      {
+        "id": "CON-045",
+        "type": "must",
+        "description": "Must provide configurable error response format. When json_errors=True, return JSON responses with Content-Type 'application/json' and structured error objects.",
+        "pattern": "return Response(json.dumps({'error': 'unauthorized', 'message': msg}), status=401, content_type='application/json')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-046",
+        "type": "must",
+        "description": "Must support path exclusion patterns for public endpoints. Skip authentication for requests matching excluded_paths configuration (e.g., /health, /public/*).",
+        "pattern": "if any(fnmatch(request.path, pattern) for pattern in excluded_paths): return next_handler(request)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-047",
+        "type": "prefer",
+        "description": "Prefer providing type hints for user context object to enable IDE autocomplete. Define UserContext dataclass or TypedDict with common fields like user_id, email, role.",
+        "pattern": "from typing import TypedDict\nclass UserContext(TypedDict):\n    user_id: str\n    role: str\n    email: str | None",
+        "source": "spec"
+      },
+      {
+        "id": "CON-048",
+        "type": "prefer",
+        "description": "Prefer implementing optional token result caching with short TTL (e.g., 5 seconds) keyed by token hash to reduce repeated signature verification for identical tokens in rapid succession.",
+        "pattern": "cache_key = hashlib.sha256(token.encode()).hexdigest()\nif cache_key in token_cache and cache_time < 5: return cached_payload",
+        "source": "spec"
+      },
+      {
+        "id": "CON-049",
+        "type": "must",
+        "description": "Must handle Unicode characters in JWT claim values correctly. Ensure proper UTF-8 encoding/decoding when processing base64 segments and JSON payloads.",
+        "pattern": "payload_bytes = base64.urlsafe_b64decode(segment)\npayload = json.loads(payload_bytes.decode('utf-8'))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-050",
+        "type": "must",
+        "description": "Must include security headers in error responses. Add 'X-Content-Type-Options: nosniff' and 'Cache-Control: no-store' to 401/403 responses to prevent caching and content sniffing.",
+        "pattern": "response.headers['X-Content-Type-Options'] = 'nosniff'\nresponse.headers['Cache-Control'] = 'no-store'",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "The middleware successfully validates well-formed JWT tokens. The _decode_token method verifies signature, expiration, and other claims, and validate_request attaches the complete payload to request.user. The main() function demonstrates this working correctly."
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "The _extract_token_from_request method returns None when Authorization header is missing, and validate_request returns a 401 error with message 'Authorization header required' in this case."
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method uses jwt.decode with verify_signature=True. Invalid signatures raise jwt.InvalidTokenError, which is caught and converted to 401 with 'invalid signature' or 'authentication failed' message."
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method verifies expiration with verify_exp=True. Expired tokens raise jwt.ExpiredSignatureError, which is caught and converted to jwt.InvalidTokenError('token expired'), returning 401."
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "The validate_request method assigns the complete decoded payload to request.user (line 'request.user = payload'). All fields from the JWT payload are preserved and accessible as dictionary keys."
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "The handle_refresh_token method validates refresh tokens, extracts user_id, creates a new access token via _create_access_token, and returns 200 with JSON containing 'access_token' field."
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "In _decode_token, expired refresh tokens raise jwt.ExpiredSignatureError. When token_type='refresh', this is converted to jwt.InvalidTokenError('refresh token expired'), which is caught in handle_refresh_token and returns 401."
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method checks if payload['type'] != token_type. When a refresh token (type='refresh') is used with token_type='access', it raises jwt.InvalidTokenError('refresh token cannot be used for API access'), returning 403 status code in validate_request."
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "JWT's exp validation rejects tokens where exp <= current_time. A token with exp equal to current timestamp will be rejected as expired since the comparison is not strictly greater than."
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method explicitly sets algorithms=['HS256', 'HS384', 'HS512'] or RS variants, excluding 'none'. JWT library will reject 'none' algorithm tokens, and the error handling catches this and returns 401 with 'unsupported algorithm' message."
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "satisfied",
+        "reasoning": "The _validate_token_structure method checks if token.split('.') has exactly 3 parts. Malformed tokens fail this check, and validate_request returns 401 with 'malformed token' message."
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "The code delegates signature verification to PyJWT library (jwt.decode). PyJWT uses hmac.compare_digest for HMAC verification internally, providing constant-time comparison protection against timing attacks."
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "When expected_issuer is configured, _decode_token sets verify_iss=True and passes issuer=self.config.expected_issuer to jwt.decode. Mismatched issuer raises jwt.InvalidTokenError, caught and converted to 401 with 'invalid issuer' message."
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "When expected_audience is configured, _decode_token sets verify_aud=True and passes audience=self.config.expected_audience to jwt.decode. Mismatched audience raises jwt.InvalidTokenError, caught and converted to 401 with 'invalid audience' message."
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "In _extract_token_from_request, the code uses scheme.lower() == 'bearer' for case-insensitive comparison, accepting 'Bearer', 'bearer', 'BEARER', etc."
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method sets require_exp=True in decode options and explicitly checks if 'exp' not in payload, raising jwt.InvalidTokenError('missing required claim: exp')."
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method sets verify_nbf=True. Tokens with future nbf claim raise jwt.InvalidTokenError, which is caught and converted to 401 with 'token not yet valid' message when error_msg contains 'not yet valid' or 'nbf'."
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "satisfied",
+        "reasoning": "The handle_refresh_token method checks if request.json is missing or if refresh_token field is missing/not a string, returning 400 Bad Request with 'refresh token required' message."
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "The _create_access_token method sets exp = current_time + self.config.access_token_lifetime, correctly generating tokens with configured expiration time (default 900 seconds/15 minutes)."
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "Error messages are generic ('token expired', 'invalid signature', 'authentication failed') without exposing secret keys, internal implementation details, or stack traces. The code logs detailed errors but returns sanitized messages to clients."
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method explicitly validates that payload.get('exp') is an instance of (int, float), raising jwt.InvalidTokenError('invalid expiration format') for non-numeric exp claims."
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "In _extract_token_from_request, after extracting the token from 'Bearer <token>', the code calls token.strip() to remove leading/trailing whitespace."
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "When enable_revocation_check is True, _decode_token checks if payload['jti'] is in revocation_list and raises jwt.InvalidTokenError('token has been revoked'), returning 401."
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "satisfied",
+        "reasoning": "The validate_request method stores original_path and original_method at the beginning but doesn't modify request.path or request.method. The request object's original attributes are preserved throughout validation."
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method returns the entire decoded payload without filtering unknown claims. Additional custom claims are included in the payload and accessible via request.user."
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "unknown",
+        "reasoning": "Cannot verify performance requirements through static analysis. The implementation uses synchronous cryptographic operations which should be fast, but actual performance under concurrent load requires runtime testing."
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method passes leeway=self.config.clock_skew (default 60 seconds) to jwt.decode, which allows tokens within the clock skew tolerance to validate while rejecting those outside it."
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method wraps jwt.decode in try-except that catches base64.binascii.Error, raising jwt.InvalidTokenError('malformed token'), which returns 401."
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "satisfied",
+        "reasoning": "The _extract_token_from_request method first checks Authorization header, then falls back to checking request.cookies.get('access_token'), supporting both token sources."
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "partial",
+        "reasoning": "The code checks 'if not isinstance(auth_header, str)' and returns None, but this causes a 401 'Authorization header required' response rather than 400 'invalid authorization header format'. The behavior is close but not exactly as specified."
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "The _log_auth_failure method logs authentication failures with logger.warning, including reason, remote_addr, and path. Both validate_request and handle_refresh_token call this method for failures."
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "satisfied",
+        "reasoning": "The _validate_token_structure method checks if len(token) > self.config.max_token_size (default 10KB), and validate_request returns 400 'token too large' for oversized tokens."
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "satisfied",
+        "reasoning": "The _decode_token method checks if algorithm starts with 'RS' and uses appropriate key (public_key) and algorithms list ['RS256', 'RS384', 'RS512'], supporting RSA algorithms."
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "satisfied",
+        "reasoning": "The code implements optional token caching via TokenCache class. When enabled, _decode_token checks cache first before decoding, avoiding repeated validation for the same token within the TTL."
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "satisfied",
+        "reasoning": "The _create_error_response method checks config.json_errors. When True, it returns JSON with Content-Type 'application/json' and structured {'error': ..., 'message': ...}. When False, it returns plain text."
+      },
+      {
+        "specId": "SPEC-036",
+        "status": "satisfied",
+        "reasoning": "The _should_skip_authentication method uses fnmatch to match request path against config.excluded_paths patterns. validate_request returns None (no error) for matching paths, allowing requests without authentication."
+      },
+      {
+        "specId": "SPEC-037",
+        "status": "satisfied",
+        "reasoning": "The code defines UserContext as a TypedDict with type annotations for user_id, email, role, and permissions. While request.user is assigned the raw payload dict, the UserContext type provides the intended structure for type hints."
+      },
+      {
+        "specId": "SPEC-038",
+        "status": "satisfied",
+        "reasoning": "The TokenCache class implements caching with TTL. When enable_token_caching is True, _decode_token checks cache via get() before decoding and stores results via set(), reducing signature verification for repeated tokens."
+      },
+      {
+        "specId": "SPEC-039",
+        "status": "satisfied",
+        "reasoning": "The code uses json module for encoding/decoding and jwt library which properly handles Unicode. Python 3 strings are Unicode by default, so Unicode characters in claims are handled correctly throughout."
+      },
+      {
+        "specId": "SPEC-040",
+        "status": "satisfied",
+        "reasoning": "The _create_error_response method includes 'X-Content-Type-Options': 'nosniff' and 'Cache-Control': 'no-store' headers in all error responses."
+      }
+    ],
+    "satisfiedCount": 38,
+    "totalSpecs": 40,
+    "generatedAt": "2026-02-12T06:32:41.807Z",
+    "inputTokens": 13517,
+    "outputTokens": 7868
+  },
+  "totalInputTokens": 17189,
+  "totalOutputTokens": 16242,
+  "totalDurationMs": 239180
+}

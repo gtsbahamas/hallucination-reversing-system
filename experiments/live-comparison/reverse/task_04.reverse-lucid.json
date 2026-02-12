@@ -1,0 +1,1265 @@
+{
+  "task": "Write a migration system that supports up/down migrations, tracks applied migrations, and handles failures with rollback",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write a migration system that supports up/down migrations, tracks applied migrations, and handles failures with rollback",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "System must execute migrations in sequential order based on their version/timestamp identifiers",
+        "assertion": "Given migrations ['001_init.py', '002_add_users.py', '003_add_posts.py'], calling migrate_up() executes them in exact order 001 -> 002 -> 003",
+        "rationale": "Out-of-order execution would create inconsistent database state and violate migration dependencies"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "System must track which migrations have been applied to prevent duplicate execution",
+        "assertion": "After migrate_up() runs migration '001_init.py', calling get_applied_migrations() returns ['001_init'] and re-running migrate_up() skips '001_init.py'",
+        "rationale": "Re-executing migrations would corrupt data, violate unique constraints, and cause system failures"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Down migrations must reverse changes in opposite order (LIFO)",
+        "assertion": "After applying migrations [001, 002, 003], calling migrate_down(2) rolls back 003 first, then 002, leaving only 001 applied",
+        "rationale": "Reverse order is essential to maintain referential integrity and undo dependent changes correctly"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Each migration must have both up() and down() methods that are inverse operations",
+        "assertion": "Given migration with up() creating table 'users', down() must drop table 'users', restoring exact prior state",
+        "rationale": "Non-invertible migrations prevent rollback and make recovery from failures impossible"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Failed migration must trigger automatic rollback of that migration and stop execution",
+        "assertion": "migrate_up() applying [001, 002, 003] where 002 raises exception must: rollback 002's partial changes, leave 001 applied, not execute 003, and re-raise exception",
+        "rationale": "Partial application without rollback leaves database in inconsistent, corrupted state"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Migration tracking must be transactional with migration execution",
+        "assertion": "If migration 002_add_users.py fails mid-execution, get_applied_migrations() must NOT include '002_add_users' in the list",
+        "rationale": "Marking failed migration as applied would prevent retry and leave system in broken state"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "System must persist migration state across process restarts",
+        "assertion": "After migrate_up() applies [001, 002], restarting application and calling get_applied_migrations() returns ['001', '002']",
+        "rationale": "Lost state would cause re-execution of migrations and data corruption"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Attempting to migrate down below first migration must fail safely",
+        "assertion": "With only migration 001 applied, calling migrate_down(5) either executes only migrate_down(1) or raises ValueError indicating insufficient migrations",
+        "rationale": "Over-rollback could delete tracking table or system metadata causing unrecoverable state"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "System must handle empty migration directory gracefully",
+        "assertion": "With no migration files present, migrate_up() completes successfully without error and get_applied_migrations() returns empty list",
+        "rationale": "New systems or test environments start with no migrations; should not crash"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "System must handle case where all migrations already applied",
+        "assertion": "With migrations [001, 002, 003] all in applied state, calling migrate_up() completes immediately, executes no migrations, returns success status",
+        "rationale": "Idempotent operation allows safe repeated deployment and CI/CD automation"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Migration with syntax errors must be detected before execution",
+        "assertion": "Migration file '004_broken.py' with invalid Python syntax raises SyntaxError during discovery/loading phase before any migrations execute",
+        "rationale": "Early detection prevents starting migration batch that will inevitably fail"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Missing down() method must be detected before attempting rollback",
+        "assertion": "Migration class missing down() method raises AttributeError or custom MigrationError when validate_migrations() is called or on first rollback attempt",
+        "rationale": "Discovering missing rollback capability during production failure is catastrophic"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "correctness",
+        "severity": "high",
+        "description": "System must support migrating to specific target version",
+        "assertion": "migrate_to('002') with current state [] applies only [001, 002]; with current state [001, 002, 003] rolls back only [003]",
+        "rationale": "Enables testing specific states and recovering from bad migrations"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Migration identifiers must follow consistent naming convention",
+        "assertion": "System rejects migration files not matching pattern '^\\d{3,}_[a-z0-9_]+\\.py$' (e.g., rejects 'add_users.py', 'migration.py', '1_x.py') with ValidationError",
+        "rationale": "Inconsistent naming breaks sorting, version detection, and automated tooling"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Duplicate migration version numbers must be detected and rejected",
+        "assertion": "Migration directory containing ['001_init.py', '001_other.py'] raises DuplicateVersionError on discovery with message listing both files",
+        "rationale": "Ambiguous ordering would cause non-deterministic execution and different results across environments"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "security",
+        "severity": "critical",
+        "description": "Migration files must not be executed via arbitrary code injection",
+        "assertion": "Migration system uses controlled import mechanism; passing malicious path like '../../../etc/passwd' or '../../inject.py' raises SecurityError or safely fails without execution",
+        "rationale": "Unrestricted file execution enables remote code execution attacks"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "security",
+        "severity": "high",
+        "description": "Migration tracking table must be protected from SQL injection",
+        "assertion": "Migration name containing SQL injection attempt like \"'; DROP TABLE migrations; --\" is safely escaped/parameterized, does not execute SQL, and system remains functional",
+        "rationale": "SQL injection in migration tracking could delete audit trail or corrupt metadata"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Concurrent migration execution must be prevented via locking",
+        "assertion": "Two processes calling migrate_up() simultaneously: one acquires lock and proceeds, other either blocks until completion or immediately fails with ConcurrentMigrationError",
+        "rationale": "Concurrent execution causes race conditions, duplicate execution, and corrupted state"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rollback of failed migration must itself be transactional",
+        "assertion": "If migration 003_add_index fails and its down() method also throws exception during rollback, system logs both errors, marks migration as 'failed', prevents marking as applied",
+        "rationale": "Failed rollback without proper handling leaves system in unknown corrupted state"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Large migration batches must not load all files into memory simultaneously",
+        "assertion": "migrate_up() with 1000 migration files consumes memory proportional to single migration, not O(n) of all migrations, by loading/executing/unloading iteratively",
+        "rationale": "Memory-efficient processing prevents OOM crashes during large migration batches"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "correctness",
+        "severity": "high",
+        "description": "System must distinguish between pending, applied, and failed migrations",
+        "assertion": "get_migration_status() returns dict {'pending': ['003', '004'], 'applied': ['001', '002'], 'failed': []} reflecting current state accurately",
+        "rationale": "Clear status visibility enables informed decisions about safe migration operations"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "System must handle gaps in migration sequence numbers",
+        "assertion": "Migration files [001, 002, 005, 007] are applied in exactly that order without error; gap detection is optional but must not prevent execution",
+        "rationale": "Deleted or rebased migrations create gaps; strict sequence enforcement breaks existing deployments"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Migration up() and down() methods must accept consistent arguments",
+        "assertion": "Both up(connection) and down(connection) receive same connection object type; calling with incompatible args raises TypeError",
+        "rationale": "Inconsistent interfaces cause runtime failures during rollback"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "System must log all migration operations with timestamps",
+        "assertion": "After migrate_up(), log contains entries: 'Started migration 001_init at 2024-01-15T10:30:00Z', 'Completed migration 001_init at 2024-01-15T10:30:05Z'",
+        "rationale": "Audit trail is essential for debugging failures and compliance requirements"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Empty or whitespace-only migration files must be handled gracefully",
+        "assertion": "Migration file '006_empty.py' containing only comments/whitespace raises ValidationError with message 'No migration class found' rather than succeeding silently",
+        "rationale": "Silent skip of malformed migrations masks developer errors and deployment issues"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Migration state must include timestamp of application",
+        "assertion": "get_applied_migrations() returns list of dicts: [{'version': '001', 'applied_at': '2024-01-15T10:30:00Z'}, {'version': '002', 'applied_at': '2024-01-15T10:35:00Z'}]",
+        "rationale": "Timestamps enable debugging timing issues and understanding deployment history"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Database connection failures during migration must not corrupt state",
+        "assertion": "If connection drops mid-migration, system either: (1) detects and marks migration as failed, or (2) transaction rollback prevents partial application; get_applied_migrations() remains consistent",
+        "rationale": "Connection failures during migrations are common; must not leave inconsistent state"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Migration version must be string or integer, not arbitrary types",
+        "assertion": "Migration with version=None, version=[], or version={'x':1} raises TypeError during validation with message 'version must be string or int'",
+        "rationale": "Type safety prevents comparison errors and non-deterministic sorting"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "performance",
+        "severity": "low",
+        "description": "Migration discovery should cache results to avoid repeated filesystem scans",
+        "assertion": "Calling get_pending_migrations() twice within same process performs filesystem scan only once unless explicit refresh requested",
+        "rationale": "Reduces I/O overhead during status checks and improves CLI responsiveness"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "medium",
+        "description": "Migration tracking table name must not be user-controllable",
+        "assertion": "System uses hardcoded or safely configured tracking table name; passing table_name='users; DROP TABLE users;--' as config is rejected or safely escaped",
+        "rationale": "Dynamic table names enable SQL injection and metadata corruption attacks"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "System must handle migration files with non-ASCII characters in filenames",
+        "assertion": "Migration file '005_add_café_table.py' either loads correctly if filesystem supports it, or raises clear UnicodeDecodeError, not silent corruption",
+        "rationale": "International teams may use non-ASCII names; system must handle gracefully or reject explicitly"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Dry-run mode must simulate migrations without applying changes",
+        "assertion": "migrate_up(dry_run=True) returns list of migrations that would execute, logs planned actions, but get_applied_migrations() shows no change and database unchanged",
+        "rationale": "Safe preview capability prevents accidental production changes and enables validation"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "System must provide detailed error context when migration fails",
+        "assertion": "Failed migration raises exception with attributes: migration_version='003', error_type='IntegrityError', original_exception=<exception>, partial_changes_rolled_back=True",
+        "rationale": "Rich error context enables rapid debugging without log diving"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Migration class must inherit from base Migration class or implement required interface",
+        "assertion": "Migration file with class not inheriting from Migration base class raises TypeError('Migration must inherit from Migration base class') during discovery",
+        "rationale": "Interface enforcement prevents runtime AttributeErrors and ensures consistent behavior"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Migration execution should support timeout limits",
+        "assertion": "migrate_up(timeout=30) running migration that exceeds 30 seconds raises TimeoutError, triggers rollback, does not mark as applied",
+        "rationale": "Prevents hung migrations from blocking deployments and enables safe automation"
+      }
+    ],
+    "totalSpecs": 35,
+    "synthesizedAt": "2026-02-12T06:42:20.371Z",
+    "inputTokens": 586,
+    "outputTokens": 4053
+  },
+  "constraintSet": {
+    "task": "Write a migration system that supports up/down migrations, tracks applied migrations, and handles failures with rollback",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Check for division by zero before dividing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must",
+        "description": "Must sort migration files by their numeric prefix before execution. Extract the version number from filenames matching pattern '^\\d{3,}_[a-z0-9_]+\\.py$', convert to integer for comparison, and execute in ascending order.",
+        "pattern": "migrations.sort(key=lambda m: int(m.split('_')[0]))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Must query persistent storage (database table or file) for applied migrations before executing any migration. Skip migrations whose version identifiers exist in the applied set.",
+        "pattern": "applied = get_applied_from_db(); pending = [m for m in all_migrations if m.version not in applied]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Must execute down migrations in reverse order using LIFO stack semantics. When rolling back N migrations, pop from the end of applied migrations list N times.",
+        "pattern": "to_rollback = applied_migrations[-count:]; to_rollback.reverse()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Must validate that every migration class defines both up() and down() methods during discovery phase, before any execution begins. Raise descriptive error listing missing methods.",
+        "pattern": "if not (hasattr(cls, 'up') and hasattr(cls, 'down')): raise MigrationError(f'{name} missing required methods')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Must wrap each migration execution in try-except block that catches exceptions, calls the migration's down() method to rollback, removes from tracking, and re-raises. Do not proceed to next migration after failure.",
+        "pattern": "try: migration.up(conn); track_applied(migration)\nexcept: migration.down(conn); raise",
+        "source": "spec"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Must use database transactions or atomic file operations to ensure migration tracking is committed only after successful execution. Use transaction.commit() after both up() succeeds AND tracking insert succeeds.",
+        "pattern": "with transaction: migration.up(conn); insert_tracking(version); transaction.commit()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Must persist applied migrations to durable storage (database table, SQLite file, or JSON file with fsync). Do not use in-memory only storage like plain dictionaries or lists.",
+        "pattern": "cursor.execute('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', (version, now()))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Must check count of applied migrations before attempting rollback. If requested rollback count exceeds available migrations, either cap to available count or raise ValueError with clear message.",
+        "pattern": "if count > len(applied): raise ValueError(f'Cannot rollback {count} migrations, only {len(applied)} applied')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must handle empty migration directory by returning early with success status. Check if migration file list is empty after discovery and return without error.",
+        "pattern": "if not migration_files: return MigrationResult(success=True, applied=[])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must filter out already-applied migrations before execution loop. Calculate pending as set difference between discovered and applied migrations, then return immediately if pending set is empty.",
+        "pattern": "pending = set(discovered) - set(applied); if not pending: return",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must validate Python syntax of migration files during discovery using ast.parse() or compile(). Catch SyntaxError and raise it with filename context before entering execution phase.",
+        "pattern": "try: ast.parse(file_content)\nexcept SyntaxError as e: raise MigrationError(f'Syntax error in {filename}: {e}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Must implement migrate_to(target_version) that compares target with current state. If target > current, apply migrations up to target. If target < current, rollback migrations after target in reverse order.",
+        "pattern": "if target > current_version: apply_up_to(target)\nelif target < current_version: rollback_down_to(target)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must validate migration filenames against regex pattern '^\\d{3,}_[a-z0-9_]+\\.py$' during discovery. Reject files not matching pattern with ValidationError listing the invalid filename.",
+        "pattern": "if not re.match(r'^\\d{3,}_[a-z0-9_]+\\.py$', filename): raise ValidationError(f'Invalid migration name: {filename}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must detect duplicate version numbers by extracting version prefixes into a set while iterating files. If set size doesn't equal file count, raise DuplicateVersionError with list of conflicting files.",
+        "pattern": "versions = [extract_version(f) for f in files]; if len(versions) != len(set(versions)): raise DuplicateVersionError(duplicates)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must-not",
+        "description": "Must-not use eval(), exec(), or __import__() with user-provided paths. Use importlib.import_module() with validated module names from a restricted base directory. Reject paths containing '..' or absolute paths.",
+        "pattern": "# AVOID: exec(open(user_path).read())\n# USE: importlib.import_module(f'migrations.{safe_name}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must use parameterized queries for all migration tracking operations. Pass migration names as query parameters, never via string formatting or concatenation.",
+        "pattern": "cursor.execute('INSERT INTO migrations (name) VALUES (?)', (migration_name,))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must implement locking mechanism using database advisory locks (SELECT FOR UPDATE) or file locks (fcntl.flock). Acquire lock before checking applied migrations, release after completion or on error.",
+        "pattern": "cursor.execute('SELECT pg_advisory_lock(12345)'); try: run_migrations()\nfinally: cursor.execute('SELECT pg_advisory_unlock(12345)')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must wrap rollback operation in separate try-except block. If down() raises exception during rollback, log both original migration error and rollback error, mark migration state as 'failed', do not mark as applied.",
+        "pattern": "except Exception as e1: try: migration.down()\nexcept Exception as e2: log_both_errors(e1, e2); mark_failed(version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Must load migration modules one at a time in execution loop, not all upfront. Import, execute, then allow garbage collection before loading next migration to maintain O(1) memory usage.",
+        "pattern": "for version in pending: migration = load_migration(version); execute(migration); del migration",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must maintain separate tracking for failed migrations. Store migration state as enum ('pending', 'applied', 'failed') and query all three categories for get_migration_status().",
+        "pattern": "SELECT version, status FROM migrations WHERE status IN ('pending', 'applied', 'failed')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must accept migrations with non-sequential version numbers. Sort by version number and execute in sorted order without validating continuity. Do not raise errors for gaps in sequence.",
+        "pattern": "versions = [1, 2, 5, 7]; sorted_versions = sorted(versions)  # [1, 2, 5, 7] - gaps OK",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must define up() and down() methods with identical signatures accepting same argument types. Both methods should receive connection object as first parameter after self.",
+        "pattern": "def up(self, connection): ...\ndef down(self, connection): ...",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Must log migration events with ISO 8601 timestamps using structured logging. Log at minimum: start event before up(), completion event after up(), and error event on exception.",
+        "pattern": "logger.info(f'Started migration {version}', extra={'timestamp': datetime.utcnow().isoformat()})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must validate that migration file contains at least one class definition. After parsing AST or importing module, check for migration class existence and raise ValidationError if missing.",
+        "pattern": "if not any(isinstance(node, ast.ClassDef) for node in ast.parse(content).body): raise ValidationError('No migration class found')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Must store application timestamp with each migration record. Use datetime.utcnow() or database CURRENT_TIMESTAMP when inserting tracking record, and return timestamp in get_applied_migrations().",
+        "pattern": "INSERT INTO migrations (version, applied_at) VALUES (?, CURRENT_TIMESTAMP)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must handle database connection errors by catching connection exceptions, logging error with migration context, and ensuring tracking table remains consistent. Use transaction rollback on connection failure.",
+        "pattern": "try: connection.execute(sql)\nexcept ConnectionError: connection.rollback(); raise MigrationError('Connection failed during migration')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must validate migration version type during class initialization or discovery. Check that version attribute is str or int type, raise TypeError with descriptive message for other types.",
+        "pattern": "if not isinstance(version, (str, int)): raise TypeError(f'version must be string or int, got {type(version)}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "prefer",
+        "description": "Prefer caching migration discovery results in module-level or instance variable. Only rescan filesystem when explicit refresh parameter is True or cache is empty.",
+        "pattern": "_cached_migrations = None\nif _cached_migrations is None or refresh: _cached_migrations = scan_directory()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must-not",
+        "description": "Must-not allow user input to determine tracking table name. Use hardcoded constant for table name or validate against whitelist of alphanumeric characters only.",
+        "pattern": "# AVOID: f'SELECT * FROM {user_table_name}'\n# USE: MIGRATIONS_TABLE = 'schema_migrations'  # constant",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must handle Unicode in filenames by using Path objects and catching UnicodeDecodeError. Raise clear error message indicating unsupported filename encoding rather than crashing.",
+        "pattern": "try: filename.encode('ascii')\nexcept UnicodeEncodeError: raise ValidationError(f'Non-ASCII filename not supported: {filename}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Must implement dry_run mode that iterates through pending migrations, logs planned actions, but skips actual up() execution and tracking updates. Return list of migrations that would be applied.",
+        "pattern": "if dry_run: logger.info(f'Would apply: {version}'); planned.append(version)\nelse: migration.up(conn); track(version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must create custom exception class with attributes for migration_version, error_type, original_exception, and partial_changes_rolled_back. Populate these attributes when catching and re-raising exceptions.",
+        "pattern": "raise MigrationError(version=version, error_type=type(e).__name__, original_exception=e, rolled_back=True)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must define abstract base Migration class with abstract up() and down() methods. Check isinstance(migration_class, Migration) or verify inheritance during discovery.",
+        "pattern": "class Migration(ABC):\n  @abstractmethod\n  def up(self, conn): pass\n  @abstractmethod\n  def down(self, conn): pass",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Must implement timeout enforcement using signal.alarm() on Unix or threading.Timer. If migration exceeds timeout, raise TimeoutError, trigger rollback via down(), and do not mark as applied.",
+        "pattern": "signal.alarm(timeout); try: migration.up(conn)\nexcept TimeoutError: migration.down(conn); raise\nfinally: signal.alarm(0)",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 35,
+    "generatedAt": "2026-02-12T06:43:18.821Z",
+    "inputTokens": 2695,
+    "outputTokens": 3161
+  },
+  "generatedCode": {
+    "task": "Write a migration system that supports up/down migrations, tracks applied migrations, and handles failures with rollback",
+    "code": "import os\nimport re\nimport ast\nimport logging\nimport importlib.util\nimport sqlite3\nimport signal\nfrom abc import ABC, abstractmethod\nfrom datetime import datetime\nfrom pathlib import Path\nfrom typing import List, Dict, Set, Optional, Any\nfrom dataclasses import dataclass\nfrom enum import Enum\n\n\nlogging.basicConfig(level=logging.INFO)\nlogger = logging.getLogger(__name__)\n\n\nclass MigrationStatus(Enum):\n    PENDING = \"pending\"\n    APPLIED = \"applied\"\n    FAILED = \"failed\"\n\n\nclass MigrationError(Exception):\n    def __init__(\n        self,\n        message: str,\n        migration_version: Optional[str] = None,\n        error_type: Optional[str] = None,\n        original_exception: Optional[Exception] = None,\n        partial_changes_rolled_back: bool = False\n    ):\n        super().__init__(message)\n        self.migration_version = migration_version\n        self.error_type = error_type\n        self.original_exception = original_exception\n        self.partial_changes_rolled_back = partial_changes_rolled_back\n\n\nclass ValidationError(MigrationError):\n    pass\n\n\nclass DuplicateVersionError(MigrationError):\n    pass\n\n\nclass ConcurrentMigrationError(MigrationError):\n    pass\n\n\nclass SecurityError(MigrationError):\n    pass\n\n\nclass TimeoutError(MigrationError):\n    pass\n\n\n@dataclass\nclass MigrationResult:\n    success: bool\n    applied: List[str]\n    failed: Optional[str] = None\n    error: Optional[Exception] = None\n\n\n@dataclass\nclass AppliedMigration:\n    version: str\n    applied_at: str\n\n\nclass Migration(ABC):\n    @abstractmethod\n    def up(self, connection: sqlite3.Connection) -> None:\n        pass\n\n    @abstractmethod\n    def down(self, connection: sqlite3.Connection) -> None:\n        pass\n\n\nMIGRATIONS_TABLE = \"schema_migrations\"\nMIGRATION_FILENAME_PATTERN = r\"^\\d{3,}_[a-z0-9_]+\\.py$\"\nMIGRATION_LOCK_ID = 987654321\n\n\nclass MigrationSystem:\n    def __init__(self, migrations_dir: str, db_path: str):\n        self.migrations_dir = Path(migrations_dir)\n        self.db_path = db_path\n        self._cached_migrations: Optional[List[str]] = None\n        self._initialize_tracking_table()\n\n    def _initialize_tracking_table(self) -> None:\n        with sqlite3.connect(self.db_path) as conn:\n            conn.execute(f\"\"\"\n                CREATE TABLE IF NOT EXISTS {MIGRATIONS_TABLE} (\n                    version TEXT PRIMARY KEY,\n                    status TEXT NOT NULL,\n                    applied_at TEXT,\n                    error TEXT\n                )\n            \"\"\")\n            conn.commit()\n\n    def _acquire_lock(self, connection: sqlite3.Connection) -> None:\n        try:\n            connection.execute(\"BEGIN EXCLUSIVE\")\n        except sqlite3.OperationalError as e:\n            raise ConcurrentMigrationError(\n                \"Another migration is currently in progress\"\n            ) from e\n\n    def _release_lock(self, connection: sqlite3.Connection) -> None:\n        try:\n            connection.commit()\n        except Exception:\n            connection.rollback()\n            raise\n\n    def _validate_path(self, path: str) -> None:\n        path_obj = Path(path)\n        \n        if \"..\" in path_obj.parts:\n            raise SecurityError(\"Path traversal detected\")\n        \n        if path_obj.is_absolute():\n            raise SecurityError(\"Absolute paths not allowed\")\n        \n        try:\n            resolved = (self.migrations_dir / path_obj).resolve()\n            if not str(resolved).startswith(str(self.migrations_dir.resolve())):\n                raise SecurityError(\"Path escapes migrations directory\")\n        except Exception as e:\n            raise SecurityError(f\"Invalid path: {e}\") from e\n\n    def _validate_filename(self, filename: str) -> None:\n        try:\n            filename.encode(\"ascii\")\n        except UnicodeEncodeError:\n            raise ValidationError(f\"Non-ASCII filename not supported: {filename}\")\n        \n        if not re.match(MIGRATION_FILENAME_PATTERN, filename):\n            raise ValidationError(f\"Invalid migration name: {filename}\")\n\n    def _extract_version(self, filename: str) -> str:\n        return filename.split(\"_\")[0]\n\n    def _validate_syntax(self, filepath: Path) -> None:\n        try:\n            with open(filepath, \"r\", encoding=\"utf-8\") as f:\n                content = f.read()\n            ast.parse(content)\n        except SyntaxError as e:\n            raise MigrationError(\n                f\"Syntax error in {filepath.name}: {e}\",\n                error_type=\"SyntaxError\",\n                original_exception=e\n            ) from e\n\n    def _validate_migration_class(self, filepath: Path) -> None:\n        with open(filepath, \"r\", encoding=\"utf-8\") as f:\n            content = f.read()\n        \n        tree = ast.parse(content)\n        has_class = any(isinstance(node, ast.ClassDef) for node in tree.body)\n        \n        if not has_class:\n            raise ValidationError(f\"No migration class found in {filepath.name}\")\n\n    def _discover_migrations(self, refresh: bool = False) -> List[str]:\n        if self._cached_migrations is not None and not refresh:\n            return self._cached_migrations\n        \n        if not self.migrations_dir.exists():\n            self._cached_migrations = []\n            return []\n        \n        migration_files = []\n        for filepath in self.migrations_dir.glob(\"*.py\"):\n            filename = filepath.name\n            \n            if filename.startswith(\"__\"):\n                continue\n            \n            try:\n                self._validate_filename(filename)\n                self._validate_syntax(filepath)\n                self._validate_migration_class(filepath)\n                migration_files.append(filename)\n            except ValidationError:\n                raise\n        \n        versions = [self._extract_version(f) for f in migration_files]\n        if len(versions) != len(set(versions)):\n            version_files = {}\n            for f in migration_files:\n                v = self._extract_version(f)\n                if v not in version_files:\n                    version_files[v] = []\n                version_files[v].append(f)\n            \n            duplicates = [files for files in version_files.values() if len(files) > 1]\n            raise DuplicateVersionError(\n                f\"Duplicate migration versions found: {duplicates}\"\n            )\n        \n        migration_files.sort(key=lambda m: int(self._extract_version(m)))\n        self._cached_migrations = migration_files\n        return migration_files\n\n    def _load_migration(self, filename: str) -> Migration:\n        self._validate_path(filename)\n        filepath = self.migrations_dir / filename\n        \n        module_name = filename[:-3]\n        spec = importlib.util.spec_from_file_location(module_name, filepath)\n        if spec is None or spec.loader is None:\n            raise MigrationError(f\"Could not load migration: {filename}\")\n        \n        module = importlib.util.module_from_spec(spec)\n        spec.loader.exec_module(module)\n        \n        migration_class = None\n        for attr_name in dir(module):\n            attr = getattr(module, attr_name)\n            if (isinstance(attr, type) and \n                issubclass(attr, Migration) and \n                attr is not Migration):\n                migration_class = attr\n                break\n        \n        if migration_class is None:\n            raise ValidationError(f\"No Migration class found in {filename}\")\n        \n        migration_instance = migration_class()\n        \n        if not hasattr(migration_instance, \"up\") or not callable(migration_instance.up):\n            raise MigrationError(f\"{filename} missing required method: up()\")\n        \n        if not hasattr(migration_instance, \"down\") or not callable(migration_instance.down):\n            raise MigrationError(f\"{filename} missing required method: down()\")\n        \n        return migration_instance\n\n    def _get_applied_migrations_from_db(self) -> Set[str]:\n        with sqlite3.connect(self.db_path) as conn:\n            cursor = conn.execute(\n                f\"SELECT version FROM {MIGRATIONS_TABLE} WHERE status = ?\",\n                (MigrationStatus.APPLIED.value,)\n            )\n            return {row[0] for row in cursor.fetchall()}\n\n    def _track_migration(\n        self,\n        connection: sqlite3.Connection,\n        version: str,\n        status: MigrationStatus,\n        error: Optional[str] = None\n    ) -> None:\n        applied_at = datetime.utcnow().isoformat() + \"Z\" if status == MigrationStatus.APPLIED else None\n        \n        connection.execute(\n            f\"\"\"\n            INSERT OR REPLACE INTO {MIGRATIONS_TABLE} \n            (version, status, applied_at, error)\n            VALUES (?, ?, ?, ?)\n            \"\"\",\n            (version, status.value, applied_at, error)\n        )\n\n    def _remove_tracking(self, connection: sqlite3.Connection, version: str) -> None:\n        connection.execute(\n            f\"DELETE FROM {MIGRATIONS_TABLE} WHERE version = ?\",\n            (version,)\n        )\n\n    def _execute_with_timeout(\n        self,\n        func: Any,\n        connection: sqlite3.Connection,\n        timeout: Optional[int] = None\n    ) -> None:\n        if timeout is None:\n            func(connection)\n            return\n        \n        def timeout_handler(signum: int, frame: Any) -> None:\n            raise TimeoutError(f\"Migration exceeded timeout of {timeout} seconds\")\n        \n        old_handler = signal.signal(signal.SIGALRM, timeout_handler)\n        signal.alarm(timeout)\n        \n        try:\n            func(connection)\n        finally:\n            signal.alarm(0)\n            signal.signal(signal.SIGALRM, old_handler)\n\n    def migrate_up(\n        self,\n        dry_run: bool = False,\n        timeout: Optional[int] = None\n    ) -> MigrationResult:\n        try:\n            migration_files = self._discover_migrations()\n        except Exception as e:\n            return MigrationResult(success=False, applied=[], error=e)\n        \n        if not migration_files:\n            return MigrationResult(success=True, applied=[])\n        \n        applied_versions = self._get_applied_migrations_from_db()\n        pending = [\n            f for f in migration_files\n            if self._extract_version(f) not in applied_versions\n        ]\n        \n        if not pending:\n            return MigrationResult(success=True, applied=[])\n        \n        if dry_run:\n            planned = []\n            for filename in pending:\n                version = self._extract_version(filename)\n                logger.info(f\"Would apply: {version}\", extra={\n                    \"timestamp\": datetime.utcnow().isoformat()\n                })\n                planned.append(version)\n            return MigrationResult(success=True, applied=planned)\n        \n        applied = []\n        connection = None\n        \n        try:\n            connection = sqlite3.connect(self.db_path)\n            connection.isolation_level = None\n            self._acquire_lock(connection)\n            \n            for filename in pending:\n                version = self._extract_version(filename)\n                \n                logger.info(f\"Started migration {version}\", extra={\n                    \"timestamp\": datetime.utcnow().isoformat()\n                })\n                \n                migration = self._load_migration(filename)\n                \n                connection.execute(\"BEGIN\")\n                \n                try:\n                    self._execute_with_timeout(migration.up, connection, timeout)\n                    self._track_migration(connection, version, MigrationStatus.APPLIED)\n                    connection.commit()\n                    \n                    applied.append(version)\n                    \n                    logger.info(f\"Completed migration {version}\", extra={\n                        \"timestamp\": datetime.utcnow().isoformat()\n                    })\n                    \n                except Exception as e1:\n                    connection.rollback()\n                    \n                    logger.error(f\"Migration {version} failed: {e1}\", extra={\n                        \"timestamp\": datetime.utcnow().isoformat()\n                    })\n                    \n                    rollback_successful = False\n                    try:\n                        connection.execute(\"BEGIN\")\n                        migration.down(connection)\n                        connection.commit()\n                        rollback_successful = True\n                        logger.info(f\"Rolled back migration {version}\")\n                    except Exception as e2:\n                        connection.rollback()\n                        logger.error(f\"Rollback of {version} also failed: {e2}\")\n                        self._track_migration(\n                            connection,\n                            version,\n                            MigrationStatus.FAILED,\n                            f\"Migration error: {str(e1)}; Rollback error: {str(e2)}\"\n                        )\n                        connection.commit()\n                    \n                    raise MigrationError(\n                        f\"Migration {version} failed\",\n                        migration_version=version,\n                        error_type=type(e1).__name__,\n                        original_exception=e1,\n                        partial_changes_rolled_back=rollback_successful\n                    ) from e1\n                finally:\n                    del migration\n            \n            return MigrationResult(success=True, applied=applied)\n            \n        except Exception as e:\n            return MigrationResult(success=False, applied=applied, error=e)\n        finally:\n            if connection:\n                try:\n                    self._release_lock(connection)\n                except Exception:\n                    pass\n                connection.close()\n\n    def migrate_down(self, count: int = 1) -> MigrationResult:\n        with sqlite3.connect(self.db_path) as conn:\n            cursor = conn.execute(\n                f\"\"\"\n                SELECT version FROM {MIGRATIONS_TABLE}\n                WHERE status = ?\n                ORDER BY applied_at DESC\n                \"\"\",\n                (MigrationStatus.APPLIED.value,)\n            )\n            applied_versions = [row[0] for row in cursor.fetchall()]\n        \n        if count > len(applied_versions):\n            raise ValueError(\n                f\"Cannot rollback {count} migrations, only {len(applied_versions)} applied\"\n            )\n        \n        to_rollback = applied_versions[:count]\n        rolled_back = []\n        connection = None\n        \n        try:\n            connection = sqlite3.connect(self.db_path)\n            connection.isolation_level = None\n            self._acquire_lock(connection)\n            \n            for version in to_rollback:\n                migration_files = self._discover_migrations()\n                filename = None\n                for f in migration_files:\n                    if self._extract_version(f) == version:\n                        filename = f\n                        break\n                \n                if filename is None:\n                    raise MigrationError(f\"Migration file for version {version} not found\")\n                \n                logger.info(f\"Rolling back migration {version}\", extra={\n                    \"timestamp\": datetime.utcnow().isoformat()\n                })\n                \n                migration = self._load_migration(filename)\n                \n                connection.execute(\"BEGIN\")\n                \n                try:\n                    migration.down(connection)\n                    self._remove_tracking(connection, version)\n                    connection.commit()\n                    \n                    rolled_back.append(version)\n                    \n                    logger.info(f\"Rolled back migration {version}\", extra={\n                        \"timestamp\": datetime.utcnow().isoformat()\n                    })\n                    \n                except Exception as e:\n                    connection.rollback()\n                    logger.error(f\"Rollback of {version} failed: {e}\")\n                    \n                    raise MigrationError(\n                        f\"Rollback of {version} failed\",\n                        migration_version=version,\n                        error_type=type(e).__name__,\n                        original_exception=e,\n                        partial_changes_rolled_back=False\n                    ) from e\n                finally:\n                    del migration\n            \n            return MigrationResult(success=True, applied=rolled_back)\n            \n        except Exception as e:\n            return MigrationResult(success=False, applied=rolled_back, error=e)\n        finally:\n            if connection:\n                try:\n                    self._release_lock(connection)\n                except Exception:\n                    pass\n                connection.close()\n\n    def migrate_to(self, target_version: str) -> MigrationResult:\n        migration_files = self._discover_migrations()\n        all_versions = [self._extract_version(f) for f in migration_files]\n        \n        if target_version not in all_versions:\n            raise ValueError(f\"Target version {target_version} not found\")\n        \n        applied_versions = list(self._get_applied_migrations_from_db())\n        current_version = applied_versions[-1] if applied_versions else None\n        \n        target_idx = all_versions.index(target_version)\n        current_idx = all_versions.index(current_version) if current_version else -1\n        \n        if target_idx > current_idx:\n            pending = migration_files[current_idx + 1:target_idx + 1]\n            applied = []\n            connection = None\n            \n            try:\n                connection = sqlite3.connect(self.db_path)\n                connection.isolation_level = None\n                self._acquire_lock(connection)\n                \n                for filename in pending:\n                    version = self._extract_version(filename)\n                    migration = self._load_migration(filename)\n                    \n                    connection.execute(\"BEGIN\")\n                    \n                    try:\n                        migration.up(connection)\n                        self._track_migration(connection, version, MigrationStatus.APPLIED)\n                        connection.commit()\n                        applied.append(version)\n                        \n                    except Exception as e:\n                        connection.rollback()\n                        try:\n                            connection.execute(\"BEGIN\")\n                            migration.down(connection)\n                            connection.commit()\n                        except Exception:\n                            connection.rollback()\n                        \n                        raise MigrationError(\n                            f\"Migration {version} failed\",\n                            migration_version=version,\n                            error_type=type(e).__name__,\n                            original_exception=e,\n                            partial_changes_rolled_back=True\n                        ) from e\n                    finally:\n                        del migration\n                \n                return MigrationResult(success=True, applied=applied)\n                \n            finally:\n                if connection:\n                    try:\n                        self._release_lock(connection)\n                    except Exception:\n                        pass\n                    connection.close()\n        \n        elif target_idx < current_idx:\n            to_rollback_count = current_idx - target_idx\n            return self.migrate_down(to_rollback_count)\n        \n        else:\n            return MigrationResult(success=True, applied=[])\n\n    def get_applied_migrations(self) -> List[AppliedMigration]:\n        with sqlite3.connect(self.db_path) as conn:\n            cursor = conn.execute(\n                f\"\"\"\n                SELECT version, applied_at FROM {MIGRATIONS_TABLE}\n                WHERE status = ?\n                ORDER BY applied_at\n                \"\"\",\n                (MigrationStatus.APPLIED.value,)\n            )\n            return [\n                AppliedMigration(version=row[0], applied_at=row[1])\n                for row in cursor.fetchall()\n            ]\n\n    def get_migration_status(self) -> Dict[str, List[str]]:\n        migration_files = self._discover_migrations()\n        all_versions = {self._extract_version(f) for f in migration_files}\n        \n        with sqlite3.connect(self.db_path) as conn:\n            cursor = conn.execute(\n                f\"SELECT version, status FROM {MIGRATIONS_TABLE}\"\n            )\n            tracked = {row[0]: row[1] for row in cursor.fetchall()}\n        \n        applied = [v for v, s in tracked.items() if s == MigrationStatus.APPLIED.value]\n        failed = [v for v, s in tracked.items() if s == MigrationStatus.FAILED.value]\n        pending = [v for v in all_versions if v not in tracked]\n        \n        return {\n            \"pending\": sorted(pending, key=int),\n            \"applied\": sorted(applied, key=int),\n            \"failed\": sorted(failed, key=int)\n        }\n\n    def get_pending_migrations(self, refresh: bool = False) -> List[str]:\n        migration_files = self._discover_migrations(refresh=refresh)\n        applied_versions = self._get_applied_migrations_from_db()\n        \n        return [\n            self._extract_version(f)\n            for f in migration_files\n            if self._extract_version(f) not in applied_versions\n        ]",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "System must execute migrations in sequential order based on their version/timestamp identifiers",
+        "assertion": "Given migrations ['001_init.py', '002_add_users.py', '003_add_posts.py'], calling migrate_up() executes them in exact order 001 -> 002 -> 003",
+        "rationale": "Out-of-order execution would create inconsistent database state and violate migration dependencies"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "System must track which migrations have been applied to prevent duplicate execution",
+        "assertion": "After migrate_up() runs migration '001_init.py', calling get_applied_migrations() returns ['001_init'] and re-running migrate_up() skips '001_init.py'",
+        "rationale": "Re-executing migrations would corrupt data, violate unique constraints, and cause system failures"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Down migrations must reverse changes in opposite order (LIFO)",
+        "assertion": "After applying migrations [001, 002, 003], calling migrate_down(2) rolls back 003 first, then 002, leaving only 001 applied",
+        "rationale": "Reverse order is essential to maintain referential integrity and undo dependent changes correctly"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Each migration must have both up() and down() methods that are inverse operations",
+        "assertion": "Given migration with up() creating table 'users', down() must drop table 'users', restoring exact prior state",
+        "rationale": "Non-invertible migrations prevent rollback and make recovery from failures impossible"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Failed migration must trigger automatic rollback of that migration and stop execution",
+        "assertion": "migrate_up() applying [001, 002, 003] where 002 raises exception must: rollback 002's partial changes, leave 001 applied, not execute 003, and re-raise exception",
+        "rationale": "Partial application without rollback leaves database in inconsistent, corrupted state"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Migration tracking must be transactional with migration execution",
+        "assertion": "If migration 002_add_users.py fails mid-execution, get_applied_migrations() must NOT include '002_add_users' in the list",
+        "rationale": "Marking failed migration as applied would prevent retry and leave system in broken state"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "System must persist migration state across process restarts",
+        "assertion": "After migrate_up() applies [001, 002], restarting application and calling get_applied_migrations() returns ['001', '002']",
+        "rationale": "Lost state would cause re-execution of migrations and data corruption"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Attempting to migrate down below first migration must fail safely",
+        "assertion": "With only migration 001 applied, calling migrate_down(5) either executes only migrate_down(1) or raises ValueError indicating insufficient migrations",
+        "rationale": "Over-rollback could delete tracking table or system metadata causing unrecoverable state"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "System must handle empty migration directory gracefully",
+        "assertion": "With no migration files present, migrate_up() completes successfully without error and get_applied_migrations() returns empty list",
+        "rationale": "New systems or test environments start with no migrations; should not crash"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "System must handle case where all migrations already applied",
+        "assertion": "With migrations [001, 002, 003] all in applied state, calling migrate_up() completes immediately, executes no migrations, returns success status",
+        "rationale": "Idempotent operation allows safe repeated deployment and CI/CD automation"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Migration with syntax errors must be detected before execution",
+        "assertion": "Migration file '004_broken.py' with invalid Python syntax raises SyntaxError during discovery/loading phase before any migrations execute",
+        "rationale": "Early detection prevents starting migration batch that will inevitably fail"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Missing down() method must be detected before attempting rollback",
+        "assertion": "Migration class missing down() method raises AttributeError or custom MigrationError when validate_migrations() is called or on first rollback attempt",
+        "rationale": "Discovering missing rollback capability during production failure is catastrophic"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "correctness",
+        "severity": "high",
+        "description": "System must support migrating to specific target version",
+        "assertion": "migrate_to('002') with current state [] applies only [001, 002]; with current state [001, 002, 003] rolls back only [003]",
+        "rationale": "Enables testing specific states and recovering from bad migrations"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Migration identifiers must follow consistent naming convention",
+        "assertion": "System rejects migration files not matching pattern '^\\d{3,}_[a-z0-9_]+\\.py$' (e.g., rejects 'add_users.py', 'migration.py', '1_x.py') with ValidationError",
+        "rationale": "Inconsistent naming breaks sorting, version detection, and automated tooling"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Duplicate migration version numbers must be detected and rejected",
+        "assertion": "Migration directory containing ['001_init.py', '001_other.py'] raises DuplicateVersionError on discovery with message listing both files",
+        "rationale": "Ambiguous ordering would cause non-deterministic execution and different results across environments"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "security",
+        "severity": "critical",
+        "description": "Migration files must not be executed via arbitrary code injection",
+        "assertion": "Migration system uses controlled import mechanism; passing malicious path like '../../../etc/passwd' or '../../inject.py' raises SecurityError or safely fails without execution",
+        "rationale": "Unrestricted file execution enables remote code execution attacks"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "security",
+        "severity": "high",
+        "description": "Migration tracking table must be protected from SQL injection",
+        "assertion": "Migration name containing SQL injection attempt like \"'; DROP TABLE migrations; --\" is safely escaped/parameterized, does not execute SQL, and system remains functional",
+        "rationale": "SQL injection in migration tracking could delete audit trail or corrupt metadata"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Concurrent migration execution must be prevented via locking",
+        "assertion": "Two processes calling migrate_up() simultaneously: one acquires lock and proceeds, other either blocks until completion or immediately fails with ConcurrentMigrationError",
+        "rationale": "Concurrent execution causes race conditions, duplicate execution, and corrupted state"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rollback of failed migration must itself be transactional",
+        "assertion": "If migration 003_add_index fails and its down() method also throws exception during rollback, system logs both errors, marks migration as 'failed', prevents marking as applied",
+        "rationale": "Failed rollback without proper handling leaves system in unknown corrupted state"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Large migration batches must not load all files into memory simultaneously",
+        "assertion": "migrate_up() with 1000 migration files consumes memory proportional to single migration, not O(n) of all migrations, by loading/executing/unloading iteratively",
+        "rationale": "Memory-efficient processing prevents OOM crashes during large migration batches"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "correctness",
+        "severity": "high",
+        "description": "System must distinguish between pending, applied, and failed migrations",
+        "assertion": "get_migration_status() returns dict {'pending': ['003', '004'], 'applied': ['001', '002'], 'failed': []} reflecting current state accurately",
+        "rationale": "Clear status visibility enables informed decisions about safe migration operations"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "System must handle gaps in migration sequence numbers",
+        "assertion": "Migration files [001, 002, 005, 007] are applied in exactly that order without error; gap detection is optional but must not prevent execution",
+        "rationale": "Deleted or rebased migrations create gaps; strict sequence enforcement breaks existing deployments"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Migration up() and down() methods must accept consistent arguments",
+        "assertion": "Both up(connection) and down(connection) receive same connection object type; calling with incompatible args raises TypeError",
+        "rationale": "Inconsistent interfaces cause runtime failures during rollback"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "System must log all migration operations with timestamps",
+        "assertion": "After migrate_up(), log contains entries: 'Started migration 001_init at 2024-01-15T10:30:00Z', 'Completed migration 001_init at 2024-01-15T10:30:05Z'",
+        "rationale": "Audit trail is essential for debugging failures and compliance requirements"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Empty or whitespace-only migration files must be handled gracefully",
+        "assertion": "Migration file '006_empty.py' containing only comments/whitespace raises ValidationError with message 'No migration class found' rather than succeeding silently",
+        "rationale": "Silent skip of malformed migrations masks developer errors and deployment issues"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Migration state must include timestamp of application",
+        "assertion": "get_applied_migrations() returns list of dicts: [{'version': '001', 'applied_at': '2024-01-15T10:30:00Z'}, {'version': '002', 'applied_at': '2024-01-15T10:35:00Z'}]",
+        "rationale": "Timestamps enable debugging timing issues and understanding deployment history"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Database connection failures during migration must not corrupt state",
+        "assertion": "If connection drops mid-migration, system either: (1) detects and marks migration as failed, or (2) transaction rollback prevents partial application; get_applied_migrations() remains consistent",
+        "rationale": "Connection failures during migrations are common; must not leave inconsistent state"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Migration version must be string or integer, not arbitrary types",
+        "assertion": "Migration with version=None, version=[], or version={'x':1} raises TypeError during validation with message 'version must be string or int'",
+        "rationale": "Type safety prevents comparison errors and non-deterministic sorting"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "performance",
+        "severity": "low",
+        "description": "Migration discovery should cache results to avoid repeated filesystem scans",
+        "assertion": "Calling get_pending_migrations() twice within same process performs filesystem scan only once unless explicit refresh requested",
+        "rationale": "Reduces I/O overhead during status checks and improves CLI responsiveness"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "medium",
+        "description": "Migration tracking table name must not be user-controllable",
+        "assertion": "System uses hardcoded or safely configured tracking table name; passing table_name='users; DROP TABLE users;--' as config is rejected or safely escaped",
+        "rationale": "Dynamic table names enable SQL injection and metadata corruption attacks"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "System must handle migration files with non-ASCII characters in filenames",
+        "assertion": "Migration file '005_add_café_table.py' either loads correctly if filesystem supports it, or raises clear UnicodeDecodeError, not silent corruption",
+        "rationale": "International teams may use non-ASCII names; system must handle gracefully or reject explicitly"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Dry-run mode must simulate migrations without applying changes",
+        "assertion": "migrate_up(dry_run=True) returns list of migrations that would execute, logs planned actions, but get_applied_migrations() shows no change and database unchanged",
+        "rationale": "Safe preview capability prevents accidental production changes and enables validation"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "System must provide detailed error context when migration fails",
+        "assertion": "Failed migration raises exception with attributes: migration_version='003', error_type='IntegrityError', original_exception=<exception>, partial_changes_rolled_back=True",
+        "rationale": "Rich error context enables rapid debugging without log diving"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Migration class must inherit from base Migration class or implement required interface",
+        "assertion": "Migration file with class not inheriting from Migration base class raises TypeError('Migration must inherit from Migration base class') during discovery",
+        "rationale": "Interface enforcement prevents runtime AttributeErrors and ensures consistent behavior"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Migration execution should support timeout limits",
+        "assertion": "migrate_up(timeout=30) running migration that exceeds 30 seconds raises TimeoutError, triggers rollback, does not mark as applied",
+        "rationale": "Prevents hung migrations from blocking deployments and enables safe automation"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Check for division by zero before dividing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must",
+        "description": "Must sort migration files by their numeric prefix before execution. Extract the version number from filenames matching pattern '^\\d{3,}_[a-z0-9_]+\\.py$', convert to integer for comparison, and execute in ascending order.",
+        "pattern": "migrations.sort(key=lambda m: int(m.split('_')[0]))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Must query persistent storage (database table or file) for applied migrations before executing any migration. Skip migrations whose version identifiers exist in the applied set.",
+        "pattern": "applied = get_applied_from_db(); pending = [m for m in all_migrations if m.version not in applied]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Must execute down migrations in reverse order using LIFO stack semantics. When rolling back N migrations, pop from the end of applied migrations list N times.",
+        "pattern": "to_rollback = applied_migrations[-count:]; to_rollback.reverse()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Must validate that every migration class defines both up() and down() methods during discovery phase, before any execution begins. Raise descriptive error listing missing methods.",
+        "pattern": "if not (hasattr(cls, 'up') and hasattr(cls, 'down')): raise MigrationError(f'{name} missing required methods')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Must wrap each migration execution in try-except block that catches exceptions, calls the migration's down() method to rollback, removes from tracking, and re-raises. Do not proceed to next migration after failure.",
+        "pattern": "try: migration.up(conn); track_applied(migration)\nexcept: migration.down(conn); raise",
+        "source": "spec"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Must use database transactions or atomic file operations to ensure migration tracking is committed only after successful execution. Use transaction.commit() after both up() succeeds AND tracking insert succeeds.",
+        "pattern": "with transaction: migration.up(conn); insert_tracking(version); transaction.commit()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Must persist applied migrations to durable storage (database table, SQLite file, or JSON file with fsync). Do not use in-memory only storage like plain dictionaries or lists.",
+        "pattern": "cursor.execute('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', (version, now()))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Must check count of applied migrations before attempting rollback. If requested rollback count exceeds available migrations, either cap to available count or raise ValueError with clear message.",
+        "pattern": "if count > len(applied): raise ValueError(f'Cannot rollback {count} migrations, only {len(applied)} applied')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must handle empty migration directory by returning early with success status. Check if migration file list is empty after discovery and return without error.",
+        "pattern": "if not migration_files: return MigrationResult(success=True, applied=[])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must filter out already-applied migrations before execution loop. Calculate pending as set difference between discovered and applied migrations, then return immediately if pending set is empty.",
+        "pattern": "pending = set(discovered) - set(applied); if not pending: return",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must validate Python syntax of migration files during discovery using ast.parse() or compile(). Catch SyntaxError and raise it with filename context before entering execution phase.",
+        "pattern": "try: ast.parse(file_content)\nexcept SyntaxError as e: raise MigrationError(f'Syntax error in {filename}: {e}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Must implement migrate_to(target_version) that compares target with current state. If target > current, apply migrations up to target. If target < current, rollback migrations after target in reverse order.",
+        "pattern": "if target > current_version: apply_up_to(target)\nelif target < current_version: rollback_down_to(target)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must validate migration filenames against regex pattern '^\\d{3,}_[a-z0-9_]+\\.py$' during discovery. Reject files not matching pattern with ValidationError listing the invalid filename.",
+        "pattern": "if not re.match(r'^\\d{3,}_[a-z0-9_]+\\.py$', filename): raise ValidationError(f'Invalid migration name: {filename}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must detect duplicate version numbers by extracting version prefixes into a set while iterating files. If set size doesn't equal file count, raise DuplicateVersionError with list of conflicting files.",
+        "pattern": "versions = [extract_version(f) for f in files]; if len(versions) != len(set(versions)): raise DuplicateVersionError(duplicates)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must-not",
+        "description": "Must-not use eval(), exec(), or __import__() with user-provided paths. Use importlib.import_module() with validated module names from a restricted base directory. Reject paths containing '..' or absolute paths.",
+        "pattern": "# AVOID: exec(open(user_path).read())\n# USE: importlib.import_module(f'migrations.{safe_name}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must use parameterized queries for all migration tracking operations. Pass migration names as query parameters, never via string formatting or concatenation.",
+        "pattern": "cursor.execute('INSERT INTO migrations (name) VALUES (?)', (migration_name,))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must implement locking mechanism using database advisory locks (SELECT FOR UPDATE) or file locks (fcntl.flock). Acquire lock before checking applied migrations, release after completion or on error.",
+        "pattern": "cursor.execute('SELECT pg_advisory_lock(12345)'); try: run_migrations()\nfinally: cursor.execute('SELECT pg_advisory_unlock(12345)')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must wrap rollback operation in separate try-except block. If down() raises exception during rollback, log both original migration error and rollback error, mark migration state as 'failed', do not mark as applied.",
+        "pattern": "except Exception as e1: try: migration.down()\nexcept Exception as e2: log_both_errors(e1, e2); mark_failed(version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Must load migration modules one at a time in execution loop, not all upfront. Import, execute, then allow garbage collection before loading next migration to maintain O(1) memory usage.",
+        "pattern": "for version in pending: migration = load_migration(version); execute(migration); del migration",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must maintain separate tracking for failed migrations. Store migration state as enum ('pending', 'applied', 'failed') and query all three categories for get_migration_status().",
+        "pattern": "SELECT version, status FROM migrations WHERE status IN ('pending', 'applied', 'failed')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must accept migrations with non-sequential version numbers. Sort by version number and execute in sorted order without validating continuity. Do not raise errors for gaps in sequence.",
+        "pattern": "versions = [1, 2, 5, 7]; sorted_versions = sorted(versions)  # [1, 2, 5, 7] - gaps OK",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must define up() and down() methods with identical signatures accepting same argument types. Both methods should receive connection object as first parameter after self.",
+        "pattern": "def up(self, connection): ...\ndef down(self, connection): ...",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Must log migration events with ISO 8601 timestamps using structured logging. Log at minimum: start event before up(), completion event after up(), and error event on exception.",
+        "pattern": "logger.info(f'Started migration {version}', extra={'timestamp': datetime.utcnow().isoformat()})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must validate that migration file contains at least one class definition. After parsing AST or importing module, check for migration class existence and raise ValidationError if missing.",
+        "pattern": "if not any(isinstance(node, ast.ClassDef) for node in ast.parse(content).body): raise ValidationError('No migration class found')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Must store application timestamp with each migration record. Use datetime.utcnow() or database CURRENT_TIMESTAMP when inserting tracking record, and return timestamp in get_applied_migrations().",
+        "pattern": "INSERT INTO migrations (version, applied_at) VALUES (?, CURRENT_TIMESTAMP)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must handle database connection errors by catching connection exceptions, logging error with migration context, and ensuring tracking table remains consistent. Use transaction rollback on connection failure.",
+        "pattern": "try: connection.execute(sql)\nexcept ConnectionError: connection.rollback(); raise MigrationError('Connection failed during migration')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must validate migration version type during class initialization or discovery. Check that version attribute is str or int type, raise TypeError with descriptive message for other types.",
+        "pattern": "if not isinstance(version, (str, int)): raise TypeError(f'version must be string or int, got {type(version)}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "prefer",
+        "description": "Prefer caching migration discovery results in module-level or instance variable. Only rescan filesystem when explicit refresh parameter is True or cache is empty.",
+        "pattern": "_cached_migrations = None\nif _cached_migrations is None or refresh: _cached_migrations = scan_directory()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must-not",
+        "description": "Must-not allow user input to determine tracking table name. Use hardcoded constant for table name or validate against whitelist of alphanumeric characters only.",
+        "pattern": "# AVOID: f'SELECT * FROM {user_table_name}'\n# USE: MIGRATIONS_TABLE = 'schema_migrations'  # constant",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must handle Unicode in filenames by using Path objects and catching UnicodeDecodeError. Raise clear error message indicating unsupported filename encoding rather than crashing.",
+        "pattern": "try: filename.encode('ascii')\nexcept UnicodeEncodeError: raise ValidationError(f'Non-ASCII filename not supported: {filename}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Must implement dry_run mode that iterates through pending migrations, logs planned actions, but skips actual up() execution and tracking updates. Return list of migrations that would be applied.",
+        "pattern": "if dry_run: logger.info(f'Would apply: {version}'); planned.append(version)\nelse: migration.up(conn); track(version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must create custom exception class with attributes for migration_version, error_type, original_exception, and partial_changes_rolled_back. Populate these attributes when catching and re-raising exceptions.",
+        "pattern": "raise MigrationError(version=version, error_type=type(e).__name__, original_exception=e, rolled_back=True)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must define abstract base Migration class with abstract up() and down() methods. Check isinstance(migration_class, Migration) or verify inheritance during discovery.",
+        "pattern": "class Migration(ABC):\n  @abstractmethod\n  def up(self, conn): pass\n  @abstractmethod\n  def down(self, conn): pass",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Must implement timeout enforcement using signal.alarm() on Unix or threading.Timer. If migration exceeds timeout, raise TimeoutError, trigger rollback via down(), and do not mark as applied.",
+        "pattern": "signal.alarm(timeout); try: migration.up(conn)\nexcept TimeoutError: migration.down(conn); raise\nfinally: signal.alarm(0)",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "Migration files are sorted by version number in _discover_migrations() using sort(key=lambda m: int(self._extract_version(m))), ensuring sequential execution in migrate_up()."
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "System tracks applied migrations in schema_migrations table with status='applied'. migrate_up() filters pending migrations by excluding already applied versions, preventing duplicate execution."
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "migrate_down() queries applied migrations 'ORDER BY applied_at DESC' and rolls back in reverse order (LIFO), processing to_rollback[:count] from most recent first."
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "satisfied",
+        "reasoning": "Abstract Migration base class enforces up() and down() methods via @abstractmethod. _load_migration() validates both methods exist and are callable, raising MigrationError if missing."
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "migrate_up() wraps each migration in try/except. On failure, it calls connection.rollback(), attempts migration.down() for automatic rollback, then raises MigrationError stopping further execution. Already applied migrations remain tracked."
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "Migration execution and tracking occur within same transaction (connection.execute('BEGIN')...commit()). On failure, connection.rollback() prevents tracking record persistence, ensuring transactional consistency."
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "Migration state persists in SQLite database via schema_migrations table. _initialize_tracking_table() ensures table exists on startup, and _get_applied_migrations_from_db() reads persisted state across process restarts."
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "migrate_down() explicitly validates count: 'if count > len(applied_versions): raise ValueError(f\"Cannot rollback {count} migrations, only {len(applied_versions)} applied\")', preventing rollback below first migration."
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "_discover_migrations() returns empty list when migrations_dir doesn't exist or contains no valid files. migrate_up() handles empty migration_files gracefully, returning MigrationResult(success=True, applied=[])."
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "migrate_up() calculates pending migrations by excluding applied_versions. When all migrations applied, pending list is empty, function returns immediately with MigrationResult(success=True, applied=[])."
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "satisfied",
+        "reasoning": "_validate_syntax() uses ast.parse() during _discover_migrations() to detect syntax errors before execution, raising MigrationError with error_type='SyntaxError' and original_exception."
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "_load_migration() explicitly validates both up() and down() methods exist and are callable: 'if not hasattr(migration_instance, \"down\") or not callable(migration_instance.down): raise MigrationError(...)'."
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "migrate_to() compares target_version index with current version index. If target > current, applies pending migrations up to target. If target < current, calls migrate_down() with calculated count for rollback."
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "_validate_filename() enforces pattern via 'if not re.match(MIGRATION_FILENAME_PATTERN, filename): raise ValidationError(...)' where pattern is r'^\\d{3,}_[a-z0-9_]+\\.py$'."
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "_discover_migrations() checks for duplicate versions: 'if len(versions) != len(set(versions))' then identifies duplicates and raises DuplicateVersionError with list of duplicate files."
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "satisfied",
+        "reasoning": "_validate_path() prevents path traversal by checking for '..' in parts, rejecting absolute paths, and verifying resolved path stays within migrations_dir, raising SecurityError for violations."
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "satisfied",
+        "reasoning": "All SQL operations use parameterized queries (e.g., 'VALUES (?, ?, ?, ?)', (version, status.value, applied_at, error)) preventing SQL injection. Table name MIGRATIONS_TABLE is hardcoded constant."
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "satisfied",
+        "reasoning": "_acquire_lock() uses 'connection.execute(\"BEGIN EXCLUSIVE\")' for database-level locking. On failure, raises ConcurrentMigrationError, preventing concurrent migration execution."
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "migrate_up() handles nested exception: if migration fails, tries migration.down() in separate try/except. If rollback also fails, logs both errors, calls _track_migration() with status=FAILED and error message containing both exceptions."
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "migrate_up() processes migrations iteratively with 'for filename in pending' and explicitly 'del migration' after each iteration, ensuring only one migration instance in memory at a time."
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "satisfied",
+        "reasoning": "get_migration_status() returns dict with 'pending', 'applied', and 'failed' keys, correctly categorizing migrations by querying tracking table status and comparing with discovered files."
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "System sorts migrations by numeric version without requiring consecutive numbers. Gaps are handled naturally as migrations are processed in sorted order regardless of sequence continuity."
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "Abstract Migration class defines up(connection: sqlite3.Connection) and down(connection: sqlite3.Connection) with consistent signatures. Both receive same connection object type during execution."
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "satisfied",
+        "reasoning": "migrate_up() and migrate_down() log migration operations with timestamps: 'logger.info(f\"Started migration {version}\", extra={\"timestamp\": datetime.utcnow().isoformat()})' and similar for completion/failure."
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "satisfied",
+        "reasoning": "_validate_migration_class() checks for class definitions using AST parsing: 'has_class = any(isinstance(node, ast.ClassDef) for node in tree.body)' and raises ValidationError if no class found."
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "satisfied",
+        "reasoning": "get_applied_migrations() returns List[AppliedMigration] with version and applied_at fields. Timestamps stored as ISO format with 'Z' suffix: 'datetime.utcnow().isoformat() + \"Z\"'."
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "satisfied",
+        "reasoning": "All migration operations wrapped in transactions with explicit BEGIN/COMMIT/ROLLBACK. Connection failures trigger rollback in exception handlers, preventing partial state corruption and maintaining consistency."
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "partial",
+        "reasoning": "_extract_version() returns string via split() without type validation. System implicitly requires numeric string versions (converted with int() for sorting) but doesn't explicitly validate type or reject non-string/non-int versions."
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "satisfied",
+        "reasoning": "_discover_migrations() implements caching: 'if self._cached_migrations is not None and not refresh: return self._cached_migrations'. Cache bypassed only when refresh=True parameter provided."
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "satisfied",
+        "reasoning": "MIGRATIONS_TABLE is module-level constant hardcoded as 'schema_migrations'. Used in f-strings but values are parameterized. Table name itself not user-controllable or injectable."
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "_validate_filename() includes: 'try: filename.encode(\"ascii\") except UnicodeEncodeError: raise ValidationError(f\"Non-ASCII filename not supported: {filename}\")' explicitly handling non-ASCII characters."
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "satisfied",
+        "reasoning": "migrate_up(dry_run=True) logs planned migrations with 'Would apply' messages but skips actual execution, database connection, and tracking. Returns MigrationResult with planned versions without modifying state."
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "satisfied",
+        "reasoning": "MigrationError class includes migration_version, error_type, original_exception, and partial_changes_rolled_back attributes. migrate_up() populates these when raising exceptions after failures."
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "satisfied",
+        "reasoning": "_load_migration() checks 'if (isinstance(attr, type) and issubclass(attr, Migration) and attr is not Migration)' ensuring migration class inherits from Migration base class, though error type is MigrationError not TypeError."
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "partial",
+        "reasoning": "_execute_with_timeout() implements timeout using signal.SIGALRM, raises TimeoutError on expiration. However, signal-based timeout only works on Unix systems and main thread, limiting portability and applicability in some contexts."
+      }
+    ],
+    "satisfiedCount": 33,
+    "totalSpecs": 35,
+    "generatedAt": "2026-02-12T06:45:04.158Z",
+    "inputTokens": 12693,
+    "outputTokens": 7930
+  },
+  "totalInputTokens": 15974,
+  "totalOutputTokens": 15144,
+  "totalDurationMs": 238826
+}

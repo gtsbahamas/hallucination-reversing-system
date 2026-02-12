@@ -68,7 +68,7 @@ curl -X POST https://lucid-api-dftr.onrender.com/verify \
   -d '{"code": "...", "context": "..."}'
 ```
 
-**Pricing:** Free tier (100 calls/month). Usage-based starting at $0.04/call.
+**Pricing:** Free tier (50 verifications + 20 generations/month). Usage-based from $0.15/verify, $0.30/generate.
 
 **Open source:** CLI is open source. Verification API is a managed service.
 
@@ -108,6 +108,7 @@ Research paper: https://doi.org/10.5281/zenodo.18522644
 - **21 critical bugs found** across 4 AI-built production apps (Bolt.new, Lovable, v0, Replit)
 - **Model-agnostic** — works with any LLM's output
 - **Usage-based pricing** — free tier included, scales with your usage
+- **Reverse mode** — synthesizes formal specs BEFORE code generation, preventing hallucinations instead of just catching them
 - **Patent-protected** (US App #63/980,048)
 
 ---

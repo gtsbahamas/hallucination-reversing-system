@@ -1,0 +1,1481 @@
+{
+  "task": "Write an input sanitization library that prevents XSS, SQL injection, and path traversal while preserving legitimate content",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write an input sanitization library that prevents XSS, SQL injection, and path traversal while preserving legitimate content",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must block all common XSS script injection patterns including <script> tags, javascript: protocol, and event handlers",
+        "assertion": "sanitize_html('<script>alert(1)</script>') returns empty string or safe equivalent without executing script",
+        "rationale": "Script tags are the primary XSS attack vector and must be completely neutralized"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must prevent SQL injection through quote escaping, comment removal, and UNION/DROP keyword detection",
+        "assertion": "sanitize_sql(\"admin' OR '1'='1\") escapes quotes and returns \"admin\\' OR \\'1\\'=\\'1\" or raises error preventing injection",
+        "rationale": "SQL injection can lead to complete database compromise"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must block path traversal attempts using ../ and ..\\ sequences",
+        "assertion": "sanitize_path('../../etc/passwd') returns normalized path without .. components or raises SecurityError",
+        "rationale": "Path traversal can expose sensitive system files and credentials"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must neutralize HTML event handlers (onclick, onerror, onload, etc.) in any context",
+        "assertion": "sanitize_html('<img src=x onerror=\"alert(1)\">') removes onerror attribute entirely",
+        "rationale": "Event handlers are common XSS vectors that bypass basic script tag filtering"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must prevent data exfiltration through javascript: and data: URI schemes",
+        "assertion": "sanitize_html('<a href=\"javascript:alert(document.cookie)\">click</a>') removes or neutralizes href attribute",
+        "rationale": "URI-based XSS can bypass content filters and exfiltrate sensitive data"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must preserve legitimate HTML content including safe tags (p, div, span, strong, em, a with safe href)",
+        "assertion": "sanitize_html('<p>Hello <strong>world</strong></p>') returns '<p>Hello <strong>world</strong></p>' or equivalent safe HTML",
+        "rationale": "Library must not break legitimate use cases by over-sanitizing"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must handle encoded XSS payloads (URL-encoded, HTML entity-encoded, Unicode-encoded)",
+        "assertion": "sanitize_html('%3Cscript%3Ealert(1)%3C/script%3E') and sanitize_html('&lt;script&gt;alert(1)&lt;/script&gt;') both prevent script execution",
+        "rationale": "Attackers use encoding to bypass naive filters"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must prevent SQL injection through stacked queries using semicolons",
+        "assertion": "sanitize_sql('user123; DROP TABLE users; --') detects and blocks or escapes the stacked query",
+        "rationale": "Stacked queries allow multiple malicious commands in one injection"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must block absolute path access attempts in path sanitization",
+        "assertion": "sanitize_path('/etc/passwd') raises SecurityError or returns safe relative path when absolute paths are disallowed",
+        "rationale": "Absolute paths can bypass directory restrictions"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must prevent XSS through CSS injection (expression, import, behavior properties)",
+        "assertion": "sanitize_html('<div style=\"background: url(javascript:alert(1))\">test</div>') removes or sanitizes the style attribute",
+        "rationale": "CSS can execute JavaScript in older browsers and leak data in modern ones"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Must handle empty string input without errors for all sanitization functions",
+        "assertion": "sanitize_html(''), sanitize_sql(''), sanitize_path('') all return empty string without raising exceptions",
+        "rationale": "Empty inputs are common and must be handled gracefully"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must block null-byte injection in paths that could truncate strings in C-based filesystems",
+        "assertion": "sanitize_path('safe.txt\\x00../../etc/passwd') detects null byte and raises SecurityError or removes it",
+        "rationale": "Null bytes can cause path truncation in underlying C APIs"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent XSS through SVG-based attacks (embedded scripts, foreignObject)",
+        "assertion": "sanitize_html('<svg onload=\"alert(1)\"></svg>') removes onload handler and '<svg><script>alert(1)</script></svg>' removes script",
+        "rationale": "SVG elements can contain JavaScript and are often overlooked in sanitization"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent SQL injection through hexadecimal and scientific notation numeric bypasses",
+        "assertion": "sanitize_sql('0x61646D696E') and sanitize_sql('1e1') detect potential bypass attempts when validating numeric input",
+        "rationale": "Alternative number representations can bypass simple validation"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "security",
+        "severity": "high",
+        "description": "Must normalize Unicode path traversal sequences (fullwidth characters, overlong UTF-8)",
+        "assertion": "sanitize_path('..\\uff0f..\\uff0fetc\\uff0fpasswd') normalizes Unicode slashes and blocks traversal",
+        "rationale": "Unicode has multiple representations for slash characters that can bypass ASCII filters"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Must preserve safe URL schemes (http, https, mailto) in href attributes",
+        "assertion": "sanitize_html('<a href=\"https://example.com\">link</a>') preserves the href attribute unchanged",
+        "rationale": "Legitimate links must work for proper functionality"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent mutation XSS (mXSS) where browser parsing changes sanitized content",
+        "assertion": "sanitize_html('<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\">') prevents the nested payload from executing after browser parsing",
+        "rationale": "Browsers may reparse sanitized HTML in ways that reintroduce XSS"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "security",
+        "severity": "high",
+        "description": "Must block SQL comments (-- and /* */) that could disable query logic",
+        "assertion": "sanitize_sql('admin\\' --') detects and escapes or removes the SQL comment marker",
+        "rationale": "SQL comments can disable authentication checks and other security logic"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent path traversal using Windows-specific patterns (..\\, UNC paths \\\\server\\share)",
+        "assertion": "sanitize_path('..\\\\..\\\\windows\\\\system32') blocks traversal on Windows-style paths",
+        "rationale": "Windows uses backslashes and has unique path formats that need handling"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Must raise clear SecurityError exceptions with descriptive messages when blocking malicious input",
+        "assertion": "When sanitize_path('../../etc/passwd') is configured to reject rather than sanitize, it raises SecurityError with message containing 'path traversal'",
+        "rationale": "Clear errors help developers identify and log security incidents"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must handle None/null input gracefully by either returning None or raising TypeError with clear message",
+        "assertion": "sanitize_html(None) either returns None or raises TypeError with message 'expected str, got NoneType'",
+        "rationale": "Type errors should fail fast with clear messages rather than causing undefined behavior"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Must preserve whitespace and newlines in legitimate content",
+        "assertion": "sanitize_html('<p>Line 1\\nLine 2</p>') preserves the newline character in output",
+        "rationale": "Content formatting should be preserved for proper display"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent template injection through AngularJS/Vue/React-style expressions",
+        "assertion": "sanitize_html('{{constructor.constructor(\"alert(1)\")()}}') escapes or removes the expression syntax",
+        "rationale": "Client-side template engines can execute arbitrary code through expression injection"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent CRLF injection in SQL queries that could lead to header injection",
+        "assertion": "sanitize_sql('value\\r\\nmalicious') detects and removes or escapes CRLF characters",
+        "rationale": "CRLF can break query parsing and enable secondary injection attacks"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle extremely long input strings without causing denial of service",
+        "assertion": "sanitize_html('A' * 10000000) completes within reasonable time (< 5 seconds) or raises ValueError for excessive length",
+        "rationale": "Very long inputs can cause regex catastrophic backtracking or memory exhaustion"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must detect and prevent polyglot payloads (valid in multiple contexts)",
+        "assertion": "sanitize_html('--></script><script>alert(1)</script><!--') prevents script execution despite HTML comment confusion",
+        "rationale": "Polyglots exploit multiple parsers interpreting the same payload differently"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must preserve HTML entities for special characters (&lt;, &gt;, &amp;, &quot;, &#39;)",
+        "assertion": "sanitize_html('&lt;div&gt;') preserves the entity encoding rather than converting to literal < and >",
+        "rationale": "Entities are legitimate way to display special characters safely"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must prevent meta-refresh redirects that could lead to phishing",
+        "assertion": "sanitize_html('<meta http-equiv=\"refresh\" content=\"0;url=evil.com\">') removes or neutralizes the meta tag",
+        "rationale": "Meta refresh can redirect users to phishing sites"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must handle case variations in attack vectors (SCRIPT, ScRiPt, etc.)",
+        "assertion": "sanitize_html('<ScRiPt>alert(1)</ScRiPt>') blocks the script regardless of case",
+        "rationale": "HTML is case-insensitive and filters must account for all variations"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle deeply nested HTML structures without stack overflow",
+        "assertion": "sanitize_html('<div>' * 1000 + 'content' + '</div>' * 1000) completes without RecursionError",
+        "rationale": "Deeply nested structures can cause stack overflow in recursive parsers"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must sanitize base64-encoded payloads in data URIs",
+        "assertion": "sanitize_html('<img src=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==\">') detects and blocks the base64-encoded script",
+        "rationale": "Data URIs can contain encoded malicious content"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Must complete sanitization of typical HTML input (< 10KB) in under 100ms",
+        "assertion": "sanitize_html('<p>' + 'word ' * 1000 + '</p>') completes in < 100ms on standard hardware",
+        "rationale": "Sanitization should not create noticeable latency in web applications"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must prevent object/embed tag abuse for Flash/plugin-based XSS",
+        "assertion": "sanitize_html('<object data=\"exploit.swf\"></object>') removes or neutralizes the object tag",
+        "rationale": "Object tags can load external malicious content"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must provide configurable whitelist of allowed HTML tags",
+        "assertion": "sanitize_html('<div><p>text</p></div>', allowed_tags=['p']) returns '<p>text</p>' with div removed",
+        "rationale": "Different contexts require different levels of HTML restriction"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Must accept bytes input and decode properly with UTF-8 or specified encoding",
+        "assertion": "sanitize_html(b'<p>text</p>') successfully decodes and sanitizes returning string result",
+        "rationale": "Web inputs may arrive as bytes and need proper encoding handling"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle malformed HTML with unclosed tags gracefully",
+        "assertion": "sanitize_html('<p>unclosed <div>nested') returns safe output without raising ParseError",
+        "rationale": "Real-world HTML is often malformed and must be handled robustly"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must prevent form action manipulation to unauthorized endpoints",
+        "assertion": "sanitize_html('<form action=\"https://evil.com/steal\">') removes or validates the action attribute against whitelist",
+        "rationale": "Forms can submit user data to attacker-controlled servers"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must preserve data attributes (data-*) that don't contain executable code",
+        "assertion": "sanitize_html('<div data-id=\"123\" data-name=\"test\">') preserves data attributes with safe values",
+        "rationale": "Data attributes are commonly used for client-side functionality"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "security",
+        "severity": "low",
+        "description": "Must strip UTF-8 BOM and other invisible Unicode characters that could hide attacks",
+        "assertion": "sanitize_html('\\ufeff<script>alert(1)</script>') removes BOM and blocks script",
+        "rationale": "Invisible characters can hide malicious payloads from visual inspection"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "performance",
+        "severity": "low",
+        "description": "Must cache compiled regex patterns to avoid recompilation overhead",
+        "assertion": "Second call to sanitize_html with similar input is at least 20% faster than first call",
+        "rationale": "Regex compilation is expensive and should be done once"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Must provide option to return sanitization report showing what was removed/modified",
+        "assertion": "sanitize_html('<script>alert(1)</script>clean', return_report=True) returns tuple (sanitized_output, report_dict) where report shows 'removed: script tag'",
+        "rationale": "Developers need visibility into what sanitization occurred for debugging and security auditing"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Must handle input with mixed encoding declarations gracefully",
+        "assertion": "sanitize_html with content containing mismatched encoding hints doesn't corrupt output",
+        "rationale": "Encoding issues are common and shouldn't produce garbled output"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "security",
+        "severity": "low",
+        "description": "Must provide strict mode that rejects rather than sanitizes suspicious input",
+        "assertion": "sanitize_html('<script>alert(1)</script>', strict=True) raises SecurityError instead of returning sanitized output",
+        "rationale": "Some security contexts require complete rejection rather than sanitization"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "type-safety",
+        "severity": "low",
+        "description": "Must provide type hints for all public functions enabling static type checking",
+        "assertion": "mypy or pyright static analysis passes without errors on library code",
+        "rationale": "Type hints improve IDE support and catch type errors at development time"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "performance",
+        "severity": "low",
+        "description": "Must be memory-efficient, not creating unnecessary copies of large strings",
+        "assertion": "sanitizing 1MB input increases memory usage by less than 3MB (< 3x overhead)",
+        "rationale": "Memory efficiency matters for high-throughput applications"
+      }
+    ],
+    "totalSpecs": 45,
+    "synthesizedAt": "2026-02-12T06:47:44.299Z",
+    "inputTokens": 589,
+    "outputTokens": 5026
+  },
+  "constraintSet": {
+    "task": "Write an input sanitization library that prevents XSS, SQL injection, and path traversal while preserving legitimate content",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Use parameterized queries, never string concatenation for SQL",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never build SQL with template literals or string concatenation",
+        "pattern": "`SELECT * FROM ${table} WHERE id = ${id}`",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Validate and sanitize all external input before processing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Wrap JSON.parse in try-catch",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Check file/directory existence before operations",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Handle file operation errors (ENOENT, EACCES, etc.)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Must use a validated HTML parser (html.parser, lxml, or bleach) rather than regex for HTML sanitization to prevent bypass through malformed HTML and nested contexts.",
+        "pattern": "from html.parser import HTMLParser\n# or\nimport bleach",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must-not",
+        "description": "Must-not use simple string replacement or basic regex patterns for XSS detection. Attackers bypass these with encoding, case variations, and nesting.",
+        "pattern": "# BAD:\nif '<script>' in html:\n    return ''\n# Bypassed by: <ScRiPt>, %3Cscript%3E, \\u003cscript\\u003e",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Must decode all common encodings (URL-encoded, HTML entities, Unicode escapes) BEFORE pattern matching to prevent encoded payload bypass.",
+        "pattern": "import html\nimport urllib.parse\ntext = html.unescape(urllib.parse.unquote(text))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must use parameterized queries or prepared statements for SQL injection prevention. If sanitizing raw SQL strings, use database-specific escaping libraries (not manual string replacement).",
+        "pattern": "# GOOD:\ncursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))\n# For sanitization:\nimport pymysql\nescaped = pymysql.escape_string(input)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must-not",
+        "description": "Must-not use simple quote escaping alone for SQL injection prevention. Must also detect and block SQL keywords (UNION, DROP, semicolons for stacked queries, comment markers -- and /* */).",
+        "pattern": "# BAD:\ndef sanitize(s):\n    return s.replace(\"'\", \"\\\\'\")  # Bypassed by UNION, --, stacked queries",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must use os.path.normpath() AND verify the result stays within allowed directory boundaries for path traversal prevention. Check for .. components after normalization.",
+        "pattern": "import os\npath = os.path.normpath(path)\nif '..' in path or os.path.isabs(path):\n    raise SecurityError('Path traversal detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Must normalize Unicode to NFC or NFKC form before security checks to prevent bypass via fullwidth characters (\\uff0f) and other Unicode equivalents.",
+        "pattern": "import unicodedata\ntext = unicodedata.normalize('NFKC', text)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must use a whitelist approach for allowed HTML tags and attributes rather than blacklist. Only permit explicitly safe tags/attributes and strip everything else.",
+        "pattern": "ALLOWED_TAGS = {'p', 'div', 'span', 'strong', 'em', 'a'}\nALLOWED_ATTRS = {'a': ['href', 'title']}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must validate URI schemes in href/src attributes against whitelist (http, https, mailto only). Reject or strip javascript:, data:, vbscript:, file: schemes.",
+        "pattern": "from urllib.parse import urlparse\nscheme = urlparse(url).scheme\nif scheme not in ('http', 'https', 'mailto', ''):\n    return None  # Strip attribute",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must handle case-insensitive matching for all security checks including tag names, attribute names, URI schemes, and SQL keywords.",
+        "pattern": "if tag_name.lower() in DANGEROUS_TAGS:\n    # Block it",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must detect and reject/escape null bytes (\\x00) in all input types as they can truncate strings in C-based systems and bypass security checks.",
+        "pattern": "if '\\x00' in input_str:\n    raise SecurityError('Null byte injection detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must handle empty string and None inputs gracefully. Return empty string for empty input; either return None or raise TypeError with clear message for None input.",
+        "pattern": "if input_str is None:\n    raise TypeError('expected str, got NoneType')\nif input_str == '':\n    return ''",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must implement input length limits and iteration depth limits to prevent ReDoS and stack overflow from deeply nested structures or extremely long inputs.",
+        "pattern": "MAX_INPUT_LENGTH = 1_000_000\nMAX_NESTING_DEPTH = 100\nif len(input_str) > MAX_INPUT_LENGTH:\n    raise ValueError('Input too long')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Must raise SecurityError (custom exception inheriting from ValueError or Exception) with descriptive messages when blocking attacks, not generic exceptions.",
+        "pattern": "class SecurityError(ValueError):\n    pass\n\nraise SecurityError('XSS attempt detected: script tag found')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must-not",
+        "description": "Must-not use regex with backtracking on untrusted input without length/complexity limits. Use linear-time parsers or limit regex complexity to prevent ReDoS.",
+        "pattern": "# BAD:\nre.search(r'(<.*>)*', untrusted_input)  # Catastrophic backtracking\n# GOOD:\nre.search(r'<[^>]+>', untrusted_input)  # Linear time",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must strip or escape CRLF characters (\\r\\n) from SQL and header-adjacent inputs to prevent injection attacks that manipulate protocol structure.",
+        "pattern": "sanitized = input_str.replace('\\r', '').replace('\\n', '')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must preserve legitimate content including whitespace, newlines, HTML entities, and safe Unicode characters. Only remove/escape security-critical patterns.",
+        "pattern": "# Preserve: &lt; &gt; &amp; whitespace \\n\n# Remove: <script> javascript: onclick=",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Must handle bytes input by decoding with UTF-8 (or specified encoding) and handling decode errors gracefully with 'replace' or 'ignore' error handler.",
+        "pattern": "if isinstance(input_data, bytes):\n    input_str = input_data.decode('utf-8', errors='replace')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must handle malformed HTML with unclosed tags, mismatched nesting, and invalid syntax without raising exceptions. Use error-tolerant parser or catch and handle parse errors.",
+        "pattern": "try:\n    parsed = parser.parse(html)\nexcept ParseError:\n    # Fall back to conservative sanitization",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "prefer",
+        "description": "Prefer using established security libraries (bleach, nh3, html5lib) for HTML sanitization rather than implementing from scratch, as they handle edge cases and mXSS.",
+        "pattern": "import bleach\nsanitized = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must compile and cache regex patterns at module level to avoid recompilation overhead on every function call.",
+        "pattern": "# Module level:\nSCRIPT_PATTERN = re.compile(r'<script[^>]*>.*?</script>', re.IGNORECASE | re.DOTALL)\n\n# In function:\nif SCRIPT_PATTERN.search(html):",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must provide type hints for all public functions with proper typing for str, Optional, Union, and return types to enable static type checking.",
+        "pattern": "from typing import Optional, Dict, Tuple\n\ndef sanitize_html(html: str, strict: bool = False) -> str:\n    ...",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must detect template expression syntax ({{, }}, ${}) and either escape or reject them to prevent server-side and client-side template injection.",
+        "pattern": "if '{{' in text or '${' in text:\n    # Escape or reject",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Must validate and sanitize style attributes by blocking dangerous CSS properties (expression, behavior, -moz-binding) and javascript: URLs in url() values.",
+        "pattern": "DANGEROUS_CSS = ['expression', 'behavior', '-moz-binding', 'javascript:']\nif any(danger in style.lower() for danger in DANGEROUS_CSS):\n    return None  # Strip style attribute",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must handle SVG tags specially by either blocking them entirely or stripping all event handlers and embedded script tags from SVG content.",
+        "pattern": "if tag_name.lower() == 'svg':\n    # Strip onload, script children, or block entirely",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must-not",
+        "description": "Must-not create unnecessary string copies in tight loops. Use generator expressions, in-place operations, or string builders for large inputs to maintain memory efficiency.",
+        "pattern": "# BAD:\nfor char in large_string:\n    result = result + char  # O(n²) copies\n# GOOD:\nresult = ''.join(chars)  # O(n)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must block or strip dangerous tags (script, object, embed, iframe, frame, meta with http-equiv, base, link with rel=import) entirely rather than just sanitizing attributes.",
+        "pattern": "DANGEROUS_TAGS = {'script', 'object', 'embed', 'iframe', 'frame', 'meta', 'base', 'link'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must validate that normalized paths remain within base directory by checking if the absolute resolved path starts with the allowed base path.",
+        "pattern": "base = os.path.abspath(base_dir)\nfull = os.path.abspath(os.path.join(base, user_path))\nif not full.startswith(base):\n    raise SecurityError('Path traversal: outside base directory')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Must detect both Unix (./) and Windows (.\\ and UNC \\\\) path patterns when normalizing and blocking traversal attempts.",
+        "pattern": "path = path.replace('\\\\', '/')  # Normalize Windows to Unix\nif '..' in path:\n    # Block traversal",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must",
+        "description": "Must strip invisible and zero-width Unicode characters (BOM \\ufeff, zero-width space \\u200b, RLO \\u202e) that can hide malicious payloads.",
+        "pattern": "INVISIBLE_CHARS = ['\\ufeff', '\\u200b', '\\u200c', '\\u200d', '\\u202e']\nfor char in INVISIBLE_CHARS:\n    text = text.replace(char, '')",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 36,
+    "generatedAt": "2026-02-12T06:48:36.856Z",
+    "inputTokens": 3217,
+    "outputTokens": 2927
+  },
+  "generatedCode": {
+    "task": "Write an input sanitization library that prevents XSS, SQL injection, and path traversal while preserving legitimate content",
+    "code": "import re\nimport html\nimport urllib.parse\nimport unicodedata\nimport os\nfrom typing import Optional, Dict, Tuple, Set, List, Union\nfrom html.parser import HTMLParser\n\n\nclass SecurityError(ValueError):\n    \"\"\"Raised when malicious input is detected\"\"\"\n    pass\n\n\n# Compile regex patterns at module level for performance\nSCRIPT_PATTERN = re.compile(r'<script[^>]*>.*?</script>', re.IGNORECASE | re.DOTALL)\nDANGEROUS_PROTOCOLS = re.compile(r'^(javascript|data|vbscript|file):', re.IGNORECASE)\nSQL_COMMENT_PATTERN = re.compile(r'(--|/\\*|\\*/)', re.IGNORECASE)\nSQL_STACKED_QUERY = re.compile(r';\\s*\\w+', re.IGNORECASE)\nSQL_UNION_PATTERN = re.compile(r'\\bunion\\b.*\\bselect\\b', re.IGNORECASE | re.DOTALL)\nSQL_DROP_PATTERN = re.compile(r'\\bdrop\\b\\s+\\btable\\b', re.IGNORECASE)\nTEMPLATE_EXPR = re.compile(r'(\\{\\{|\\}\\}|\\$\\{)')\nEVENT_HANDLER = re.compile(r'\\bon\\w+\\s*=', re.IGNORECASE)\nMETA_REFRESH = re.compile(r'<meta[^>]*http-equiv\\s*=\\s*[\"\\']?refresh', re.IGNORECASE)\nHEX_NUMERIC = re.compile(r'0x[0-9a-f]+', re.IGNORECASE)\nDANGEROUS_CSS = ['expression', 'behavior', '-moz-binding', 'javascript:', 'import', 'url(javascript:']\nINVISIBLE_CHARS = ['\\ufeff', '\\u200b', '\\u200c', '\\u200d', '\\u202e']\n\n# HTML sanitization configuration\nDANGEROUS_TAGS = {\n    'script', 'object', 'embed', 'iframe', 'frame', 'frameset',\n    'base', 'applet', 'style', 'link', 'meta'\n}\n\nALLOWED_TAGS = {\n    'p', 'div', 'span', 'strong', 'em', 'b', 'i', 'u', 's', 'strike',\n    'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',\n    'ul', 'ol', 'li', 'dl', 'dt', 'dd',\n    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',\n    'a', 'img', 'blockquote', 'pre', 'code', 'sup', 'sub'\n}\n\nALLOWED_ATTRS = {\n    'a': ['href', 'title', 'target'],\n    'img': ['src', 'alt', 'title', 'width', 'height'],\n    'td': ['colspan', 'rowspan'],\n    'th': ['colspan', 'rowspan'],\n    '*': ['class', 'id', 'title']\n}\n\nSAFE_URI_SCHEMES = {'http', 'https', 'mailto', ''}\n\nMAX_INPUT_LENGTH = 10_000_000\nMAX_NESTING_DEPTH = 100\n\n\nclass SafeHTMLParser(HTMLParser):\n    \"\"\"HTML parser that sanitizes malicious content\"\"\"\n    \n    def __init__(self, allowed_tags: Set[str], allowed_attrs: Dict[str, List[str]], \n                 strict: bool = False):\n        super().__init__()\n        self.allowed_tags = allowed_tags\n        self.allowed_attrs = allowed_attrs\n        self.strict = strict\n        self.result = []\n        self.nesting_depth = 0\n        self.report = {'removed_tags': [], 'removed_attrs': [], 'blocked_content': []}\n        \n    def handle_starttag(self, tag, attrs):\n        tag_lower = tag.lower()\n        \n        if self.nesting_depth >= MAX_NESTING_DEPTH:\n            if self.strict:\n                raise SecurityError('Maximum nesting depth exceeded')\n            return\n            \n        if tag_lower in DANGEROUS_TAGS:\n            self.report['removed_tags'].append(tag_lower)\n            if self.strict:\n                raise SecurityError(f'Dangerous tag detected: {tag_lower}')\n            return\n        \n        if tag_lower == 'svg':\n            self.report['removed_tags'].append('svg')\n            if self.strict:\n                raise SecurityError('SVG tags are blocked')\n            return\n            \n        if tag_lower not in self.allowed_tags:\n            self.report['removed_tags'].append(tag_lower)\n            return\n        \n        self.nesting_depth += 1\n        \n        # Sanitize attributes\n        safe_attrs = []\n        tag_allowed_attrs = self.allowed_attrs.get(tag_lower, [])\n        global_allowed_attrs = self.allowed_attrs.get('*', [])\n        \n        for attr_name, attr_value in attrs:\n            attr_lower = attr_name.lower()\n            \n            # Check for event handlers\n            if attr_lower.startswith('on'):\n                self.report['removed_attrs'].append(f'{tag_lower}.{attr_lower}')\n                if self.strict:\n                    raise SecurityError(f'Event handler detected: {attr_lower}')\n                continue\n            \n            # Check for style attribute\n            if attr_lower == 'style':\n                if not self._is_safe_style(attr_value):\n                    self.report['removed_attrs'].append(f'{tag_lower}.style')\n                    if self.strict:\n                        raise SecurityError('Dangerous CSS detected in style attribute')\n                    continue\n            \n            # Check for data attributes (allow safe ones)\n            if attr_lower.startswith('data-'):\n                if self._is_safe_data_attr(attr_value):\n                    safe_attrs.append((attr_name, attr_value))\n                else:\n                    self.report['removed_attrs'].append(f'{tag_lower}.{attr_lower}')\n                continue\n            \n            # Check if attribute is allowed for this tag\n            if attr_lower not in tag_allowed_attrs and attr_lower not in global_allowed_attrs:\n                self.report['removed_attrs'].append(f'{tag_lower}.{attr_lower}')\n                continue\n            \n            # Special validation for href and src\n            if attr_lower in ('href', 'src'):\n                sanitized_url = self._sanitize_url(attr_value)\n                if sanitized_url is None:\n                    self.report['removed_attrs'].append(f'{tag_lower}.{attr_lower}')\n                    if self.strict:\n                        raise SecurityError(f'Dangerous URL scheme in {attr_lower}')\n                    continue\n                safe_attrs.append((attr_name, sanitized_url))\n            else:\n                safe_attrs.append((attr_name, attr_value))\n        \n        # Build tag\n        if safe_attrs:\n            attrs_str = ' ' + ' '.join(f'{name}=\"{html.escape(value)}\"' \n                                       for name, value in safe_attrs)\n        else:\n            attrs_str = ''\n        \n        self.result.append(f'<{tag}{attrs_str}>')\n    \n    def handle_endtag(self, tag):\n        tag_lower = tag.lower()\n        if tag_lower in self.allowed_tags and tag_lower not in DANGEROUS_TAGS:\n            if self.nesting_depth > 0:\n                self.nesting_depth -= 1\n            self.result.append(f'</{tag}>')\n    \n    def handle_data(self, data):\n        self.result.append(html.escape(data))\n    \n    def handle_entityref(self, name):\n        # Preserve HTML entities\n        self.result.append(f'&{name};')\n    \n    def handle_charref(self, name):\n        # Preserve character references\n        self.result.append(f'&#{name};')\n    \n    def _sanitize_url(self, url: str) -> Optional[str]:\n        \"\"\"Validate and sanitize URLs\"\"\"\n        if not url:\n            return url\n        \n        try:\n            parsed = urllib.parse.urlparse(url)\n            scheme = parsed.scheme.lower()\n            \n            if scheme not in SAFE_URI_SCHEMES:\n                return None\n            \n            # Check for encoded javascript/data URIs\n            decoded_url = urllib.parse.unquote(url)\n            if DANGEROUS_PROTOCOLS.match(decoded_url):\n                return None\n            \n            return url\n        except Exception:\n            return None\n    \n    def _is_safe_style(self, style: str) -> bool:\n        \"\"\"Check if CSS style is safe\"\"\"\n        style_lower = style.lower()\n        for danger in DANGEROUS_CSS:\n            if danger in style_lower:\n                return False\n        return True\n    \n    def _is_safe_data_attr(self, value: str) -> bool:\n        \"\"\"Check if data attribute value is safe\"\"\"\n        value_lower = value.lower()\n        if DANGEROUS_PROTOCOLS.match(value_lower):\n            return False\n        if '<script' in value_lower or 'javascript:' in value_lower:\n            return False\n        return True\n    \n    def get_sanitized_html(self) -> str:\n        return ''.join(self.result)\n\n\ndef _normalize_input(text: str) -> str:\n    \"\"\"Normalize input by decoding and removing invisible characters\"\"\"\n    # Remove invisible Unicode characters\n    for char in INVISIBLE_CHARS:\n        text = text.replace(char, '')\n    \n    # Normalize Unicode\n    text = unicodedata.normalize('NFKC', text)\n    \n    # Decode URL encoding\n    try:\n        text = urllib.parse.unquote(text)\n    except Exception:\n        pass\n    \n    # Decode HTML entities\n    text = html.unescape(text)\n    \n    return text\n\n\ndef sanitize_html(html_input: Union[str, bytes], \n                  allowed_tags: Optional[Set[str]] = None,\n                  allowed_attrs: Optional[Dict[str, List[str]]] = None,\n                  strict: bool = False,\n                  return_report: bool = False) -> Union[str, Tuple[str, Dict]]:\n    \"\"\"\n    Sanitize HTML input to prevent XSS attacks.\n    \n    Args:\n        html_input: HTML string or bytes to sanitize\n        allowed_tags: Set of allowed HTML tags (defaults to ALLOWED_TAGS)\n        allowed_attrs: Dict of allowed attributes per tag (defaults to ALLOWED_ATTRS)\n        strict: If True, raises SecurityError instead of sanitizing\n        return_report: If True, returns tuple of (sanitized, report)\n    \n    Returns:\n        Sanitized HTML string, or tuple of (sanitized, report) if return_report=True\n    \n    Raises:\n        TypeError: If input is None\n        ValueError: If input is too long\n        SecurityError: If strict=True and malicious content is detected\n    \"\"\"\n    if html_input is None:\n        raise TypeError('expected str, got NoneType')\n    \n    # Handle bytes input\n    if isinstance(html_input, bytes):\n        html_input = html_input.decode('utf-8', errors='replace')\n    \n    # Handle empty string\n    if html_input == '':\n        if return_report:\n            return '', {}\n        return ''\n    \n    # Check length limit\n    if len(html_input) > MAX_INPUT_LENGTH:\n        raise ValueError(f'Input too long: {len(html_input)} > {MAX_INPUT_LENGTH}')\n    \n    # Detect null bytes\n    if '\\x00' in html_input:\n        if strict:\n            raise SecurityError('Null byte injection detected')\n        html_input = html_input.replace('\\x00', '')\n    \n    # Normalize input\n    normalized = _normalize_input(html_input)\n    \n    # Check for dangerous patterns after normalization\n    if SCRIPT_PATTERN.search(normalized):\n        if strict:\n            raise SecurityError('XSS attempt detected: script tag found')\n    \n    if META_REFRESH.search(normalized):\n        if strict:\n            raise SecurityError('Meta refresh redirect detected')\n    \n    if TEMPLATE_EXPR.search(normalized):\n        if strict:\n            raise SecurityError('Template expression detected')\n        # Escape template expressions\n        normalized = normalized.replace('{{', '&#123;&#123;')\n        normalized = normalized.replace('}}', '&#125;&#125;')\n        normalized = normalized.replace('${', '&#36;&#123;')\n    \n    # Use default allowed tags/attrs if not provided\n    if allowed_tags is None:\n        allowed_tags = ALLOWED_TAGS\n    if allowed_attrs is None:\n        allowed_attrs = ALLOWED_ATTRS\n    \n    # Parse and sanitize HTML\n    parser = SafeHTMLParser(allowed_tags, allowed_attrs, strict)\n    \n    try:\n        parser.feed(normalized)\n    except Exception as e:\n        if strict:\n            raise\n        # Fallback to conservative sanitization on parse error\n        result = html.escape(html_input)\n        if return_report:\n            return result, {'error': str(e), 'fallback': True}\n        return result\n    \n    sanitized = parser.get_sanitized_html()\n    \n    if return_report:\n        return sanitized, parser.report\n    \n    return sanitized\n\n\ndef sanitize_sql(sql_input: Union[str, bytes], detect_only: bool = False) -> str:\n    \"\"\"\n    Sanitize SQL input to prevent SQL injection attacks.\n    \n    NOTE: This should NOT be used as a replacement for parameterized queries.\n    Always use parameterized queries when possible. This is for sanitizing\n    individual string values that will be used in SQL contexts.\n    \n    Args:\n        sql_input: SQL string or bytes to sanitize\n        detect_only: If True, only detects attacks without sanitizing\n    \n    Returns:\n        Sanitized SQL string with escaped quotes\n    \n    Raises:\n        TypeError: If input is None\n        SecurityError: If SQL injection patterns are detected and detect_only=True\n    \"\"\"\n    if sql_input is None:\n        raise TypeError('expected str, got NoneType')\n    \n    # Handle bytes input\n    if isinstance(sql_input, bytes):\n        sql_input = sql_input.decode('utf-8', errors='replace')\n    \n    # Handle empty string\n    if sql_input == '':\n        return ''\n    \n    # Detect null bytes\n    if '\\x00' in sql_input:\n        raise SecurityError('Null byte injection detected in SQL input')\n    \n    # Strip CRLF characters\n    sanitized = sql_input.replace('\\r', '').replace('\\n', ' ')\n    \n    # Normalize input\n    normalized = _normalize_input(sanitized)\n    \n    # Check for SQL injection patterns\n    attacks_detected = []\n    \n    if SQL_COMMENT_PATTERN.search(normalized):\n        attacks_detected.append('SQL comment marker (-- or /* */)')\n    \n    if SQL_STACKED_QUERY.search(normalized):\n        attacks_detected.append('stacked query (semicolon)')\n    \n    if SQL_UNION_PATTERN.search(normalized):\n        attacks_detected.append('UNION-based injection')\n    \n    if SQL_DROP_PATTERN.search(normalized):\n        attacks_detected.append('DROP TABLE statement')\n    \n    # Check for hex-encoded bypasses\n    if HEX_NUMERIC.search(normalized):\n        attacks_detected.append('hexadecimal numeric encoding')\n    \n    # Check for quote-based injection\n    if \"'\" in normalized and (' or ' in normalized.lower() or ' and ' in normalized.lower()):\n        # Check for patterns like: ' OR '1'='1\n        if re.search(r\"'\\s*(or|and)\\s*'\", normalized, re.IGNORECASE):\n            attacks_detected.append('quote-based boolean injection')\n    \n    if attacks_detected:\n        if detect_only:\n            raise SecurityError(f'SQL injection detected: {\", \".join(attacks_detected)}')\n    \n    # Escape single quotes\n    sanitized = sanitized.replace(\"'\", \"\\\\'\")\n    \n    # Escape double quotes\n    sanitized = sanitized.replace('\"', '\\\\\"')\n    \n    return sanitized\n\n\ndef sanitize_path(path_input: Union[str, bytes], \n                  base_dir: Optional[str] = None,\n                  allow_absolute: bool = False) -> str:\n    \"\"\"\n    Sanitize file path input to prevent path traversal attacks.\n    \n    Args:\n        path_input: Path string or bytes to sanitize\n        base_dir: Base directory to validate against (optional)\n        allow_absolute: If True, allows absolute paths\n    \n    Returns:\n        Sanitized and normalized path\n    \n    Raises:\n        TypeError: If input is None\n        SecurityError: If path traversal or invalid path is detected\n    \"\"\"\n    if path_input is None:\n        raise TypeError('expected str, got NoneType')\n    \n    # Handle bytes input\n    if isinstance(path_input, bytes):\n        path_input = path_input.decode('utf-8', errors='replace')\n    \n    # Handle empty string\n    if path_input == '':\n        return ''\n    \n    # Detect null bytes\n    if '\\x00' in path_input:\n        raise SecurityError('Null byte injection detected in path')\n    \n    # Normalize Unicode (handles fullwidth slashes etc.)\n    path = unicodedata.normalize('NFKC', path_input)\n    \n    # Normalize Windows paths to Unix style\n    path = path.replace('\\\\', '/')\n    \n    # Check for UNC paths\n    if path.startswith('//'):\n        raise SecurityError('UNC path detected')\n    \n    # Check for absolute paths\n    if os.path.isabs(path) and not allow_absolute:\n        raise SecurityError('Absolute path not allowed')\n    \n    # Normalize the path\n    path = os.path.normpath(path)\n    \n    # Convert back to forward slashes for consistency\n    path = path.replace('\\\\', '/')\n    \n    # Check for path traversal after normalization\n    if '..' in path:\n        raise SecurityError('Path traversal detected: .. component in path')\n    \n    # If base_dir is provided, validate the path stays within it\n    if base_dir is not None:\n        base = os.path.abspath(base_dir)\n        \n        # Handle relative paths by joining with base\n        if not os.path.isabs(path):\n            full_path = os.path.abspath(os.path.join(base, path))\n        else:\n            full_path = os.path.abspath(path)\n        \n        # Ensure the resolved path is within base directory\n        if not full_path.startswith(base + os.sep) and full_path != base:\n            raise SecurityError('Path traversal: resolved path outside base directory')\n        \n        return full_path\n    \n    return path\n\n\n# Type hints for static analysis\n__all__ = [\n    'sanitize_html',\n    'sanitize_sql', \n    'sanitize_path',\n    'SecurityError'\n]",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must block all common XSS script injection patterns including <script> tags, javascript: protocol, and event handlers",
+        "assertion": "sanitize_html('<script>alert(1)</script>') returns empty string or safe equivalent without executing script",
+        "rationale": "Script tags are the primary XSS attack vector and must be completely neutralized"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must prevent SQL injection through quote escaping, comment removal, and UNION/DROP keyword detection",
+        "assertion": "sanitize_sql(\"admin' OR '1'='1\") escapes quotes and returns \"admin\\' OR \\'1\\'=\\'1\" or raises error preventing injection",
+        "rationale": "SQL injection can lead to complete database compromise"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must block path traversal attempts using ../ and ..\\ sequences",
+        "assertion": "sanitize_path('../../etc/passwd') returns normalized path without .. components or raises SecurityError",
+        "rationale": "Path traversal can expose sensitive system files and credentials"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must neutralize HTML event handlers (onclick, onerror, onload, etc.) in any context",
+        "assertion": "sanitize_html('<img src=x onerror=\"alert(1)\">') removes onerror attribute entirely",
+        "rationale": "Event handlers are common XSS vectors that bypass basic script tag filtering"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must prevent data exfiltration through javascript: and data: URI schemes",
+        "assertion": "sanitize_html('<a href=\"javascript:alert(document.cookie)\">click</a>') removes or neutralizes href attribute",
+        "rationale": "URI-based XSS can bypass content filters and exfiltrate sensitive data"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must preserve legitimate HTML content including safe tags (p, div, span, strong, em, a with safe href)",
+        "assertion": "sanitize_html('<p>Hello <strong>world</strong></p>') returns '<p>Hello <strong>world</strong></p>' or equivalent safe HTML",
+        "rationale": "Library must not break legitimate use cases by over-sanitizing"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must handle encoded XSS payloads (URL-encoded, HTML entity-encoded, Unicode-encoded)",
+        "assertion": "sanitize_html('%3Cscript%3Ealert(1)%3C/script%3E') and sanitize_html('&lt;script&gt;alert(1)&lt;/script&gt;') both prevent script execution",
+        "rationale": "Attackers use encoding to bypass naive filters"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must prevent SQL injection through stacked queries using semicolons",
+        "assertion": "sanitize_sql('user123; DROP TABLE users; --') detects and blocks or escapes the stacked query",
+        "rationale": "Stacked queries allow multiple malicious commands in one injection"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must block absolute path access attempts in path sanitization",
+        "assertion": "sanitize_path('/etc/passwd') raises SecurityError or returns safe relative path when absolute paths are disallowed",
+        "rationale": "Absolute paths can bypass directory restrictions"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must prevent XSS through CSS injection (expression, import, behavior properties)",
+        "assertion": "sanitize_html('<div style=\"background: url(javascript:alert(1))\">test</div>') removes or sanitizes the style attribute",
+        "rationale": "CSS can execute JavaScript in older browsers and leak data in modern ones"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Must handle empty string input without errors for all sanitization functions",
+        "assertion": "sanitize_html(''), sanitize_sql(''), sanitize_path('') all return empty string without raising exceptions",
+        "rationale": "Empty inputs are common and must be handled gracefully"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must block null-byte injection in paths that could truncate strings in C-based filesystems",
+        "assertion": "sanitize_path('safe.txt\\x00../../etc/passwd') detects null byte and raises SecurityError or removes it",
+        "rationale": "Null bytes can cause path truncation in underlying C APIs"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent XSS through SVG-based attacks (embedded scripts, foreignObject)",
+        "assertion": "sanitize_html('<svg onload=\"alert(1)\"></svg>') removes onload handler and '<svg><script>alert(1)</script></svg>' removes script",
+        "rationale": "SVG elements can contain JavaScript and are often overlooked in sanitization"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent SQL injection through hexadecimal and scientific notation numeric bypasses",
+        "assertion": "sanitize_sql('0x61646D696E') and sanitize_sql('1e1') detect potential bypass attempts when validating numeric input",
+        "rationale": "Alternative number representations can bypass simple validation"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "security",
+        "severity": "high",
+        "description": "Must normalize Unicode path traversal sequences (fullwidth characters, overlong UTF-8)",
+        "assertion": "sanitize_path('..\\uff0f..\\uff0fetc\\uff0fpasswd') normalizes Unicode slashes and blocks traversal",
+        "rationale": "Unicode has multiple representations for slash characters that can bypass ASCII filters"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Must preserve safe URL schemes (http, https, mailto) in href attributes",
+        "assertion": "sanitize_html('<a href=\"https://example.com\">link</a>') preserves the href attribute unchanged",
+        "rationale": "Legitimate links must work for proper functionality"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent mutation XSS (mXSS) where browser parsing changes sanitized content",
+        "assertion": "sanitize_html('<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\">') prevents the nested payload from executing after browser parsing",
+        "rationale": "Browsers may reparse sanitized HTML in ways that reintroduce XSS"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "security",
+        "severity": "high",
+        "description": "Must block SQL comments (-- and /* */) that could disable query logic",
+        "assertion": "sanitize_sql('admin\\' --') detects and escapes or removes the SQL comment marker",
+        "rationale": "SQL comments can disable authentication checks and other security logic"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent path traversal using Windows-specific patterns (..\\, UNC paths \\\\server\\share)",
+        "assertion": "sanitize_path('..\\\\..\\\\windows\\\\system32') blocks traversal on Windows-style paths",
+        "rationale": "Windows uses backslashes and has unique path formats that need handling"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Must raise clear SecurityError exceptions with descriptive messages when blocking malicious input",
+        "assertion": "When sanitize_path('../../etc/passwd') is configured to reject rather than sanitize, it raises SecurityError with message containing 'path traversal'",
+        "rationale": "Clear errors help developers identify and log security incidents"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must handle None/null input gracefully by either returning None or raising TypeError with clear message",
+        "assertion": "sanitize_html(None) either returns None or raises TypeError with message 'expected str, got NoneType'",
+        "rationale": "Type errors should fail fast with clear messages rather than causing undefined behavior"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Must preserve whitespace and newlines in legitimate content",
+        "assertion": "sanitize_html('<p>Line 1\\nLine 2</p>') preserves the newline character in output",
+        "rationale": "Content formatting should be preserved for proper display"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent template injection through AngularJS/Vue/React-style expressions",
+        "assertion": "sanitize_html('{{constructor.constructor(\"alert(1)\")()}}') escapes or removes the expression syntax",
+        "rationale": "Client-side template engines can execute arbitrary code through expression injection"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "security",
+        "severity": "high",
+        "description": "Must prevent CRLF injection in SQL queries that could lead to header injection",
+        "assertion": "sanitize_sql('value\\r\\nmalicious') detects and removes or escapes CRLF characters",
+        "rationale": "CRLF can break query parsing and enable secondary injection attacks"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle extremely long input strings without causing denial of service",
+        "assertion": "sanitize_html('A' * 10000000) completes within reasonable time (< 5 seconds) or raises ValueError for excessive length",
+        "rationale": "Very long inputs can cause regex catastrophic backtracking or memory exhaustion"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must detect and prevent polyglot payloads (valid in multiple contexts)",
+        "assertion": "sanitize_html('--></script><script>alert(1)</script><!--') prevents script execution despite HTML comment confusion",
+        "rationale": "Polyglots exploit multiple parsers interpreting the same payload differently"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must preserve HTML entities for special characters (&lt;, &gt;, &amp;, &quot;, &#39;)",
+        "assertion": "sanitize_html('&lt;div&gt;') preserves the entity encoding rather than converting to literal < and >",
+        "rationale": "Entities are legitimate way to display special characters safely"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must prevent meta-refresh redirects that could lead to phishing",
+        "assertion": "sanitize_html('<meta http-equiv=\"refresh\" content=\"0;url=evil.com\">') removes or neutralizes the meta tag",
+        "rationale": "Meta refresh can redirect users to phishing sites"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must handle case variations in attack vectors (SCRIPT, ScRiPt, etc.)",
+        "assertion": "sanitize_html('<ScRiPt>alert(1)</ScRiPt>') blocks the script regardless of case",
+        "rationale": "HTML is case-insensitive and filters must account for all variations"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle deeply nested HTML structures without stack overflow",
+        "assertion": "sanitize_html('<div>' * 1000 + 'content' + '</div>' * 1000) completes without RecursionError",
+        "rationale": "Deeply nested structures can cause stack overflow in recursive parsers"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must sanitize base64-encoded payloads in data URIs",
+        "assertion": "sanitize_html('<img src=\"data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==\">') detects and blocks the base64-encoded script",
+        "rationale": "Data URIs can contain encoded malicious content"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Must complete sanitization of typical HTML input (< 10KB) in under 100ms",
+        "assertion": "sanitize_html('<p>' + 'word ' * 1000 + '</p>') completes in < 100ms on standard hardware",
+        "rationale": "Sanitization should not create noticeable latency in web applications"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must prevent object/embed tag abuse for Flash/plugin-based XSS",
+        "assertion": "sanitize_html('<object data=\"exploit.swf\"></object>') removes or neutralizes the object tag",
+        "rationale": "Object tags can load external malicious content"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must provide configurable whitelist of allowed HTML tags",
+        "assertion": "sanitize_html('<div><p>text</p></div>', allowed_tags=['p']) returns '<p>text</p>' with div removed",
+        "rationale": "Different contexts require different levels of HTML restriction"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Must accept bytes input and decode properly with UTF-8 or specified encoding",
+        "assertion": "sanitize_html(b'<p>text</p>') successfully decodes and sanitizes returning string result",
+        "rationale": "Web inputs may arrive as bytes and need proper encoding handling"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle malformed HTML with unclosed tags gracefully",
+        "assertion": "sanitize_html('<p>unclosed <div>nested') returns safe output without raising ParseError",
+        "rationale": "Real-world HTML is often malformed and must be handled robustly"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "security",
+        "severity": "medium",
+        "description": "Must prevent form action manipulation to unauthorized endpoints",
+        "assertion": "sanitize_html('<form action=\"https://evil.com/steal\">') removes or validates the action attribute against whitelist",
+        "rationale": "Forms can submit user data to attacker-controlled servers"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must preserve data attributes (data-*) that don't contain executable code",
+        "assertion": "sanitize_html('<div data-id=\"123\" data-name=\"test\">') preserves data attributes with safe values",
+        "rationale": "Data attributes are commonly used for client-side functionality"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "security",
+        "severity": "low",
+        "description": "Must strip UTF-8 BOM and other invisible Unicode characters that could hide attacks",
+        "assertion": "sanitize_html('\\ufeff<script>alert(1)</script>') removes BOM and blocks script",
+        "rationale": "Invisible characters can hide malicious payloads from visual inspection"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "performance",
+        "severity": "low",
+        "description": "Must cache compiled regex patterns to avoid recompilation overhead",
+        "assertion": "Second call to sanitize_html with similar input is at least 20% faster than first call",
+        "rationale": "Regex compilation is expensive and should be done once"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Must provide option to return sanitization report showing what was removed/modified",
+        "assertion": "sanitize_html('<script>alert(1)</script>clean', return_report=True) returns tuple (sanitized_output, report_dict) where report shows 'removed: script tag'",
+        "rationale": "Developers need visibility into what sanitization occurred for debugging and security auditing"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Must handle input with mixed encoding declarations gracefully",
+        "assertion": "sanitize_html with content containing mismatched encoding hints doesn't corrupt output",
+        "rationale": "Encoding issues are common and shouldn't produce garbled output"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "security",
+        "severity": "low",
+        "description": "Must provide strict mode that rejects rather than sanitizes suspicious input",
+        "assertion": "sanitize_html('<script>alert(1)</script>', strict=True) raises SecurityError instead of returning sanitized output",
+        "rationale": "Some security contexts require complete rejection rather than sanitization"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "type-safety",
+        "severity": "low",
+        "description": "Must provide type hints for all public functions enabling static type checking",
+        "assertion": "mypy or pyright static analysis passes without errors on library code",
+        "rationale": "Type hints improve IDE support and catch type errors at development time"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "performance",
+        "severity": "low",
+        "description": "Must be memory-efficient, not creating unnecessary copies of large strings",
+        "assertion": "sanitizing 1MB input increases memory usage by less than 3MB (< 3x overhead)",
+        "rationale": "Memory efficiency matters for high-throughput applications"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Use parameterized queries, never string concatenation for SQL",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never build SQL with template literals or string concatenation",
+        "pattern": "`SELECT * FROM ${table} WHERE id = ${id}`",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Validate and sanitize all external input before processing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Wrap JSON.parse in try-catch",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Check file/directory existence before operations",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Handle file operation errors (ENOENT, EACCES, etc.)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Must use a validated HTML parser (html.parser, lxml, or bleach) rather than regex for HTML sanitization to prevent bypass through malformed HTML and nested contexts.",
+        "pattern": "from html.parser import HTMLParser\n# or\nimport bleach",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must-not",
+        "description": "Must-not use simple string replacement or basic regex patterns for XSS detection. Attackers bypass these with encoding, case variations, and nesting.",
+        "pattern": "# BAD:\nif '<script>' in html:\n    return ''\n# Bypassed by: <ScRiPt>, %3Cscript%3E, \\u003cscript\\u003e",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Must decode all common encodings (URL-encoded, HTML entities, Unicode escapes) BEFORE pattern matching to prevent encoded payload bypass.",
+        "pattern": "import html\nimport urllib.parse\ntext = html.unescape(urllib.parse.unquote(text))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must use parameterized queries or prepared statements for SQL injection prevention. If sanitizing raw SQL strings, use database-specific escaping libraries (not manual string replacement).",
+        "pattern": "# GOOD:\ncursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))\n# For sanitization:\nimport pymysql\nescaped = pymysql.escape_string(input)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must-not",
+        "description": "Must-not use simple quote escaping alone for SQL injection prevention. Must also detect and block SQL keywords (UNION, DROP, semicolons for stacked queries, comment markers -- and /* */).",
+        "pattern": "# BAD:\ndef sanitize(s):\n    return s.replace(\"'\", \"\\\\'\")  # Bypassed by UNION, --, stacked queries",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must use os.path.normpath() AND verify the result stays within allowed directory boundaries for path traversal prevention. Check for .. components after normalization.",
+        "pattern": "import os\npath = os.path.normpath(path)\nif '..' in path or os.path.isabs(path):\n    raise SecurityError('Path traversal detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Must normalize Unicode to NFC or NFKC form before security checks to prevent bypass via fullwidth characters (\\uff0f) and other Unicode equivalents.",
+        "pattern": "import unicodedata\ntext = unicodedata.normalize('NFKC', text)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must use a whitelist approach for allowed HTML tags and attributes rather than blacklist. Only permit explicitly safe tags/attributes and strip everything else.",
+        "pattern": "ALLOWED_TAGS = {'p', 'div', 'span', 'strong', 'em', 'a'}\nALLOWED_ATTRS = {'a': ['href', 'title']}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must validate URI schemes in href/src attributes against whitelist (http, https, mailto only). Reject or strip javascript:, data:, vbscript:, file: schemes.",
+        "pattern": "from urllib.parse import urlparse\nscheme = urlparse(url).scheme\nif scheme not in ('http', 'https', 'mailto', ''):\n    return None  # Strip attribute",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must handle case-insensitive matching for all security checks including tag names, attribute names, URI schemes, and SQL keywords.",
+        "pattern": "if tag_name.lower() in DANGEROUS_TAGS:\n    # Block it",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must detect and reject/escape null bytes (\\x00) in all input types as they can truncate strings in C-based systems and bypass security checks.",
+        "pattern": "if '\\x00' in input_str:\n    raise SecurityError('Null byte injection detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must handle empty string and None inputs gracefully. Return empty string for empty input; either return None or raise TypeError with clear message for None input.",
+        "pattern": "if input_str is None:\n    raise TypeError('expected str, got NoneType')\nif input_str == '':\n    return ''",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must implement input length limits and iteration depth limits to prevent ReDoS and stack overflow from deeply nested structures or extremely long inputs.",
+        "pattern": "MAX_INPUT_LENGTH = 1_000_000\nMAX_NESTING_DEPTH = 100\nif len(input_str) > MAX_INPUT_LENGTH:\n    raise ValueError('Input too long')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Must raise SecurityError (custom exception inheriting from ValueError or Exception) with descriptive messages when blocking attacks, not generic exceptions.",
+        "pattern": "class SecurityError(ValueError):\n    pass\n\nraise SecurityError('XSS attempt detected: script tag found')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must-not",
+        "description": "Must-not use regex with backtracking on untrusted input without length/complexity limits. Use linear-time parsers or limit regex complexity to prevent ReDoS.",
+        "pattern": "# BAD:\nre.search(r'(<.*>)*', untrusted_input)  # Catastrophic backtracking\n# GOOD:\nre.search(r'<[^>]+>', untrusted_input)  # Linear time",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must strip or escape CRLF characters (\\r\\n) from SQL and header-adjacent inputs to prevent injection attacks that manipulate protocol structure.",
+        "pattern": "sanitized = input_str.replace('\\r', '').replace('\\n', '')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must preserve legitimate content including whitespace, newlines, HTML entities, and safe Unicode characters. Only remove/escape security-critical patterns.",
+        "pattern": "# Preserve: &lt; &gt; &amp; whitespace \\n\n# Remove: <script> javascript: onclick=",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Must handle bytes input by decoding with UTF-8 (or specified encoding) and handling decode errors gracefully with 'replace' or 'ignore' error handler.",
+        "pattern": "if isinstance(input_data, bytes):\n    input_str = input_data.decode('utf-8', errors='replace')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must handle malformed HTML with unclosed tags, mismatched nesting, and invalid syntax without raising exceptions. Use error-tolerant parser or catch and handle parse errors.",
+        "pattern": "try:\n    parsed = parser.parse(html)\nexcept ParseError:\n    # Fall back to conservative sanitization",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "prefer",
+        "description": "Prefer using established security libraries (bleach, nh3, html5lib) for HTML sanitization rather than implementing from scratch, as they handle edge cases and mXSS.",
+        "pattern": "import bleach\nsanitized = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must compile and cache regex patterns at module level to avoid recompilation overhead on every function call.",
+        "pattern": "# Module level:\nSCRIPT_PATTERN = re.compile(r'<script[^>]*>.*?</script>', re.IGNORECASE | re.DOTALL)\n\n# In function:\nif SCRIPT_PATTERN.search(html):",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must provide type hints for all public functions with proper typing for str, Optional, Union, and return types to enable static type checking.",
+        "pattern": "from typing import Optional, Dict, Tuple\n\ndef sanitize_html(html: str, strict: bool = False) -> str:\n    ...",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must detect template expression syntax ({{, }}, ${}) and either escape or reject them to prevent server-side and client-side template injection.",
+        "pattern": "if '{{' in text or '${' in text:\n    # Escape or reject",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Must validate and sanitize style attributes by blocking dangerous CSS properties (expression, behavior, -moz-binding) and javascript: URLs in url() values.",
+        "pattern": "DANGEROUS_CSS = ['expression', 'behavior', '-moz-binding', 'javascript:']\nif any(danger in style.lower() for danger in DANGEROUS_CSS):\n    return None  # Strip style attribute",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must handle SVG tags specially by either blocking them entirely or stripping all event handlers and embedded script tags from SVG content.",
+        "pattern": "if tag_name.lower() == 'svg':\n    # Strip onload, script children, or block entirely",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must-not",
+        "description": "Must-not create unnecessary string copies in tight loops. Use generator expressions, in-place operations, or string builders for large inputs to maintain memory efficiency.",
+        "pattern": "# BAD:\nfor char in large_string:\n    result = result + char  # O(n²) copies\n# GOOD:\nresult = ''.join(chars)  # O(n)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must block or strip dangerous tags (script, object, embed, iframe, frame, meta with http-equiv, base, link with rel=import) entirely rather than just sanitizing attributes.",
+        "pattern": "DANGEROUS_TAGS = {'script', 'object', 'embed', 'iframe', 'frame', 'meta', 'base', 'link'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must validate that normalized paths remain within base directory by checking if the absolute resolved path starts with the allowed base path.",
+        "pattern": "base = os.path.abspath(base_dir)\nfull = os.path.abspath(os.path.join(base, user_path))\nif not full.startswith(base):\n    raise SecurityError('Path traversal: outside base directory')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Must detect both Unix (./) and Windows (.\\ and UNC \\\\) path patterns when normalizing and blocking traversal attempts.",
+        "pattern": "path = path.replace('\\\\', '/')  # Normalize Windows to Unix\nif '..' in path:\n    # Block traversal",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must",
+        "description": "Must strip invisible and zero-width Unicode characters (BOM \\ufeff, zero-width space \\u200b, RLO \\u202e) that can hide malicious payloads.",
+        "pattern": "INVISIBLE_CHARS = ['\\ufeff', '\\u200b', '\\u200c', '\\u200d', '\\u202e']\nfor char in INVISIBLE_CHARS:\n    text = text.replace(char, '')",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "Code blocks <script> tags via SCRIPT_PATTERN regex and DANGEROUS_TAGS set, removes javascript: protocol via DANGEROUS_PROTOCOLS regex, and strips event handlers via EVENT_HANDLER checking in handle_starttag"
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "sanitize_sql escapes single/double quotes, detects SQL comments via SQL_COMMENT_PATTERN, detects UNION via SQL_UNION_PATTERN, and DROP TABLE via SQL_DROP_PATTERN, returning escaped string or raising SecurityError in detect_only mode"
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "sanitize_path normalizes paths with os.path.normpath and explicitly checks for '..' in normalized path, raising SecurityError if found, blocking traversal attempts"
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "satisfied",
+        "reasoning": "SafeHTMLParser.handle_starttag checks if attr_lower.startswith('on') and removes those attributes, preventing all event handlers from being included in sanitized output"
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "_sanitize_url method checks parsed.scheme against SAFE_URI_SCHEMES which only includes 'http', 'https', 'mailto', and empty string, blocking javascript: and data: URIs"
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "ALLOWED_TAGS includes p, div, span, strong, em, a and parser preserves these tags with safe attributes through handle_starttag/handle_endtag/handle_data logic"
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "_normalize_input calls urllib.parse.unquote for URL decoding and html.unescape for HTML entity decoding, then SCRIPT_PATTERN checks normalized text preventing encoded script execution"
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "SQL_STACKED_QUERY pattern (r';\\s*\\w+') detects semicolon-based stacked queries, added to attacks_detected list, raising SecurityError in detect_only mode or escaping quotes in normal mode"
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "sanitize_path checks os.path.isabs(path) and if allow_absolute is False, raises SecurityError('Absolute path not allowed'), blocking /etc/passwd style paths"
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "_is_safe_style checks for DANGEROUS_CSS list including 'javascript:', 'expression', 'behavior', etc., removing style attribute if dangerous CSS detected"
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "satisfied",
+        "reasoning": "All three functions explicitly check for empty string with 'if <input> == \"\":' and return '' without errors, handling edge case properly"
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "sanitize_path checks 'if '\\x00' in path_input:' and raises SecurityError('Null byte injection detected in path'), blocking null-byte truncation attacks"
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "SafeHTMLParser explicitly checks 'if tag_lower == \"svg\":' and removes it, plus event handlers like onload are stripped via the 'on' prefix check, blocking SVG-based XSS"
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "HEX_NUMERIC pattern (r'0x[0-9a-f]+') detects hexadecimal encoding in sanitize_sql, adding 'hexadecimal numeric encoding' to attacks_detected"
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "sanitize_path uses unicodedata.normalize('NFKC', path_input) which normalizes fullwidth characters to ASCII equivalents, then checks for '..' preventing Unicode-based traversal"
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "satisfied",
+        "reasoning": "SAFE_URI_SCHEMES includes 'http' and 'https', _sanitize_url returns original URL unchanged if scheme is in SAFE_URI_SCHEMES, preserving safe hrefs"
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "partial",
+        "reasoning": "Code normalizes and escapes content, but doesn't have specific mXSS mutation detection. The noscript example might not be caught if browser re-parses differently than HTMLParser, though basic protections exist"
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "satisfied",
+        "reasoning": "SQL_COMMENT_PATTERN (r'(--|/\\*|\\*/)') detects both -- and /* */ comment markers, adding to attacks_detected and escaping quotes in output"
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "sanitize_path converts backslashes to forward slashes, checks for UNC paths ('if path.startswith(\"//\")'), and normalizes then checks for '..' blocking Windows-style traversal"
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "Code raises SecurityError with descriptive messages like 'Path traversal detected: .. component in path', 'Path traversal: resolved path outside base directory', providing clear error context"
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "satisfied",
+        "reasoning": "All three sanitize functions check 'if <input> is None:' and raise TypeError('expected str, got NoneType'), exactly matching specification requirement"
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "handle_data in SafeHTMLParser calls html.escape(data) which preserves whitespace including newlines, only escaping HTML special characters"
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "TEMPLATE_EXPR pattern matches '{{', '}}', and '${', and in strict mode raises SecurityError, in normal mode escapes them to HTML entities preventing template injection"
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "satisfied",
+        "reasoning": "sanitize_sql explicitly removes CRLF: 'sanitized = sql_input.replace('\\r', '').replace('\\n', ' ')' converting to spaces before other checks"
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "satisfied",
+        "reasoning": "MAX_INPUT_LENGTH = 10_000_000 constant enforced in sanitize_html with 'if len(html_input) > MAX_INPUT_LENGTH: raise ValueError', preventing DoS from excessive input"
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "satisfied",
+        "reasoning": "SCRIPT_PATTERN uses re.DOTALL flag to match across HTML comments, and normalization happens before checks, catching polyglot attempts that combine multiple contexts"
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "satisfied",
+        "reasoning": "handle_entityref and handle_charref preserve entities by appending '&{name};' and '&#{name};' to result, maintaining entity encoding rather than decoding"
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "satisfied",
+        "reasoning": "META_REFRESH pattern detects meta refresh tags, and in strict mode raises SecurityError('Meta refresh redirect detected'), in normal mode meta is in DANGEROUS_TAGS and removed"
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "satisfied",
+        "reasoning": "All regex patterns use re.IGNORECASE flag (SCRIPT_PATTERN, DANGEROUS_PROTOCOLS, SQL patterns, etc.) and tag comparisons use .lower(), handling case variations"
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "satisfied",
+        "reasoning": "MAX_NESTING_DEPTH = 100 enforced in SafeHTMLParser.handle_starttag with 'if self.nesting_depth >= MAX_NESTING_DEPTH' check, preventing stack overflow from deep nesting"
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "_sanitize_url checks for data: scheme via DANGEROUS_PROTOCOLS pattern matching, and data: is not in SAFE_URI_SCHEMES, blocking base64-encoded data URIs"
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "unknown",
+        "reasoning": "Cannot verify performance requirements through static analysis. Code uses compiled regex patterns at module level which helps performance, but actual timing depends on runtime environment"
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "satisfied",
+        "reasoning": "DANGEROUS_TAGS set includes 'object' and 'embed', checked in handle_starttag and removed from output, preventing object/embed tag abuse"
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "satisfied",
+        "reasoning": "sanitize_html accepts allowed_tags parameter passed to SafeHTMLParser, which checks 'if tag_lower not in self.allowed_tags' to remove non-whitelisted tags"
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "satisfied",
+        "reasoning": "All sanitize functions check 'if isinstance(<input>, bytes): <input> = <input>.decode('utf-8', errors='replace')' accepting and properly decoding bytes input"
+      },
+      {
+        "specId": "SPEC-036",
+        "status": "satisfied",
+        "reasoning": "SafeHTMLParser inherits from HTMLParser which handles malformed HTML, and try/except in sanitize_html catches parse errors with fallback to html.escape"
+      },
+      {
+        "specId": "SPEC-037",
+        "status": "partial",
+        "reasoning": "Form tags are not in ALLOWED_TAGS by default so forms would be stripped, but there's no explicit form action validation logic. Depends on configuration whether forms are allowed at all"
+      },
+      {
+        "specId": "SPEC-038",
+        "status": "satisfied",
+        "reasoning": "handle_starttag has explicit check for data- attributes: 'if attr_lower.startswith(\"data-\"): if self._is_safe_data_attr(attr_value):' preserving safe data attributes"
+      },
+      {
+        "specId": "SPEC-039",
+        "status": "satisfied",
+        "reasoning": "INVISIBLE_CHARS list includes '\\ufeff' (BOM) and _normalize_input removes all invisible characters with 'for char in INVISIBLE_CHARS: text = text.replace(char, \"\")'"
+      },
+      {
+        "specId": "SPEC-040",
+        "status": "satisfied",
+        "reasoning": "All regex patterns compiled at module level (SCRIPT_PATTERN, DANGEROUS_PROTOCOLS, etc.) using re.compile() stored in constants, avoiding recompilation on each call"
+      },
+      {
+        "specId": "SPEC-041",
+        "status": "satisfied",
+        "reasoning": "sanitize_html has return_report parameter, when True returns tuple (sanitized, parser.report) where report dict contains 'removed_tags', 'removed_attrs', 'blocked_content'"
+      },
+      {
+        "specId": "SPEC-042",
+        "status": "partial",
+        "reasoning": "Bytes input decoded with errors='replace' handles encoding issues gracefully, but no explicit mixed encoding declaration handling. Basic robustness exists but not specifically tested"
+      },
+      {
+        "specId": "SPEC-043",
+        "status": "satisfied",
+        "reasoning": "sanitize_html accepts strict parameter, SafeHTMLParser raises SecurityError when strict=True and malicious content detected rather than sanitizing silently"
+      },
+      {
+        "specId": "SPEC-044",
+        "status": "satisfied",
+        "reasoning": "All functions have complete type hints with Optional, Dict, Tuple, Set, List, Union from typing module. Return types and parameters fully annotated for static analysis"
+      },
+      {
+        "specId": "SPEC-045",
+        "status": "unknown",
+        "reasoning": "Cannot verify memory efficiency through static analysis. Code appends to result list rather than string concatenation which is better, but actual memory overhead depends on runtime behavior"
+      }
+    ],
+    "satisfiedCount": 40,
+    "totalSpecs": 45,
+    "generatedAt": "2026-02-12T06:50:35.147Z",
+    "inputTokens": 13204,
+    "outputTokens": 8131
+  },
+  "totalInputTokens": 17010,
+  "totalOutputTokens": 16084,
+  "totalDurationMs": 251651
+}

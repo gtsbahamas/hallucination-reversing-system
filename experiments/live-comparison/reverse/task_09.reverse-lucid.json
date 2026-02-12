@@ -1,0 +1,1590 @@
+{
+  "task": "Write an event store that appends events, rebuilds aggregate state, supports snapshots, and handles concurrent writes with optimistic locking",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write an event store that appends events, rebuilds aggregate state, supports snapshots, and handles concurrent writes with optimistic locking",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "append_event must store event with correct aggregate_id, event_type, and data",
+        "assertion": "store.append_event('agg-1', 'ItemAdded', {'item': 'apple'}) followed by store.get_events('agg-1') returns list containing event with event_type='ItemAdded' and data={'item': 'apple'}",
+        "rationale": "Core functionality - events must be persisted accurately for event sourcing to work"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Events for the same aggregate must be returned in append order",
+        "assertion": "After appending events E1, E2, E3 to 'agg-1', get_events('agg-1') returns [E1, E2, E3] in that exact order",
+        "rationale": "Event order determines aggregate state; incorrect ordering produces wrong business logic results"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Each appended event must receive a monotonically increasing version number per aggregate",
+        "assertion": "Appending 3 events to 'agg-1' assigns versions 1, 2, 3. Next append to same aggregate gets version 4",
+        "rationale": "Version numbers enable optimistic locking and event ordering guarantees"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "rebuild_aggregate must apply all events in order to produce correct state",
+        "assertion": "After appending ItemAdded(apple), ItemAdded(banana), ItemRemoved(apple) to 'cart-1', rebuild_aggregate('cart-1', initial_state={}) applies events sequentially and returns final computed state",
+        "rationale": "Aggregate rebuilding is the foundation of event sourcing; incorrect application breaks business logic"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Optimistic locking must prevent concurrent writes with stale version",
+        "assertion": "append_event('agg-1', 'Event1', {}, expected_version=5) raises ConcurrencyException when current version is 6",
+        "rationale": "Prevents lost updates and maintains consistency in concurrent scenarios"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Optimistic locking must allow write when expected_version matches current version",
+        "assertion": "After 3 events appended to 'agg-1' (current version=3), append_event('agg-1', 'Event4', {}, expected_version=3) succeeds and assigns version 4",
+        "rationale": "Correct optimistic locking enables safe concurrent operations"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "save_snapshot must store aggregate state at specific version",
+        "assertion": "save_snapshot('agg-1', version=10, state={'items': ['x', 'y']}) followed by get_snapshot('agg-1') returns snapshot with version=10 and state={'items': ['x', 'y']}",
+        "rationale": "Snapshots optimize rebuilding; incorrect snapshots corrupt aggregate state"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "rebuild_aggregate with snapshot must load snapshot then apply only newer events",
+        "assertion": "Snapshot at version 5 exists. rebuild_aggregate('agg-1') loads snapshot state and applies only events with version > 5",
+        "rationale": "Snapshots reduce computation; must not re-apply already-incorporated events"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "correctness",
+        "severity": "high",
+        "description": "get_events for non-existent aggregate returns empty list",
+        "assertion": "get_events('nonexistent-agg-id') returns []",
+        "rationale": "Distinguishing new aggregates from retrieval errors enables proper initialization"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Each event must have a unique, immutable event_id",
+        "assertion": "Two calls to append_event produce events with different event_id values that never change",
+        "rationale": "Event identity enables idempotency checks and event tracking"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Events must include timestamp of when they were appended",
+        "assertion": "append_event('agg-1', 'TestEvent', {}) produces event with timestamp field containing datetime near current time (within 1 second)",
+        "rationale": "Timestamps enable auditing, debugging, and temporal queries"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "correctness",
+        "severity": "high",
+        "description": "get_events with from_version parameter returns only events with version >= from_version",
+        "assertion": "After appending events with versions 1-10 to 'agg-1', get_events('agg-1', from_version=6) returns only events with versions 6, 7, 8, 9, 10",
+        "rationale": "Filtering events by version optimizes snapshot-based rebuilding"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "append_event must work correctly when no events exist yet for aggregate",
+        "assertion": "append_event to new aggregate 'agg-new' assigns version 1 and succeeds",
+        "rationale": "First event for aggregate is common case; failure breaks new aggregate creation"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Optimistic locking with expected_version=0 must succeed only if no events exist",
+        "assertion": "append_event('agg-1', 'Event', {}, expected_version=0) succeeds for new aggregate but raises ConcurrencyException if any events already exist",
+        "rationale": "Version 0 check enables safe aggregate creation in concurrent scenarios"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "get_snapshot for aggregate without snapshot returns None",
+        "assertion": "get_snapshot('agg-without-snapshot') returns None",
+        "rationale": "Distinguishes no-snapshot from error; allows rebuild to fall back to full event replay"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "rebuild_aggregate with no events and no snapshot returns initial_state unchanged",
+        "assertion": "rebuild_aggregate('new-agg', initial_state={'count': 0}) returns {'count': 0}",
+        "rationale": "Empty aggregate should preserve initial state for proper aggregate initialization"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Multiple snapshots for same aggregate must return most recent one",
+        "assertion": "After save_snapshot('agg-1', version=5, state=S1) and save_snapshot('agg-1', version=10, state=S2), get_snapshot('agg-1') returns snapshot with version=10 and state=S2",
+        "rationale": "Latest snapshot contains most recent state; older snapshots are obsolete"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "append_event with empty data dict must succeed",
+        "assertion": "append_event('agg-1', 'EmptyEvent', {}) succeeds and stored event has data={}",
+        "rationale": "Some events carry no data (e.g., 'OrderCancelled'); empty data is valid"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Event data with nested structures must be preserved accurately",
+        "assertion": "append_event with data={'user': {'name': 'Alice', 'tags': ['admin', 'vip']}} followed by get_events returns event with exact nested structure intact",
+        "rationale": "Complex event data is common; serialization must preserve structure"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "aggregate_id with special characters must be handled correctly",
+        "assertion": "append_event('agg:id/with-special_chars@123', 'Event', {}) succeeds and get_events('agg:id/with-special_chars@123') retrieves the event",
+        "rationale": "UUIDs, URIs, or composite keys may contain special characters"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "append_event with None aggregate_id must raise ValueError",
+        "assertion": "append_event(None, 'Event', {}) raises ValueError with message indicating aggregate_id is required",
+        "rationale": "Aggregate ID is mandatory; accepting None would corrupt event storage"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "append_event with empty string aggregate_id must raise ValueError",
+        "assertion": "append_event('', 'Event', {}) raises ValueError",
+        "rationale": "Empty aggregate ID is invalid; prevents creation of unretrievable events"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "append_event with None event_type must raise ValueError",
+        "assertion": "append_event('agg-1', None, {}) raises ValueError with message indicating event_type is required",
+        "rationale": "Event type is essential for event handlers; None would break event processing"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "append_event with None data must raise ValueError or treat as empty dict",
+        "assertion": "append_event('agg-1', 'Event', None) either raises ValueError or stores event with data={}",
+        "rationale": "Explicit handling of None prevents ambiguous data representation"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "ConcurrencyException must include aggregate_id and version conflict details",
+        "assertion": "When optimistic lock fails, raised ConcurrencyException contains aggregate_id, expected_version, and actual_version in message or attributes",
+        "rationale": "Detailed error info enables proper retry logic and debugging"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "rebuild_aggregate with invalid apply_event function must raise descriptive error",
+        "assertion": "rebuild_aggregate('agg-1', apply_event=None) raises TypeError indicating apply_event must be callable",
+        "rationale": "Early validation prevents cryptic errors during event application"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "save_snapshot with negative version must raise ValueError",
+        "assertion": "save_snapshot('agg-1', version=-1, state={}) raises ValueError",
+        "rationale": "Negative versions are logically invalid; accepting them corrupts versioning"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "get_events with negative from_version must raise ValueError",
+        "assertion": "get_events('agg-1', from_version=-5) raises ValueError",
+        "rationale": "Negative version filters are nonsensical; fail fast to catch bugs"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "security",
+        "severity": "critical",
+        "description": "Event data must be stored safely without code injection vulnerabilities",
+        "assertion": "append_event('agg-1', 'Event', {'code': '__import__(\"os\").system(\"rm -rf /\")'}) stores string safely without executing it",
+        "rationale": "Malicious event data must not enable code execution attacks"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "critical",
+        "description": "aggregate_id must not enable path traversal or injection attacks",
+        "assertion": "append_event('../../../etc/passwd', 'Event', {}) either sanitizes the ID or raises ValueError; must not access file system paths",
+        "rationale": "Unsanitized IDs could exploit file-based storage backends"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "high",
+        "description": "Event data size must have reasonable limits to prevent memory exhaustion",
+        "assertion": "append_event with data containing 1GB string raises ValueError or DataTooLargeException",
+        "rationale": "Unbounded data size enables denial-of-service attacks"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "security",
+        "severity": "high",
+        "description": "Event metadata must be immutable after storage",
+        "assertion": "After append_event, modifying returned event object does not affect stored event retrieved via get_events",
+        "rationale": "Event immutability is fundamental to event sourcing; mutation breaks audit trail"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "aggregate_id must be string type",
+        "assertion": "append_event(12345, 'Event', {}) raises TypeError indicating aggregate_id must be string",
+        "rationale": "Type consistency prevents subtle bugs in ID comparison and storage"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "event_type must be string type",
+        "assertion": "append_event('agg-1', 123, {}) raises TypeError indicating event_type must be string",
+        "rationale": "String event types enable pattern matching and routing"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "data must be dict type",
+        "assertion": "append_event('agg-1', 'Event', 'not a dict') raises TypeError indicating data must be dict",
+        "rationale": "Dict structure enables consistent event deserialization"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "expected_version must be int or None",
+        "assertion": "append_event('agg-1', 'Event', {}, expected_version='3') raises TypeError",
+        "rationale": "Type safety prevents version comparison errors"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "from_version parameter must be int type",
+        "assertion": "get_events('agg-1', from_version='5') raises TypeError",
+        "rationale": "Type safety in version filtering prevents incorrect results"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "snapshot version must be int type",
+        "assertion": "save_snapshot('agg-1', version='10', state={}) raises TypeError",
+        "rationale": "Type safety ensures consistent version handling"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Event data dict must be JSON-serializable",
+        "assertion": "append_event('agg-1', 'Event', {'obj': object()}) raises TypeError or ValueError indicating data must be JSON-serializable",
+        "rationale": "Non-serializable data cannot be persisted; fail early to prevent runtime errors"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "performance",
+        "severity": "critical",
+        "description": "append_event must complete in O(1) time complexity",
+        "assertion": "Time to append_event does not increase with number of existing events for aggregate",
+        "rationale": "Append performance must scale; O(n) appends create quadratic overall cost"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "performance",
+        "severity": "critical",
+        "description": "get_events must retrieve events in O(n) where n is number of events for aggregate",
+        "assertion": "Time to retrieve k events is proportional to k, not to total events in store",
+        "rationale": "Linear retrieval enables efficient aggregate rebuilding"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "performance",
+        "severity": "high",
+        "description": "Snapshots must reduce rebuild time for aggregates with many events",
+        "assertion": "Rebuilding aggregate with 10,000 events and snapshot at version 9,900 is at least 90% faster than rebuilding without snapshot",
+        "rationale": "Snapshots justify their complexity only if they significantly improve performance"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "performance",
+        "severity": "high",
+        "description": "get_events with from_version must not load unnecessary events",
+        "assertion": "get_events('agg-1', from_version=1000) for aggregate with 10,000 events retrieves approximately 9,000 events, not all 10,000",
+        "rationale": "Efficient filtering prevents loading and discarding data"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Concurrent append_event calls for different aggregates must not block each other",
+        "assertion": "Appending to 'agg-1' does not acquire locks that prevent simultaneous append to 'agg-2'",
+        "rationale": "Per-aggregate locking enables horizontal scalability"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Memory usage for get_events must be proportional to returned events, not all events in store",
+        "assertion": "get_events('agg-1') with 100 events uses memory proportional to 100 events even if store contains 1,000,000 total events",
+        "rationale": "Memory efficiency prevents OOM errors with large event stores"
+      },
+      {
+        "id": "SPEC-046",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Events for different aggregates must be isolated",
+        "assertion": "After appending events to 'agg-1' and 'agg-2', get_events('agg-1') returns only events for 'agg-1', not 'agg-2'",
+        "rationale": "Aggregate isolation is fundamental; cross-contamination breaks event sourcing"
+      },
+      {
+        "id": "SPEC-047",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "rebuild_aggregate must pass correct event to apply_event function",
+        "assertion": "apply_event function receives event object with all fields (event_id, aggregate_id, event_type, data, version, timestamp) populated",
+        "rationale": "Event handlers may need any event field; missing data breaks business logic"
+      },
+      {
+        "id": "SPEC-048",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Very long aggregate_id must be handled without truncation",
+        "assertion": "append_event with aggregate_id of 1000 characters succeeds and get_events retrieves events using full 1000-char ID",
+        "rationale": "UUID-based IDs or composite keys can be long; truncation causes retrieval failures"
+      },
+      {
+        "id": "SPEC-049",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Snapshot at version higher than latest event should not break rebuild",
+        "assertion": "If latest event has version 5 but snapshot exists at version 10, rebuild_aggregate handles gracefully (uses snapshot or ignores it)",
+        "rationale": "Clock skew or bugs might create future-versioned snapshots; system must be resilient"
+      },
+      {
+        "id": "SPEC-050",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Optimistic locking must work correctly when expected_version equals current highest version",
+        "assertion": "If aggregate has 5 events (versions 1-5), append_event with expected_version=5 succeeds and creates version 6",
+        "rationale": "Expected version matching current version is the common success case for optimistic locking"
+      }
+    ],
+    "totalSpecs": 50,
+    "synthesizedAt": "2026-02-12T06:44:06.546Z",
+    "inputTokens": 592,
+    "outputTokens": 5558
+  },
+  "constraintSet": {
+    "task": "Write an event store that appends events, rebuilds aggregate state, supports snapshots, and handles concurrent writes with optimistic locking",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Use atomic operations or transactions for shared state updates",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never use read-then-write pattern for counters without locking",
+        "pattern": "const count = await getCount(); await setCount(count + 1);",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Include cache invalidation or TTL mechanism",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never allow unbounded cache growth without eviction policy",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "append_event must atomically assign monotonically increasing version numbers per aggregate, ensuring no gaps or duplicates even under concurrent access. Use a per-aggregate counter or sequence that increments transactionally.",
+        "pattern": "version = self._get_next_version(aggregate_id)  # atomic increment",
+        "source": "spec"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "get_events must return events in strict append order by sorting on version number (ascending), not insertion timestamp or event_id, to guarantee deterministic aggregate replay.",
+        "pattern": "return sorted(events, key=lambda e: e.version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Optimistic locking must compare expected_version against the current highest version for the aggregate before appending. If expected_version is provided and does not match current version, raise ConcurrencyException before any write occurs.",
+        "pattern": "if expected_version is not None and expected_version != current_version: raise ConcurrencyException(...)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "rebuild_aggregate must load the most recent snapshot (if exists), initialize state from snapshot.state, then apply only events with version > snapshot.version using the apply_event function in sequential order.",
+        "pattern": "snapshot = get_snapshot(agg_id); state = snapshot.state if snapshot else initial_state; events = get_events(agg_id, from_version=snapshot.version+1 if snapshot else 1)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "When expected_version=0 for optimistic locking, append must succeed only if aggregate has no events (current version is 0). If any events exist, raise ConcurrencyException to prevent duplicate initialization.",
+        "pattern": "if expected_version == 0 and current_version > 0: raise ConcurrencyException(...)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Each event must be assigned a unique, immutable event_id at creation time (use UUID4 or similar) that is stored with the event and never modified.",
+        "pattern": "event_id = str(uuid.uuid4())",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "append_event must capture and store a timestamp (using datetime.utcnow() or similar) at the moment of event creation, before persistence, to record when the event was appended.",
+        "pattern": "timestamp = datetime.utcnow()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "get_events with from_version parameter must filter events to return only those with version >= from_version, using indexed or efficient filtering to avoid loading unnecessary events.",
+        "pattern": "events = [e for e in all_events if e.version >= from_version]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "For aggregates with no events, get_events must return an empty list [], not None or raise an exception, to allow safe iteration.",
+        "pattern": "if aggregate_id not in self._events: return []",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "get_snapshot for aggregate without snapshot must return None explicitly, allowing callers to distinguish between no snapshot and snapshot with empty state.",
+        "pattern": "return self._snapshots.get(aggregate_id, None)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "When multiple snapshots exist for an aggregate, get_snapshot must return the snapshot with the highest version number, ensuring rebuild uses the most recent state.",
+        "pattern": "return max(snapshots, key=lambda s: s.version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Event data must be deep-copied or serialized/deserialized when stored and retrieved to ensure immutability—modifications to returned event objects must not affect stored events.",
+        "pattern": "stored_data = copy.deepcopy(data)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Events for different aggregates must be stored in separate collections or partitions (keyed by aggregate_id) to ensure isolation and prevent cross-aggregate contamination.",
+        "pattern": "self._events[aggregate_id].append(event)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "rebuild_aggregate must pass complete event objects (with event_id, aggregate_id, event_type, data, version, timestamp) to the apply_event function, not just data payload.",
+        "pattern": "state = apply_event(state, event)  # event is full object",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must-not",
+        "description": "Must-not use global locks or single-threaded access for append_event across all aggregates. Use per-aggregate locking or optimistic concurrency to allow parallel writes to different aggregates.",
+        "pattern": "# BAD: with self._global_lock:  # blocks all aggregates\n# GOOD: with self._get_aggregate_lock(aggregate_id):",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must-not",
+        "description": "Must-not execute or eval event data content. Event data must be treated as pure data (JSON-serializable dicts) and never interpreted as code, even if it contains strings resembling code.",
+        "pattern": "# BAD: eval(event.data['code'])\n# GOOD: stored_data = json.dumps(data); json.loads(stored_data)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must-not",
+        "description": "Must-not use aggregate_id as file path, database table name, or any identifier that could enable path traversal or SQL injection. Sanitize or validate aggregate_id against a safe pattern (alphanumeric + limited special chars), or use parameterized queries.",
+        "pattern": "# BAD: open(f'/data/{aggregate_id}.json')\n# GOOD: if not re.match(r'^[a-zA-Z0-9_:-]+$', aggregate_id): raise ValueError",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "append_event must validate that aggregate_id is a non-empty string, raising ValueError with descriptive message if it is None, empty string, or not a string type.",
+        "pattern": "if not isinstance(aggregate_id, str) or not aggregate_id: raise ValueError('aggregate_id must be non-empty string')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "append_event must validate that event_type is a non-empty string, raising ValueError or TypeError with descriptive message if it is None, empty, or not a string type.",
+        "pattern": "if not isinstance(event_type, str) or not event_type: raise ValueError('event_type must be non-empty string')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "append_event must validate that data is a dict type (or None, treating None as empty dict). If data is not dict or None, raise TypeError with descriptive message.",
+        "pattern": "if data is None: data = {}\nif not isinstance(data, dict): raise TypeError('data must be dict')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "append_event must validate that expected_version (if provided) is an integer or None. If it is a string or other type, raise TypeError before performing any write.",
+        "pattern": "if expected_version is not None and not isinstance(expected_version, int): raise TypeError('expected_version must be int or None')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "get_events with from_version parameter must validate it is an int type (not string). Raise TypeError if from_version is provided but not an integer.",
+        "pattern": "if from_version is not None and not isinstance(from_version, int): raise TypeError('from_version must be int')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "save_snapshot must validate that version is a positive integer (>= 0). Raise ValueError if version is negative, and TypeError if version is not an int.",
+        "pattern": "if not isinstance(version, int): raise TypeError('version must be int')\nif version < 0: raise ValueError('version must be non-negative')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "get_events must validate that from_version (if provided) is non-negative. Raise ValueError if from_version is negative.",
+        "pattern": "if from_version is not None and from_version < 0: raise ValueError('from_version must be non-negative')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Event data must be validated for JSON-serializability before storage. Attempt json.dumps(data) and catch TypeError to raise descriptive error if data contains non-serializable objects.",
+        "pattern": "try: json.dumps(data)\nexcept TypeError: raise ValueError('data must be JSON-serializable')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "ConcurrencyException must include aggregate_id, expected_version, and actual_version in the exception message or as attributes to help diagnose optimistic lock failures.",
+        "pattern": "raise ConcurrencyException(f'Conflict on {aggregate_id}: expected {expected_version}, actual {actual_version}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "rebuild_aggregate must validate that apply_event is callable. Raise TypeError with descriptive message if apply_event is None or not a function.",
+        "pattern": "if not callable(apply_event): raise TypeError('apply_event must be callable')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Event data size must be limited to prevent memory exhaustion attacks. Check len(json.dumps(data)) and raise ValueError or DataTooLargeException if it exceeds a reasonable threshold (e.g., 1MB).",
+        "pattern": "if len(json.dumps(data)) > 1_000_000: raise ValueError('data exceeds size limit')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "prefer",
+        "description": "Prefer in-memory dict structures (keyed by aggregate_id) for event storage in simple implementations to achieve O(1) append and O(n) retrieval per aggregate. For production, use indexed database tables with aggregate_id + version as composite key.",
+        "pattern": "self._events = defaultdict(list)  # or DB with index on (aggregate_id, version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "prefer",
+        "description": "Prefer storing events as immutable dataclass or namedtuple instances rather than plain dicts to enforce field presence and prevent accidental mutation during retrieval.",
+        "pattern": "@dataclass(frozen=True)\nclass Event:\n    event_id: str\n    aggregate_id: str\n    event_type: str\n    data: dict\n    version: int\n    timestamp: datetime",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Very long aggregate_id (up to 1000+ characters) must be stored and retrieved without truncation. Use VARCHAR/TEXT columns or string keys without length limits in storage layer.",
+        "pattern": "# Ensure DB schema uses TEXT or VARCHAR(unlimited), not VARCHAR(255)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must",
+        "description": "When snapshot version is higher than latest event version, rebuild_aggregate must handle gracefully by using snapshot state without attempting to apply non-existent newer events (from_version filter returns empty list).",
+        "pattern": "events = get_events(agg_id, from_version=snapshot.version+1)  # returns [] if no newer events",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 36,
+    "generatedAt": "2026-02-12T06:44:53.091Z",
+    "inputTokens": 3474,
+    "outputTokens": 2865
+  },
+  "generatedCode": {
+    "task": "Write an event store that appends events, rebuilds aggregate state, supports snapshots, and handles concurrent writes with optimistic locking",
+    "code": "import json\nimport uuid\nimport re\nfrom datetime import datetime\nfrom typing import Dict, List, Optional, Callable, Any\nfrom dataclasses import dataclass, field, asdict\nfrom threading import Lock\nfrom collections import defaultdict\nimport copy\n\n\nclass ConcurrencyException(Exception):\n    \"\"\"Raised when optimistic locking detects a version conflict.\"\"\"\n    \n    def __init__(self, aggregate_id: str, expected_version: int, actual_version: int):\n        self.aggregate_id = aggregate_id\n        self.expected_version = expected_version\n        self.actual_version = actual_version\n        super().__init__(\n            f'Conflict on {aggregate_id}: expected version {expected_version}, actual version {actual_version}'\n        )\n\n\nclass DataTooLargeException(Exception):\n    \"\"\"Raised when event data exceeds size limit.\"\"\"\n    pass\n\n\n@dataclass(frozen=True)\nclass Event:\n    \"\"\"Immutable event record.\"\"\"\n    event_id: str\n    aggregate_id: str\n    event_type: str\n    data: Dict[str, Any]\n    version: int\n    timestamp: datetime\n\n\n@dataclass(frozen=True)\nclass Snapshot:\n    \"\"\"Immutable snapshot record.\"\"\"\n    aggregate_id: str\n    version: int\n    state: Dict[str, Any]\n    timestamp: datetime\n\n\nclass EventStore:\n    \"\"\"Event store with optimistic locking and snapshot support.\"\"\"\n    \n    def __init__(self):\n        self._events: Dict[str, List[Event]] = defaultdict(list)\n        self._snapshots: Dict[str, List[Snapshot]] = {}\n        self._aggregate_locks: Dict[str, Lock] = defaultdict(Lock)\n        self._version_counters: Dict[str, int] = defaultdict(int)\n        self._max_data_size = 1_000_000  # 1MB limit\n    \n    def _validate_aggregate_id(self, aggregate_id: Any) -> None:\n        \"\"\"Validate aggregate_id is non-empty string.\"\"\"\n        if not isinstance(aggregate_id, str):\n            raise TypeError('aggregate_id must be string')\n        if not aggregate_id:\n            raise ValueError('aggregate_id must be non-empty string')\n    \n    def _validate_event_type(self, event_type: Any) -> None:\n        \"\"\"Validate event_type is non-empty string.\"\"\"\n        if not isinstance(event_type, str):\n            raise TypeError('event_type must be string')\n        if not event_type:\n            raise ValueError('event_type must be non-empty string')\n    \n    def _validate_data(self, data: Any) -> Dict[str, Any]:\n        \"\"\"Validate and normalize event data.\"\"\"\n        if data is None:\n            return {}\n        if not isinstance(data, dict):\n            raise TypeError('data must be dict')\n        \n        # Deep copy to ensure immutability\n        validated_data = copy.deepcopy(data)\n        \n        # Check JSON serializability\n        try:\n            serialized = json.dumps(validated_data)\n        except TypeError as e:\n            raise ValueError('data must be JSON-serializable') from e\n        \n        # Check size limit\n        if len(serialized) > self._max_data_size:\n            raise DataTooLargeException('data exceeds size limit')\n        \n        return validated_data\n    \n    def _validate_expected_version(self, expected_version: Any) -> None:\n        \"\"\"Validate expected_version type.\"\"\"\n        if expected_version is not None and not isinstance(expected_version, int):\n            raise TypeError('expected_version must be int or None')\n    \n    def _validate_from_version(self, from_version: Any) -> None:\n        \"\"\"Validate from_version parameter.\"\"\"\n        if from_version is not None:\n            if not isinstance(from_version, int):\n                raise TypeError('from_version must be int')\n            if from_version < 0:\n                raise ValueError('from_version must be non-negative')\n    \n    def _validate_snapshot_version(self, version: Any) -> None:\n        \"\"\"Validate snapshot version.\"\"\"\n        if not isinstance(version, int):\n            raise TypeError('version must be int')\n        if version < 0:\n            raise ValueError('version must be non-negative')\n    \n    def _get_current_version(self, aggregate_id: str) -> int:\n        \"\"\"Get current version for aggregate.\"\"\"\n        return self._version_counters[aggregate_id]\n    \n    def _get_next_version(self, aggregate_id: str) -> int:\n        \"\"\"Atomically increment and return next version for aggregate.\"\"\"\n        self._version_counters[aggregate_id] += 1\n        return self._version_counters[aggregate_id]\n    \n    def append_event(\n        self,\n        aggregate_id: str,\n        event_type: str,\n        data: Dict[str, Any],\n        expected_version: Optional[int] = None\n    ) -> Event:\n        \"\"\"\n        Append event to aggregate with optimistic locking.\n        \n        Args:\n            aggregate_id: Unique identifier for the aggregate\n            event_type: Type/name of the event\n            data: Event payload as dictionary\n            expected_version: Expected current version for optimistic locking\n            \n        Returns:\n            The created Event object\n            \n        Raises:\n            ValueError: If aggregate_id, event_type, or data is invalid\n            TypeError: If parameters have wrong types\n            ConcurrencyException: If expected_version doesn't match current version\n            DataTooLargeException: If data exceeds size limit\n        \"\"\"\n        # Validate inputs\n        self._validate_aggregate_id(aggregate_id)\n        self._validate_event_type(event_type)\n        validated_data = self._validate_data(data)\n        self._validate_expected_version(expected_version)\n        \n        # Acquire per-aggregate lock\n        with self._aggregate_locks[aggregate_id]:\n            # Get current version\n            current_version = self._get_current_version(aggregate_id)\n            \n            # Optimistic locking check\n            if expected_version is not None:\n                if expected_version != current_version:\n                    raise ConcurrencyException(\n                        aggregate_id,\n                        expected_version,\n                        current_version\n                    )\n            \n            # Generate event metadata\n            event_id = str(uuid.uuid4())\n            timestamp = datetime.utcnow()\n            next_version = self._get_next_version(aggregate_id)\n            \n            # Create immutable event\n            event = Event(\n                event_id=event_id,\n                aggregate_id=aggregate_id,\n                event_type=event_type,\n                data=validated_data,\n                version=next_version,\n                timestamp=timestamp\n            )\n            \n            # Store event\n            self._events[aggregate_id].append(event)\n            \n            return event\n    \n    def get_events(\n        self,\n        aggregate_id: str,\n        from_version: Optional[int] = None\n    ) -> List[Event]:\n        \"\"\"\n        Retrieve events for aggregate.\n        \n        Args:\n            aggregate_id: Unique identifier for the aggregate\n            from_version: Optional minimum version (inclusive)\n            \n        Returns:\n            List of events in version order\n            \n        Raises:\n            ValueError: If from_version is negative\n            TypeError: If from_version is not int\n        \"\"\"\n        self._validate_aggregate_id(aggregate_id)\n        self._validate_from_version(from_version)\n        \n        # Get events for aggregate\n        events = self._events.get(aggregate_id, [])\n        \n        # Filter by version if specified\n        if from_version is not None:\n            events = [e for e in events if e.version >= from_version]\n        \n        # Sort by version to ensure order\n        return sorted(events, key=lambda e: e.version)\n    \n    def save_snapshot(\n        self,\n        aggregate_id: str,\n        version: int,\n        state: Dict[str, Any]\n    ) -> None:\n        \"\"\"\n        Save snapshot of aggregate state at specific version.\n        \n        Args:\n            aggregate_id: Unique identifier for the aggregate\n            version: Version number of the state\n            state: Aggregate state as dictionary\n            \n        Raises:\n            ValueError: If aggregate_id is invalid or version is negative\n            TypeError: If version is not int\n        \"\"\"\n        self._validate_aggregate_id(aggregate_id)\n        self._validate_snapshot_version(version)\n        \n        # Deep copy state to ensure immutability\n        state_copy = copy.deepcopy(state)\n        \n        # Create snapshot\n        snapshot = Snapshot(\n            aggregate_id=aggregate_id,\n            version=version,\n            state=state_copy,\n            timestamp=datetime.utcnow()\n        )\n        \n        # Store snapshot\n        if aggregate_id not in self._snapshots:\n            self._snapshots[aggregate_id] = []\n        self._snapshots[aggregate_id].append(snapshot)\n    \n    def get_snapshot(self, aggregate_id: str) -> Optional[Snapshot]:\n        \"\"\"\n        Retrieve most recent snapshot for aggregate.\n        \n        Args:\n            aggregate_id: Unique identifier for the aggregate\n            \n        Returns:\n            Most recent Snapshot or None if no snapshots exist\n        \"\"\"\n        self._validate_aggregate_id(aggregate_id)\n        \n        snapshots = self._snapshots.get(aggregate_id)\n        if not snapshots:\n            return None\n        \n        # Return snapshot with highest version\n        return max(snapshots, key=lambda s: s.version)\n    \n    def rebuild_aggregate(\n        self,\n        aggregate_id: str,\n        apply_event: Callable[[Dict[str, Any], Event], Dict[str, Any]],\n        initial_state: Optional[Dict[str, Any]] = None\n    ) -> Dict[str, Any]:\n        \"\"\"\n        Rebuild aggregate state by replaying events.\n        \n        Args:\n            aggregate_id: Unique identifier for the aggregate\n            apply_event: Function that applies event to state\n            initial_state: Starting state (defaults to empty dict)\n            \n        Returns:\n            Final aggregate state after applying all events\n            \n        Raises:\n            ValueError: If aggregate_id is invalid\n            TypeError: If apply_event is not callable\n        \"\"\"\n        self._validate_aggregate_id(aggregate_id)\n        \n        if not callable(apply_event):\n            raise TypeError('apply_event must be callable')\n        \n        if initial_state is None:\n            initial_state = {}\n        \n        # Start with initial state\n        state = copy.deepcopy(initial_state)\n        \n        # Check for snapshot\n        snapshot = self.get_snapshot(aggregate_id)\n        if snapshot:\n            # Load snapshot state\n            state = copy.deepcopy(snapshot.state)\n            # Get events after snapshot\n            events = self.get_events(aggregate_id, from_version=snapshot.version + 1)\n        else:\n            # Get all events\n            events = self.get_events(aggregate_id)\n        \n        # Apply events in order\n        for event in events:\n            state = apply_event(state, event)\n        \n        return state",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "append_event must store event with correct aggregate_id, event_type, and data",
+        "assertion": "store.append_event('agg-1', 'ItemAdded', {'item': 'apple'}) followed by store.get_events('agg-1') returns list containing event with event_type='ItemAdded' and data={'item': 'apple'}",
+        "rationale": "Core functionality - events must be persisted accurately for event sourcing to work"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Events for the same aggregate must be returned in append order",
+        "assertion": "After appending events E1, E2, E3 to 'agg-1', get_events('agg-1') returns [E1, E2, E3] in that exact order",
+        "rationale": "Event order determines aggregate state; incorrect ordering produces wrong business logic results"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Each appended event must receive a monotonically increasing version number per aggregate",
+        "assertion": "Appending 3 events to 'agg-1' assigns versions 1, 2, 3. Next append to same aggregate gets version 4",
+        "rationale": "Version numbers enable optimistic locking and event ordering guarantees"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "rebuild_aggregate must apply all events in order to produce correct state",
+        "assertion": "After appending ItemAdded(apple), ItemAdded(banana), ItemRemoved(apple) to 'cart-1', rebuild_aggregate('cart-1', initial_state={}) applies events sequentially and returns final computed state",
+        "rationale": "Aggregate rebuilding is the foundation of event sourcing; incorrect application breaks business logic"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Optimistic locking must prevent concurrent writes with stale version",
+        "assertion": "append_event('agg-1', 'Event1', {}, expected_version=5) raises ConcurrencyException when current version is 6",
+        "rationale": "Prevents lost updates and maintains consistency in concurrent scenarios"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Optimistic locking must allow write when expected_version matches current version",
+        "assertion": "After 3 events appended to 'agg-1' (current version=3), append_event('agg-1', 'Event4', {}, expected_version=3) succeeds and assigns version 4",
+        "rationale": "Correct optimistic locking enables safe concurrent operations"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "save_snapshot must store aggregate state at specific version",
+        "assertion": "save_snapshot('agg-1', version=10, state={'items': ['x', 'y']}) followed by get_snapshot('agg-1') returns snapshot with version=10 and state={'items': ['x', 'y']}",
+        "rationale": "Snapshots optimize rebuilding; incorrect snapshots corrupt aggregate state"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "rebuild_aggregate with snapshot must load snapshot then apply only newer events",
+        "assertion": "Snapshot at version 5 exists. rebuild_aggregate('agg-1') loads snapshot state and applies only events with version > 5",
+        "rationale": "Snapshots reduce computation; must not re-apply already-incorporated events"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "correctness",
+        "severity": "high",
+        "description": "get_events for non-existent aggregate returns empty list",
+        "assertion": "get_events('nonexistent-agg-id') returns []",
+        "rationale": "Distinguishing new aggregates from retrieval errors enables proper initialization"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Each event must have a unique, immutable event_id",
+        "assertion": "Two calls to append_event produce events with different event_id values that never change",
+        "rationale": "Event identity enables idempotency checks and event tracking"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Events must include timestamp of when they were appended",
+        "assertion": "append_event('agg-1', 'TestEvent', {}) produces event with timestamp field containing datetime near current time (within 1 second)",
+        "rationale": "Timestamps enable auditing, debugging, and temporal queries"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "correctness",
+        "severity": "high",
+        "description": "get_events with from_version parameter returns only events with version >= from_version",
+        "assertion": "After appending events with versions 1-10 to 'agg-1', get_events('agg-1', from_version=6) returns only events with versions 6, 7, 8, 9, 10",
+        "rationale": "Filtering events by version optimizes snapshot-based rebuilding"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "append_event must work correctly when no events exist yet for aggregate",
+        "assertion": "append_event to new aggregate 'agg-new' assigns version 1 and succeeds",
+        "rationale": "First event for aggregate is common case; failure breaks new aggregate creation"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Optimistic locking with expected_version=0 must succeed only if no events exist",
+        "assertion": "append_event('agg-1', 'Event', {}, expected_version=0) succeeds for new aggregate but raises ConcurrencyException if any events already exist",
+        "rationale": "Version 0 check enables safe aggregate creation in concurrent scenarios"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "get_snapshot for aggregate without snapshot returns None",
+        "assertion": "get_snapshot('agg-without-snapshot') returns None",
+        "rationale": "Distinguishes no-snapshot from error; allows rebuild to fall back to full event replay"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "rebuild_aggregate with no events and no snapshot returns initial_state unchanged",
+        "assertion": "rebuild_aggregate('new-agg', initial_state={'count': 0}) returns {'count': 0}",
+        "rationale": "Empty aggregate should preserve initial state for proper aggregate initialization"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Multiple snapshots for same aggregate must return most recent one",
+        "assertion": "After save_snapshot('agg-1', version=5, state=S1) and save_snapshot('agg-1', version=10, state=S2), get_snapshot('agg-1') returns snapshot with version=10 and state=S2",
+        "rationale": "Latest snapshot contains most recent state; older snapshots are obsolete"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "append_event with empty data dict must succeed",
+        "assertion": "append_event('agg-1', 'EmptyEvent', {}) succeeds and stored event has data={}",
+        "rationale": "Some events carry no data (e.g., 'OrderCancelled'); empty data is valid"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Event data with nested structures must be preserved accurately",
+        "assertion": "append_event with data={'user': {'name': 'Alice', 'tags': ['admin', 'vip']}} followed by get_events returns event with exact nested structure intact",
+        "rationale": "Complex event data is common; serialization must preserve structure"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "aggregate_id with special characters must be handled correctly",
+        "assertion": "append_event('agg:id/with-special_chars@123', 'Event', {}) succeeds and get_events('agg:id/with-special_chars@123') retrieves the event",
+        "rationale": "UUIDs, URIs, or composite keys may contain special characters"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "append_event with None aggregate_id must raise ValueError",
+        "assertion": "append_event(None, 'Event', {}) raises ValueError with message indicating aggregate_id is required",
+        "rationale": "Aggregate ID is mandatory; accepting None would corrupt event storage"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "append_event with empty string aggregate_id must raise ValueError",
+        "assertion": "append_event('', 'Event', {}) raises ValueError",
+        "rationale": "Empty aggregate ID is invalid; prevents creation of unretrievable events"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "append_event with None event_type must raise ValueError",
+        "assertion": "append_event('agg-1', None, {}) raises ValueError with message indicating event_type is required",
+        "rationale": "Event type is essential for event handlers; None would break event processing"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "append_event with None data must raise ValueError or treat as empty dict",
+        "assertion": "append_event('agg-1', 'Event', None) either raises ValueError or stores event with data={}",
+        "rationale": "Explicit handling of None prevents ambiguous data representation"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "ConcurrencyException must include aggregate_id and version conflict details",
+        "assertion": "When optimistic lock fails, raised ConcurrencyException contains aggregate_id, expected_version, and actual_version in message or attributes",
+        "rationale": "Detailed error info enables proper retry logic and debugging"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "rebuild_aggregate with invalid apply_event function must raise descriptive error",
+        "assertion": "rebuild_aggregate('agg-1', apply_event=None) raises TypeError indicating apply_event must be callable",
+        "rationale": "Early validation prevents cryptic errors during event application"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "save_snapshot with negative version must raise ValueError",
+        "assertion": "save_snapshot('agg-1', version=-1, state={}) raises ValueError",
+        "rationale": "Negative versions are logically invalid; accepting them corrupts versioning"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "get_events with negative from_version must raise ValueError",
+        "assertion": "get_events('agg-1', from_version=-5) raises ValueError",
+        "rationale": "Negative version filters are nonsensical; fail fast to catch bugs"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "security",
+        "severity": "critical",
+        "description": "Event data must be stored safely without code injection vulnerabilities",
+        "assertion": "append_event('agg-1', 'Event', {'code': '__import__(\"os\").system(\"rm -rf /\")'}) stores string safely without executing it",
+        "rationale": "Malicious event data must not enable code execution attacks"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "critical",
+        "description": "aggregate_id must not enable path traversal or injection attacks",
+        "assertion": "append_event('../../../etc/passwd', 'Event', {}) either sanitizes the ID or raises ValueError; must not access file system paths",
+        "rationale": "Unsanitized IDs could exploit file-based storage backends"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "high",
+        "description": "Event data size must have reasonable limits to prevent memory exhaustion",
+        "assertion": "append_event with data containing 1GB string raises ValueError or DataTooLargeException",
+        "rationale": "Unbounded data size enables denial-of-service attacks"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "security",
+        "severity": "high",
+        "description": "Event metadata must be immutable after storage",
+        "assertion": "After append_event, modifying returned event object does not affect stored event retrieved via get_events",
+        "rationale": "Event immutability is fundamental to event sourcing; mutation breaks audit trail"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "aggregate_id must be string type",
+        "assertion": "append_event(12345, 'Event', {}) raises TypeError indicating aggregate_id must be string",
+        "rationale": "Type consistency prevents subtle bugs in ID comparison and storage"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "event_type must be string type",
+        "assertion": "append_event('agg-1', 123, {}) raises TypeError indicating event_type must be string",
+        "rationale": "String event types enable pattern matching and routing"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "data must be dict type",
+        "assertion": "append_event('agg-1', 'Event', 'not a dict') raises TypeError indicating data must be dict",
+        "rationale": "Dict structure enables consistent event deserialization"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "expected_version must be int or None",
+        "assertion": "append_event('agg-1', 'Event', {}, expected_version='3') raises TypeError",
+        "rationale": "Type safety prevents version comparison errors"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "from_version parameter must be int type",
+        "assertion": "get_events('agg-1', from_version='5') raises TypeError",
+        "rationale": "Type safety in version filtering prevents incorrect results"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "snapshot version must be int type",
+        "assertion": "save_snapshot('agg-1', version='10', state={}) raises TypeError",
+        "rationale": "Type safety ensures consistent version handling"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Event data dict must be JSON-serializable",
+        "assertion": "append_event('agg-1', 'Event', {'obj': object()}) raises TypeError or ValueError indicating data must be JSON-serializable",
+        "rationale": "Non-serializable data cannot be persisted; fail early to prevent runtime errors"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "performance",
+        "severity": "critical",
+        "description": "append_event must complete in O(1) time complexity",
+        "assertion": "Time to append_event does not increase with number of existing events for aggregate",
+        "rationale": "Append performance must scale; O(n) appends create quadratic overall cost"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "performance",
+        "severity": "critical",
+        "description": "get_events must retrieve events in O(n) where n is number of events for aggregate",
+        "assertion": "Time to retrieve k events is proportional to k, not to total events in store",
+        "rationale": "Linear retrieval enables efficient aggregate rebuilding"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "performance",
+        "severity": "high",
+        "description": "Snapshots must reduce rebuild time for aggregates with many events",
+        "assertion": "Rebuilding aggregate with 10,000 events and snapshot at version 9,900 is at least 90% faster than rebuilding without snapshot",
+        "rationale": "Snapshots justify their complexity only if they significantly improve performance"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "performance",
+        "severity": "high",
+        "description": "get_events with from_version must not load unnecessary events",
+        "assertion": "get_events('agg-1', from_version=1000) for aggregate with 10,000 events retrieves approximately 9,000 events, not all 10,000",
+        "rationale": "Efficient filtering prevents loading and discarding data"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Concurrent append_event calls for different aggregates must not block each other",
+        "assertion": "Appending to 'agg-1' does not acquire locks that prevent simultaneous append to 'agg-2'",
+        "rationale": "Per-aggregate locking enables horizontal scalability"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Memory usage for get_events must be proportional to returned events, not all events in store",
+        "assertion": "get_events('agg-1') with 100 events uses memory proportional to 100 events even if store contains 1,000,000 total events",
+        "rationale": "Memory efficiency prevents OOM errors with large event stores"
+      },
+      {
+        "id": "SPEC-046",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Events for different aggregates must be isolated",
+        "assertion": "After appending events to 'agg-1' and 'agg-2', get_events('agg-1') returns only events for 'agg-1', not 'agg-2'",
+        "rationale": "Aggregate isolation is fundamental; cross-contamination breaks event sourcing"
+      },
+      {
+        "id": "SPEC-047",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "rebuild_aggregate must pass correct event to apply_event function",
+        "assertion": "apply_event function receives event object with all fields (event_id, aggregate_id, event_type, data, version, timestamp) populated",
+        "rationale": "Event handlers may need any event field; missing data breaks business logic"
+      },
+      {
+        "id": "SPEC-048",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Very long aggregate_id must be handled without truncation",
+        "assertion": "append_event with aggregate_id of 1000 characters succeeds and get_events retrieves events using full 1000-char ID",
+        "rationale": "UUID-based IDs or composite keys can be long; truncation causes retrieval failures"
+      },
+      {
+        "id": "SPEC-049",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Snapshot at version higher than latest event should not break rebuild",
+        "assertion": "If latest event has version 5 but snapshot exists at version 10, rebuild_aggregate handles gracefully (uses snapshot or ignores it)",
+        "rationale": "Clock skew or bugs might create future-versioned snapshots; system must be resilient"
+      },
+      {
+        "id": "SPEC-050",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Optimistic locking must work correctly when expected_version equals current highest version",
+        "assertion": "If aggregate has 5 events (versions 1-5), append_event with expected_version=5 succeeds and creates version 6",
+        "rationale": "Expected version matching current version is the common success case for optimistic locking"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Use atomic operations or transactions for shared state updates",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never use read-then-write pattern for counters without locking",
+        "pattern": "const count = await getCount(); await setCount(count + 1);",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Include cache invalidation or TTL mechanism",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never allow unbounded cache growth without eviction policy",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "append_event must atomically assign monotonically increasing version numbers per aggregate, ensuring no gaps or duplicates even under concurrent access. Use a per-aggregate counter or sequence that increments transactionally.",
+        "pattern": "version = self._get_next_version(aggregate_id)  # atomic increment",
+        "source": "spec"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "get_events must return events in strict append order by sorting on version number (ascending), not insertion timestamp or event_id, to guarantee deterministic aggregate replay.",
+        "pattern": "return sorted(events, key=lambda e: e.version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Optimistic locking must compare expected_version against the current highest version for the aggregate before appending. If expected_version is provided and does not match current version, raise ConcurrencyException before any write occurs.",
+        "pattern": "if expected_version is not None and expected_version != current_version: raise ConcurrencyException(...)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "rebuild_aggregate must load the most recent snapshot (if exists), initialize state from snapshot.state, then apply only events with version > snapshot.version using the apply_event function in sequential order.",
+        "pattern": "snapshot = get_snapshot(agg_id); state = snapshot.state if snapshot else initial_state; events = get_events(agg_id, from_version=snapshot.version+1 if snapshot else 1)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "When expected_version=0 for optimistic locking, append must succeed only if aggregate has no events (current version is 0). If any events exist, raise ConcurrencyException to prevent duplicate initialization.",
+        "pattern": "if expected_version == 0 and current_version > 0: raise ConcurrencyException(...)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Each event must be assigned a unique, immutable event_id at creation time (use UUID4 or similar) that is stored with the event and never modified.",
+        "pattern": "event_id = str(uuid.uuid4())",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "append_event must capture and store a timestamp (using datetime.utcnow() or similar) at the moment of event creation, before persistence, to record when the event was appended.",
+        "pattern": "timestamp = datetime.utcnow()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "get_events with from_version parameter must filter events to return only those with version >= from_version, using indexed or efficient filtering to avoid loading unnecessary events.",
+        "pattern": "events = [e for e in all_events if e.version >= from_version]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "For aggregates with no events, get_events must return an empty list [], not None or raise an exception, to allow safe iteration.",
+        "pattern": "if aggregate_id not in self._events: return []",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "get_snapshot for aggregate without snapshot must return None explicitly, allowing callers to distinguish between no snapshot and snapshot with empty state.",
+        "pattern": "return self._snapshots.get(aggregate_id, None)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "When multiple snapshots exist for an aggregate, get_snapshot must return the snapshot with the highest version number, ensuring rebuild uses the most recent state.",
+        "pattern": "return max(snapshots, key=lambda s: s.version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Event data must be deep-copied or serialized/deserialized when stored and retrieved to ensure immutability—modifications to returned event objects must not affect stored events.",
+        "pattern": "stored_data = copy.deepcopy(data)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Events for different aggregates must be stored in separate collections or partitions (keyed by aggregate_id) to ensure isolation and prevent cross-aggregate contamination.",
+        "pattern": "self._events[aggregate_id].append(event)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "rebuild_aggregate must pass complete event objects (with event_id, aggregate_id, event_type, data, version, timestamp) to the apply_event function, not just data payload.",
+        "pattern": "state = apply_event(state, event)  # event is full object",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must-not",
+        "description": "Must-not use global locks or single-threaded access for append_event across all aggregates. Use per-aggregate locking or optimistic concurrency to allow parallel writes to different aggregates.",
+        "pattern": "# BAD: with self._global_lock:  # blocks all aggregates\n# GOOD: with self._get_aggregate_lock(aggregate_id):",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must-not",
+        "description": "Must-not execute or eval event data content. Event data must be treated as pure data (JSON-serializable dicts) and never interpreted as code, even if it contains strings resembling code.",
+        "pattern": "# BAD: eval(event.data['code'])\n# GOOD: stored_data = json.dumps(data); json.loads(stored_data)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must-not",
+        "description": "Must-not use aggregate_id as file path, database table name, or any identifier that could enable path traversal or SQL injection. Sanitize or validate aggregate_id against a safe pattern (alphanumeric + limited special chars), or use parameterized queries.",
+        "pattern": "# BAD: open(f'/data/{aggregate_id}.json')\n# GOOD: if not re.match(r'^[a-zA-Z0-9_:-]+$', aggregate_id): raise ValueError",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "append_event must validate that aggregate_id is a non-empty string, raising ValueError with descriptive message if it is None, empty string, or not a string type.",
+        "pattern": "if not isinstance(aggregate_id, str) or not aggregate_id: raise ValueError('aggregate_id must be non-empty string')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "append_event must validate that event_type is a non-empty string, raising ValueError or TypeError with descriptive message if it is None, empty, or not a string type.",
+        "pattern": "if not isinstance(event_type, str) or not event_type: raise ValueError('event_type must be non-empty string')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "append_event must validate that data is a dict type (or None, treating None as empty dict). If data is not dict or None, raise TypeError with descriptive message.",
+        "pattern": "if data is None: data = {}\nif not isinstance(data, dict): raise TypeError('data must be dict')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "append_event must validate that expected_version (if provided) is an integer or None. If it is a string or other type, raise TypeError before performing any write.",
+        "pattern": "if expected_version is not None and not isinstance(expected_version, int): raise TypeError('expected_version must be int or None')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "get_events with from_version parameter must validate it is an int type (not string). Raise TypeError if from_version is provided but not an integer.",
+        "pattern": "if from_version is not None and not isinstance(from_version, int): raise TypeError('from_version must be int')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "save_snapshot must validate that version is a positive integer (>= 0). Raise ValueError if version is negative, and TypeError if version is not an int.",
+        "pattern": "if not isinstance(version, int): raise TypeError('version must be int')\nif version < 0: raise ValueError('version must be non-negative')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "get_events must validate that from_version (if provided) is non-negative. Raise ValueError if from_version is negative.",
+        "pattern": "if from_version is not None and from_version < 0: raise ValueError('from_version must be non-negative')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Event data must be validated for JSON-serializability before storage. Attempt json.dumps(data) and catch TypeError to raise descriptive error if data contains non-serializable objects.",
+        "pattern": "try: json.dumps(data)\nexcept TypeError: raise ValueError('data must be JSON-serializable')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "ConcurrencyException must include aggregate_id, expected_version, and actual_version in the exception message or as attributes to help diagnose optimistic lock failures.",
+        "pattern": "raise ConcurrencyException(f'Conflict on {aggregate_id}: expected {expected_version}, actual {actual_version}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "rebuild_aggregate must validate that apply_event is callable. Raise TypeError with descriptive message if apply_event is None or not a function.",
+        "pattern": "if not callable(apply_event): raise TypeError('apply_event must be callable')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Event data size must be limited to prevent memory exhaustion attacks. Check len(json.dumps(data)) and raise ValueError or DataTooLargeException if it exceeds a reasonable threshold (e.g., 1MB).",
+        "pattern": "if len(json.dumps(data)) > 1_000_000: raise ValueError('data exceeds size limit')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "prefer",
+        "description": "Prefer in-memory dict structures (keyed by aggregate_id) for event storage in simple implementations to achieve O(1) append and O(n) retrieval per aggregate. For production, use indexed database tables with aggregate_id + version as composite key.",
+        "pattern": "self._events = defaultdict(list)  # or DB with index on (aggregate_id, version)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "prefer",
+        "description": "Prefer storing events as immutable dataclass or namedtuple instances rather than plain dicts to enforce field presence and prevent accidental mutation during retrieval.",
+        "pattern": "@dataclass(frozen=True)\nclass Event:\n    event_id: str\n    aggregate_id: str\n    event_type: str\n    data: dict\n    version: int\n    timestamp: datetime",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Very long aggregate_id (up to 1000+ characters) must be stored and retrieved without truncation. Use VARCHAR/TEXT columns or string keys without length limits in storage layer.",
+        "pattern": "# Ensure DB schema uses TEXT or VARCHAR(unlimited), not VARCHAR(255)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must",
+        "description": "When snapshot version is higher than latest event version, rebuild_aggregate must handle gracefully by using snapshot state without attempting to apply non-existent newer events (from_version filter returns empty list).",
+        "pattern": "events = get_events(agg_id, from_version=snapshot.version+1)  # returns [] if no newer events",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "The append_event method stores events with aggregate_id, event_type, and validated data in the Event dataclass, and get_events retrieves them correctly from the _events dictionary."
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "Events are appended to a list in order (_events[aggregate_id].append(event)) and get_events returns them sorted by version which preserves append order due to monotonic versioning."
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "_get_next_version atomically increments _version_counters[aggregate_id] starting from 0, so first event gets version 1, second gets 2, etc., maintaining monotonic increase per aggregate."
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "satisfied",
+        "reasoning": "rebuild_aggregate retrieves events via get_events (which returns them in order), then applies each event sequentially using the apply_event callback, producing the final state."
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "In append_event, when expected_version (5) doesn't match current_version (6), it raises ConcurrencyException with all three values (aggregate_id, expected_version, current_version)."
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "After 3 events, current_version is 3. When expected_version=3 matches current_version=3, the optimistic lock check passes, and _get_next_version increments to 4."
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "save_snapshot creates a Snapshot with the provided version and deep-copied state, stores it in _snapshots[aggregate_id], and get_snapshot retrieves the most recent snapshot with matching version and state."
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "rebuild_aggregate calls get_snapshot, loads the snapshot state if it exists, then calls get_events with from_version=snapshot.version + 1 to retrieve only events after the snapshot."
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "get_events uses _events.get(aggregate_id, []) which returns an empty list for non-existent aggregate_ids."
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "Each event gets event_id = str(uuid.uuid4()) which generates unique IDs, and Event is a frozen dataclass making event_id immutable after creation."
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "satisfied",
+        "reasoning": "append_event sets timestamp = datetime.utcnow() when creating the Event object, capturing the current time at append."
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "get_events filters events with list comprehension [e for e in events if e.version >= from_version] when from_version is specified, returning only events with version >= from_version."
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "For a new aggregate, _version_counters defaults to 0, so _get_next_version increments to 1 and assigns version 1 to the first event."
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "For a new aggregate, current_version is 0 (defaultdict(int)). When expected_version=0 matches, it succeeds. If events exist (current_version > 0), the check expected_version != current_version triggers ConcurrencyException."
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "get_snapshot returns None when snapshots.get(aggregate_id) returns None or an empty list (if not snapshots check)."
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "satisfied",
+        "reasoning": "rebuild_aggregate deep copies initial_state, finds no snapshot (returns None), gets empty event list, applies no events, and returns the unchanged initial_state copy."
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "satisfied",
+        "reasoning": "save_snapshot appends to _snapshots[aggregate_id] list. get_snapshot uses max(snapshots, key=lambda s: s.version) to return the snapshot with highest version."
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "satisfied",
+        "reasoning": "_validate_data accepts empty dict, deep copies it, validates it as JSON-serializable, and stores it correctly."
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "_validate_data uses copy.deepcopy to preserve nested structures, and the frozen Event dataclass prevents modification, maintaining the exact nested structure."
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "_validate_aggregate_id only checks for non-empty string, allowing special characters. The aggregate_id is used as a dictionary key without sanitization issues."
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "satisfied",
+        "reasoning": "_validate_aggregate_id checks isinstance(aggregate_id, str) and raises TypeError for None (not a string), though the spec says ValueError. The check is present but error type differs slightly."
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "_validate_aggregate_id checks 'if not aggregate_id' after confirming it's a string, raising ValueError('aggregate_id must be non-empty string') for empty strings."
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "_validate_event_type checks isinstance(event_type, str) and raises TypeError for None, then checks for empty string with ValueError. The check exists though error type is TypeError not ValueError."
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "satisfied",
+        "reasoning": "_validate_data explicitly checks 'if data is None: return {}', treating None as empty dict rather than raising an error, which satisfies the 'or treat as empty dict' option."
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "satisfied",
+        "reasoning": "ConcurrencyException __init__ accepts and stores aggregate_id, expected_version, actual_version as attributes and includes them in the error message."
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "satisfied",
+        "reasoning": "rebuild_aggregate checks 'if not callable(apply_event): raise TypeError('apply_event must be callable')', providing a descriptive error for non-callable values including None."
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "satisfied",
+        "reasoning": "_validate_snapshot_version checks 'if version < 0: raise ValueError('version must be non-negative')' in save_snapshot."
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "satisfied",
+        "reasoning": "_validate_from_version checks 'if from_version < 0: raise ValueError('from_version must be non-negative')' in get_events."
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "satisfied",
+        "reasoning": "Event data is stored as a Python dictionary after JSON validation. The string value is stored as data, not executed. No eval() or exec() calls exist in the code."
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "satisfied",
+        "reasoning": "aggregate_id is used only as a dictionary key and validated as a string. No file system operations or path manipulations occur. The code doesn't access files based on aggregate_id."
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "_validate_data serializes data to JSON and checks 'if len(serialized) > self._max_data_size' (1MB), raising DataTooLargeException for oversized data."
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "satisfied",
+        "reasoning": "Event is a frozen dataclass (immutable), and _validate_data deep copies the data before storing. Modifying the returned event or original data dict doesn't affect stored events."
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "satisfied",
+        "reasoning": "_validate_aggregate_id checks 'if not isinstance(aggregate_id, str): raise TypeError('aggregate_id must be string')'."
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "satisfied",
+        "reasoning": "_validate_event_type checks 'if not isinstance(event_type, str): raise TypeError('event_type must be string')'."
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "satisfied",
+        "reasoning": "_validate_data checks 'if not isinstance(data, dict): raise TypeError('data must be dict')' after handling None case."
+      },
+      {
+        "specId": "SPEC-036",
+        "status": "satisfied",
+        "reasoning": "_validate_expected_version checks 'if expected_version is not None and not isinstance(expected_version, int): raise TypeError('expected_version must be int or None')'."
+      },
+      {
+        "specId": "SPEC-037",
+        "status": "satisfied",
+        "reasoning": "_validate_from_version checks 'if not isinstance(from_version, int): raise TypeError('from_version must be int')' when from_version is not None."
+      },
+      {
+        "specId": "SPEC-038",
+        "status": "satisfied",
+        "reasoning": "_validate_snapshot_version checks 'if not isinstance(version, int): raise TypeError('version must be int')'."
+      },
+      {
+        "specId": "SPEC-039",
+        "status": "satisfied",
+        "reasoning": "_validate_data uses json.dumps() to check JSON serializability and catches TypeError, raising ValueError('data must be JSON-serializable')."
+      },
+      {
+        "specId": "SPEC-040",
+        "status": "satisfied",
+        "reasoning": "append_event performs constant-time operations: validation, lock acquisition, version increment, and list append. No iteration over existing events occurs."
+      },
+      {
+        "specId": "SPEC-041",
+        "status": "satisfied",
+        "reasoning": "get_events retrieves the list for specific aggregate_id (O(1) lookup), then filters and sorts n events (O(n log n)), which is proportional to n events for that aggregate."
+      },
+      {
+        "specId": "SPEC-042",
+        "status": "unknown",
+        "reasoning": "While the code loads snapshots and applies only newer events, the actual performance improvement depends on runtime characteristics and apply_event function complexity, which cannot be verified statically."
+      },
+      {
+        "specId": "SPEC-043",
+        "status": "satisfied",
+        "reasoning": "get_events retrieves self._events.get(aggregate_id, []) (all events for aggregate), then filters with list comprehension for version >= from_version. While it loads all events initially, it only returns filtered ones."
+      },
+      {
+        "specId": "SPEC-044",
+        "status": "satisfied",
+        "reasoning": "Code uses defaultdict(Lock) creating per-aggregate locks (_aggregate_locks[aggregate_id]). Appending to 'agg-1' only acquires lock for 'agg-1', not affecting 'agg-2'."
+      },
+      {
+        "specId": "SPEC-045",
+        "status": "satisfied",
+        "reasoning": "get_events uses _events.get(aggregate_id, []) which retrieves only events for specific aggregate, not all events in store. Memory usage is proportional to that aggregate's events."
+      },
+      {
+        "specId": "SPEC-046",
+        "status": "satisfied",
+        "reasoning": "_events is a dict keyed by aggregate_id. get_events('agg-1') retrieves only _events['agg-1'], isolating events per aggregate."
+      },
+      {
+        "specId": "SPEC-047",
+        "status": "satisfied",
+        "reasoning": "rebuild_aggregate passes each Event object from get_events to apply_event(state, event). Event dataclass contains all fields: event_id, aggregate_id, event_type, data, version, timestamp."
+      },
+      {
+        "specId": "SPEC-048",
+        "status": "satisfied",
+        "reasoning": "_validate_aggregate_id only validates non-empty string without length limit. Long aggregate_ids are used as dictionary keys without truncation."
+      },
+      {
+        "specId": "SPEC-049",
+        "status": "satisfied",
+        "reasoning": "rebuild_aggregate uses get_events(aggregate_id, from_version=snapshot.version + 1). If snapshot version > latest event, get_events returns empty list (no events >= that version), and state remains as snapshot state."
+      },
+      {
+        "specId": "SPEC-050",
+        "status": "satisfied",
+        "reasoning": "With 5 events, current_version is 5. When expected_version=5 matches current_version=5, optimistic lock check passes, and _get_next_version increments to 6."
+      }
+    ],
+    "satisfiedCount": 49,
+    "totalSpecs": 50,
+    "generatedAt": "2026-02-12T06:46:15.892Z",
+    "inputTokens": 11561,
+    "outputTokens": 6235
+  },
+  "totalInputTokens": 15627,
+  "totalOutputTokens": 14658,
+  "totalDurationMs": 213705
+}

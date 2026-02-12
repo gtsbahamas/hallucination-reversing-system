@@ -1,0 +1,215 @@
+{
+  "task_id": "task_08",
+  "task": "Write an HTTP client wrapper with exponential backoff retry, circuit breaker pattern, timeout handling, and request/response logging",
+  "model": "claude-sonnet-4-5-20250929",
+  "verification": {
+    "claims": [
+      {
+        "id": "C1",
+        "claim": "Implements exponential backoff retry with configurable max_retries, initial_delay, max_delay, exponential_base, and jitter",
+        "verdict": "PASS",
+        "reasoning": "_calculate_delay implements exponential backoff correctly with delay = initial_delay * (exponential_base ** attempt) capped at max_delay. Jitter is applied as delay * (0.5 + random.random()) when enabled."
+      },
+      {
+        "id": "C2",
+        "claim": "Implements circuit breaker pattern with CLOSED, OPEN, HALF_OPEN states",
+        "verdict": "PASS",
+        "reasoning": "CircuitBreaker class properly implements three-state pattern with transitions: CLOSED->OPEN on failure_threshold, OPEN->HALF_OPEN after timeout, HALF_OPEN->CLOSED on success_threshold successes, HALF_OPEN->OPEN on any failure."
+      },
+      {
+        "id": "C3",
+        "claim": "Handles timeouts properly",
+        "verdict": "PARTIAL",
+        "reasoning": "Timeout is configured in AsyncClient constructor and passed to httpx. However, the code doesn't explicitly handle timeout exceptions differently from other exceptions in retry logic, and timeout errors are NOT excluded from triggering circuit breaker failures, which could be problematic."
+      },
+      {
+        "id": "C4",
+        "claim": "Provides request/response logging with sensitive data filtering",
+        "verdict": "PARTIAL",
+        "reasoning": "Request logging filters 'authorization' header (case-insensitive). Response logging exists. However, filtering is incomplete - doesn't handle 'Authorization' with capital A properly in dict comprehension, doesn't filter other sensitive headers (cookies, api-key, etc.), and doesn't filter sensitive data in request/response bodies."
+      },
+      {
+        "id": "C5",
+        "claim": "Thread-safe circuit breaker implementation",
+        "verdict": "FAIL",
+        "reasoning": "Uses asyncio.Lock which provides async task safety, but NOT thread safety. If called from multiple threads, race conditions will occur. The claim of 'thread-safe' is not met, only 'async-safe'."
+      },
+      {
+        "id": "C6",
+        "claim": "Retries on appropriate HTTP status codes (408, 429, 500, 502, 503, 504) and network errors",
+        "verdict": "PASS",
+        "reasoning": "_should_retry correctly identifies retryable status codes and network/timeout exceptions from httpx."
+      },
+      {
+        "id": "C7",
+        "claim": "Circuit breaker can exclude specific exception types",
+        "verdict": "PASS",
+        "reasoning": "CircuitBreakerConfig has excluded_exceptions field, and _on_failure checks 'if not any(isinstance(e, exc) for exc in self.config.excluded_exceptions)' before counting failures."
+      },
+      {
+        "id": "C8",
+        "claim": "Supports all common HTTP methods (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS)",
+        "verdict": "PASS",
+        "reasoning": "All seven methods are implemented with appropriate method-specific parameters."
+      },
+      {
+        "id": "C9",
+        "claim": "Provides async context manager support for resource cleanup",
+        "verdict": "PASS",
+        "reasoning": "__aenter__ and __aexit__ are implemented, calling close() which properly closes the httpx client."
+      },
+      {
+        "id": "C10",
+        "claim": "Circuit breaker prevents cascading failures by opening after failure threshold",
+        "verdict": "PARTIAL",
+        "reasoning": "Circuit breaker opens after failures, but the implementation has a race condition: state check and function execution are not atomic. Between checking state and executing function, state could change."
+      }
+    ],
+    "issues": [
+      {
+        "id": "I1",
+        "severity": "high",
+        "category": "CORRECTNESS",
+        "description": "Race condition in CircuitBreaker.call(): State is checked with lock, but function execution happens outside lock. Another coroutine could change state between check and execution.",
+        "fix": "Keep the lock held during function execution, or use a different synchronization pattern. Current implementation: async with self._lock: check state, then execute without lock. Should be: acquire lock, check state, execute, update state, release lock."
+      },
+      {
+        "id": "I2",
+        "severity": "high",
+        "category": "CORRECTNESS",
+        "description": "In _execute_request, headers/params/data/json are popped from kwargs before being passed to _log_request, but then kwargs is passed to client.request. If kwargs contains 'headers', 'params', etc., they'll be passed twice or override the intended values.",
+        "fix": "Don't pass **kwargs to client.request, or ensure popped values are the only ones used. Better: headers = {**self.default_headers, **(kwargs.pop('headers', {}))}"
+      },
+      {
+        "id": "I3",
+        "severity": "medium",
+        "category": "SECURITY",
+        "description": "Incomplete sensitive data filtering in _log_request. Only filters 'authorization' in lowercase check, missing 'Authorization', 'cookie', 'Cookie', 'X-API-Key', tokens in URLs, etc. Body data is logged if under 1000 chars without content inspection.",
+        "fix": "Use case-insensitive header filtering: {k: v for k, v in (headers or {}).items() if k.lower() not in ['authorization', 'cookie', 'x-api-key', 'x-api-token']}. Consider regex-based filtering for tokens in bodies and URLs."
+      },
+      {
+        "id": "I4",
+        "severity": "medium",
+        "category": "ROBUSTNESS",
+        "description": "Circuit breaker timeout calculation uses datetime.now() which is not monotonic and can be affected by system clock changes. Could cause circuit breaker to stay open indefinitely or reset prematurely.",
+        "fix": "Use time.monotonic() instead: self.last_failure_time = time.monotonic() and compare with time.monotonic() - self.last_failure_time >= timeout_duration"
+      },
+      {
+        "id": "I5",
+        "severity": "medium",
+        "category": "CORRECTNESS",
+        "description": "Circuit breaker state transitions are not atomic. _on_success and _on_failure acquire lock independently, but the check and call in CircuitBreaker.call() are separate, allowing TOCTOU (Time-Of-Check-Time-Of-Use) bugs.",
+        "fix": "Redesign to make state check and function call atomic, or use a state machine with explicit transition guards."
+      },
+      {
+        "id": "I6",
+        "severity": "medium",
+        "category": "CORRECTNESS",
+        "description": "_should_retry doesn't distinguish between client errors (4xx except 408, 429) and server errors. A 400 Bad Request will be retried if response.status_code check falls through, potentially wasting retries on non-retryable errors.",
+        "fix": "Add explicit check: if response and 400 <= response.status_code < 500 and response.status_code not in [408, 429]: return False"
+      },
+      {
+        "id": "I7",
+        "severity": "medium",
+        "category": "ROBUSTNESS",
+        "description": "No handling for httpx.HTTPStatusError. When response.raise_for_status() is called, it raises HTTPStatusError, but _should_retry receives 'exception' without access to response. The hasattr(e, 'response') fallback is fragile.",
+        "fix": "Catch HTTPStatusError explicitly: except httpx.HTTPStatusError as e: last_response = e.response; last_exception = e"
+      },
+      {
+        "id": "I8",
+        "severity": "low",
+        "category": "CORRECTNESS",
+        "description": "Retry loop has unreachable code. After the loop completes, 'if last_exception: raise last_exception' will always raise because if there were no exceptions, we'd have returned from the loop. The final 'raise Exception(...)' is unreachable.",
+        "fix": "Remove unreachable code or restructure logic."
+      },
+      {
+        "id": "I9",
+        "severity": "low",
+        "category": "ROBUSTNESS",
+        "description": "_log_response silently catches all exceptions when accessing response.text. Could hide encoding errors or other issues. No logging of the suppressed exception.",
+        "fix": "Log the exception: except Exception as e: logger.debug(f'Could not log response content: {e}')"
+      },
+      {
+        "id": "I10",
+        "severity": "low",
+        "category": "TYPE_SAFETY",
+        "description": "Missing type hints in several places: _lock is asyncio.Lock but not typed, _make_request uses **kwargs: Any without proper typing, default_factory=list in excluded_exceptions is mutable default anti-pattern.",
+        "fix": "Add type hints: self._lock: asyncio.Lock = asyncio.Lock(). Use field(default_factory=list) properly. Consider using Protocol or TypedDict for kwargs."
+      },
+      {
+        "id": "I11",
+        "severity": "critical",
+        "category": "ROBUSTNESS",
+        "description": "Circuit breaker failures from timeouts will prevent legitimate requests. If a service is slow but functional, timeout exceptions will count as failures and open the circuit, causing false positives. Timeouts should often be retried without affecting circuit breaker state.",
+        "fix": "Add timeout exceptions to excluded_exceptions by default, or add a separate configuration for 'circuit_breaker_excluded_exceptions' vs 'retry_excluded_exceptions'."
+      },
+      {
+        "id": "I12",
+        "severity": "high",
+        "category": "CORRECTNESS",
+        "description": "In _log_request, headers filtering uses case-sensitive dictionary comprehension but then checks 'k.lower() not in [\"authorization\"]'. The 'not in' check is correct but the list should include more sensitive headers, and it won't filter 'Authorization' with capital A because the dict key is unchanged in the output.",
+        "fix": "Filter correctly: {k: '***' if k.lower() in ['authorization', 'cookie'] else v for k, v in (headers or {}).items()}"
+      },
+      {
+        "id": "I13",
+        "severity": "medium",
+        "category": "ROBUSTNESS",
+        "description": "No connection pooling configuration exposed. httpx.AsyncClient uses connection pooling by default, but limits (max_connections, max_keepalive_connections) are not configurable, which could cause issues under high load.",
+        "fix": "Add connection limits to __init__: limits = httpx.Limits(max_connections=100, max_keepalive_connections=20) and pass to AsyncClient."
+      },
+      {
+        "id": "I14",
+        "severity": "low",
+        "category": "COMPLETENESS",
+        "description": "No metrics/observability. Code logs events but doesn't expose metrics for monitoring (circuit breaker state, retry counts, error rates, latencies). Critical for production use.",
+        "fix": "Add metrics collection: counter for requests, histograms for latency, gauges for circuit breaker state. Expose via Prometheus or similar."
+      },
+      {
+        "id": "I15",
+        "severity": "medium",
+        "category": "ROBUSTNESS",
+        "description": "No graceful shutdown handling. If close() is called while requests are in flight, they may be abruptly terminated. AsyncClient.aclose() should be coordinated with in-flight request tracking.",
+        "fix": "Track in-flight requests with a counter/set, wait for completion in close() with timeout: await asyncio.wait_for(all_requests_done, timeout=30)"
+      },
+      {
+        "id": "I16",
+        "severity": "low",
+        "category": "CORRECTNESS",
+        "description": "Jitter calculation uses random.random() which is not cryptographically secure, but more importantly, 'import random' is done inside _calculate_delay method, causing repeated imports on every retry.",
+        "fix": "Move 'import random' to module level imports."
+      },
+      {
+        "id": "I17",
+        "severity": "medium",
+        "category": "COMPLETENESS",
+        "description": "Circuit breaker success_count is only incremented in HALF_OPEN state, but never reset when transitioning from HALF_OPEN to OPEN. If circuit oscillates, success_count could become stale.",
+        "fix": "Reset success_count when transitioning to OPEN: self.success_count = 0 (already done correctly in _on_failure)"
+      },
+      {
+        "id": "I18",
+        "severity": "low",
+        "category": "CORRECTNESS",
+        "description": "Log statement uses string formatting with variable interpolation in f-strings, but also uses .format()-style braces in some places inconsistently.",
+        "fix": "Standardize on f-strings throughout."
+      }
+    ],
+    "summary": {
+      "total_claims": 10,
+      "pass": 5,
+      "partial": 3,
+      "fail": 2,
+      "critical_issues": 1,
+      "high_issues": 3,
+      "medium_issues": 9,
+      "low_issues": 5,
+      "total_issues": 18
+    }
+  },
+  "verify_input_tokens": 4329,
+  "verify_output_tokens": 3576,
+  "remediate_input_tokens": 7494,
+  "remediate_output_tokens": 4863,
+  "total_input_tokens": 11823,
+  "total_output_tokens": 8439,
+  "duration_s": 117.0
+}

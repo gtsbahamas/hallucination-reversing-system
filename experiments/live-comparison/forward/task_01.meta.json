@@ -1,0 +1,18 @@
+{
+  "task_id": "task_01",
+  "task": "Write a middleware that validates JWT tokens, checks expiration, handles refresh tokens, and attaches user context to the request",
+  "model": "claude-sonnet-4-5-20250929",
+  "verification": {
+    "raw": "\n{\n  \"claims\": [\n    {\n      \"id\": \"C1\",\n      \"claim\": \"Validates JWT tokens\",\n      \"verdict\": \"PARTIAL\",\n      \"reasoning\": \"Basic validation exists but lacks critical security checks: no token blacklisting, no jti claim for replay protection, no audience/issuer validation, vulnerable to algorithm confusion attacks\"\n    },\n    {\n      \"id\": \"C2\",\n      \"claim\": \"Checks expiration\",\n      \"verdict\": \"PARTIAL\",\n      \"reasoning\": \"Relies entirely on PyJWT's exp check. No clock skew tolerance (leeway), no explicit expiration validation in business logic, no handling of nbf (not before) claim\"\n    },\n    {\n      \"id\": \"C3\",\n      \"claim\": \"Handles refresh tokens\",\n      \"verdict\": \"FAIL\",\n      \"reasoning\": \"Critical flaw: refresh_access_token accepts username/roles from caller instead of fetching from authoritative source. This allows privilege escalation. No refresh token rotation. No binding between access and refresh tokens\"\n    },\n    {\n      \"id\": \"C4\",\n      \"claim\": \"Attaches user context to request\",\n      \"verdict\": \"PASS\",\n      \"reasoning\": \"Successfully creates and attaches UserContext to request object\"\n    },\n    {\n      \"id\": \"C5\",\n      \"claim\": \"Prevents token tampering\",\n      \"verdict\": \"PARTIAL\",\n      \"reasoning\": \"HMAC signature verification exists but vulnerable to algorithm confusion attack (no algorithm whitelist enforcement at verification time)\"\n    },\n    {\n      \"id\": \"C6\",\n      \"claim\": \"Thread-safe operation\",\n      \"verdict\": \"FAIL\",\n      \"reasoning\": \"No consideration for thread safety. UserContext.authenticated_at uses datetime.utcnow() which could have precision issues in high-concurrency scenarios\"\n    },\n    {\n      \"id\": \"C7\",\n      \"claim\": \"Handles expired tokens gracefully\",\n      \"verdict\": \"PARTIAL\",\n      \"reasoning\": \"Returns user_id in error response when refresh token is available - this is an information disclosure vulnerability\"\n    }\n  ],\n  \"issues\": [\n    {\n      \"id\": \"I1\",\n      \"severity\": \"critical\",\n      \"category\": \"SECURITY\",\n      \"description\": \"Algorithm Confusion Attack Vulnerability - The code specifies algorithm during encoding but jwt.decode() accepts any algorithm from the token header by default in older PyJWT versions. An attacker could change algorithm to 'none' or HS256->RS256 confusion.\",\n      \"fix\": \"Always pass algorithms parameter as a list in jwt.decode() and never trust the algorithm in the token header. Code does pass algorithms=[self.config.algorithm] which is correct, but this should be emphasized as critical security requirement.\"\n    },\n    {\n      \"id\": \"I2\",\n      \"severity\": \"critical\",\n      \"category\": \"SECURITY\",\n      \"description\": \"Privilege Escalation in refresh_access_token() - Function accepts username, roles, and metadata from caller instead of fetching from authoritative database. Attacker with valid refresh token can request arbitrary roles.\",\n      \"fix\": \"Remove username, roles, metadata parameters. Fetch user data from database using user_id:\\n",
+    "claims": [],
+    "issues": [],
+    "summary": {}
+  },
+  "verify_input_tokens": 3989,
+  "verify_output_tokens": 4000,
+  "remediate_input_tokens": 4730,
+  "remediate_output_tokens": 6376,
+  "total_input_tokens": 8719,
+  "total_output_tokens": 10376,
+  "duration_s": 120.9
+}

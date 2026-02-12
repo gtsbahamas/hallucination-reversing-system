@@ -1,0 +1,1582 @@
+{
+  "task": "Write cursor-based pagination for a REST API that handles sorting, filtering, and returns consistent results under concurrent writes",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write cursor-based pagination for a REST API that handles sorting, filtering, and returns consistent results under concurrent writes",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Cursor must encode sufficient state to retrieve the exact next page of results deterministically",
+        "assertion": "Given a dataset [{'id':1,'name':'Alice'},{'id':2,'name':'Bob'},{'id':3,'name':'Charlie'}] with page_size=2, fetching page 1 returns items 1,2 and a cursor. Using that cursor to fetch page 2 returns item 3 exactly, with no duplicates or gaps.",
+        "rationale": "Pagination must be deterministic and complete to ensure all data is retrievable"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Sorting order must be preserved across all paginated requests with the same sort parameters",
+        "assertion": "Paginating through dataset sorted by 'created_at DESC' yields items in strict descending order of created_at timestamp across all pages, with no item appearing before another item with a later timestamp",
+        "rationale": "Consistent sort order is fundamental to pagination correctness"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Filtering criteria must be preserved and encoded in cursor to maintain consistent result set",
+        "assertion": "Given filter {'status':'active'}, page 1 returns 10 active items and cursor C1. Using C1 to fetch page 2 returns only active items, never including status='inactive' items even if they were created between requests",
+        "rationale": "Filter drift between pages would corrupt the result set"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Cursor must be opaque, tamper-evident, and contain integrity protection",
+        "assertion": "Modifying any byte in a valid cursor string results in either: (1) validation error with 400 status, or (2) cryptographic signature verification failure. Cursor format should not expose internal implementation details in plaintext.",
+        "rationale": "Users must not be able to manipulate cursors to access unauthorized data or cause logic errors"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "No item duplication across pages when items are inserted during pagination",
+        "assertion": "Start paginating dataset with 100 items (page_size=10). After fetching page 3, insert 5 new items before the current cursor position. Fetching pages 4-10 returns the remaining original items exactly once each, with no duplicates.",
+        "rationale": "Concurrent writes must not cause items to appear multiple times"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "No items skipped when items are deleted during pagination",
+        "assertion": "Start paginating dataset with 100 items (page_size=10). After fetching page 3, delete 3 items from page 5. Continuing pagination retrieves all remaining 97 items exactly once, with items from page 5 appearing at their correct sorted position.",
+        "rationale": "Concurrent deletes must not cause gaps in pagination"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Stable sort must use tie-breaker column (typically unique ID) for consistent ordering",
+        "assertion": "Given 50 items with identical 'created_at' timestamps, paginating with page_size=10 and sort='created_at DESC' uses secondary sort on 'id' to produce deterministic order. Same query repeated yields identical item order across all pages.",
+        "rationale": "Without tie-breaker, items with equal sort keys could appear in random order causing duplication/skipping"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Empty result set returns valid response with null/empty cursor and empty data array",
+        "assertion": "Querying with filters that match zero items returns {'data': [], 'next_cursor': null, 'has_more': false} with 200 status code",
+        "rationale": "Empty results are valid states that must be handled without errors"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Last page with items returns null next_cursor and has_more=false",
+        "assertion": "Dataset with 25 items, page_size=10: page 3 returns 5 items with next_cursor=null and has_more=false. Attempting to fetch next page with null cursor returns empty result set or 400 error.",
+        "rationale": "Clients must know when pagination is complete"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "First page with no cursor specified returns first N items in sort order",
+        "assertion": "GET /api/items?page_size=10&sort=created_at:desc with no cursor parameter returns the 10 most recently created items and a valid next_cursor",
+        "rationale": "Initial pagination request is a critical entry point"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Page size of 1 must work correctly",
+        "assertion": "Requesting page_size=1 returns exactly 1 item per page, and paginating through 10 items requires 10 requests, each with valid cursor to next item",
+        "rationale": "Minimum page size is a boundary condition"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Maximum page size limit must be enforced",
+        "assertion": "Requesting page_size=10000 when max is 1000 either: (1) returns only 1000 items, or (2) returns 400 error with message 'page_size exceeds maximum of 1000'",
+        "rationale": "Unbounded page sizes can cause memory exhaustion and performance issues"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Cursor from different filter/sort context must be rejected",
+        "assertion": "Generate cursor C1 with filter {'status':'active'} and sort 'name:asc'. Attempting to use C1 with filter {'status':'inactive'} or sort 'created_at:desc' returns 400 error indicating cursor mismatch",
+        "rationale": "Cursors from different query contexts are invalid and could return incorrect data"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Item at exact cursor position must not be included in next page (exclusive cursor)",
+        "assertion": "Cursor encodes last_id=50. Next page query uses WHERE id > 50 (not id >= 50), ensuring item 50 appears only on previous page, never duplicated on next page",
+        "rationale": "Cursor boundary semantics must be consistent"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "All items in dataset are retrievable even when dataset size equals page_size",
+        "assertion": "Dataset has exactly 10 items, page_size=10: first page returns all 10 items with next_cursor=null, no second page needed",
+        "rationale": "Perfect page alignment is a common edge case"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Unicode and special characters in sort/filter fields must be handled correctly",
+        "assertion": "Items with names containing emoji, Chinese characters, RTL text, and null bytes can be paginated through with sort='name:asc', maintaining correct unicode collation order",
+        "rationale": "Internationalization requires proper unicode handling in cursors"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Expired cursor must return 400 error with clear message",
+        "assertion": "Cursor issued 48 hours ago (if TTL=24h) returns {'error': 'cursor_expired', 'message': 'Cursor has expired, please restart pagination', 'code': 400}",
+        "rationale": "Clients need actionable error messages when cursors expire"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Malformed cursor string must return 400 error, not 500",
+        "assertion": "Passing cursor='invalid_base64!!!' or cursor='random_string' returns 400 status with error message 'Invalid cursor format', never crashes with 500 error",
+        "rationale": "Invalid input must be handled gracefully without exposing stack traces"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Invalid sort field must return 400 error with list of valid fields",
+        "assertion": "Requesting sort='nonexistent_field:asc' returns 400 with message like 'Invalid sort field nonexistent_field. Valid fields: id, created_at, name'",
+        "rationale": "Users need to know which fields support sorting"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Invalid sort direction must return 400 error",
+        "assertion": "Requesting sort='name:sideways' returns 400 with message 'Invalid sort direction sideways. Use asc or desc'",
+        "rationale": "Sort direction is constrained to two values"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Zero or negative page_size must return 400 error",
+        "assertion": "Requesting page_size=0 or page_size=-5 returns 400 with message 'page_size must be positive integer between 1 and {max}'",
+        "rationale": "Page size must be positive to be meaningful"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Non-integer page_size must return 400 error",
+        "assertion": "Requesting page_size='ten' or page_size=3.14 returns 400 with message 'page_size must be integer'",
+        "rationale": "Type validation prevents injection and logic errors"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Invalid filter field or operator must return 400 error",
+        "assertion": "Requesting filter={'unknown_field': 'value'} returns 400 with message 'Invalid filter field unknown_field. Valid fields: status, created_at, name'",
+        "rationale": "Filter validation prevents SQL injection and provides user feedback"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Database connection errors must return 503 with retry-after header",
+        "assertion": "When database is unreachable, return 503 status with {'error': 'service_unavailable', 'message': 'Database temporarily unavailable'} and Retry-After header set to 60 seconds",
+        "rationale": "Transient errors should signal clients to retry"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "security",
+        "severity": "critical",
+        "description": "SQL injection via filter parameters must be prevented",
+        "assertion": "Requesting filter={'name': \"'; DROP TABLE items; --\"} does not execute SQL injection, returns safe results or validation error, and database remains intact",
+        "rationale": "SQL injection is a critical security vulnerability"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "security",
+        "severity": "critical",
+        "description": "Cursor must not be directly constructible by clients to access unauthorized data",
+        "assertion": "Manually crafting cursor encoding {'user_id': 9999, 'last_id': 500} for another user's data is rejected if cursor signature verification fails or user_id doesn't match authenticated user",
+        "rationale": "Cursors must not enable privilege escalation"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "security",
+        "severity": "critical",
+        "description": "Filter parameters must not allow access to unauthorized fields or tables",
+        "assertion": "Attempting filter={'password': 'any_value'} on items endpoint returns 400 error 'Cannot filter by restricted field password', never exposes password data",
+        "rationale": "Field-level access control prevents data leakage"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "security",
+        "severity": "high",
+        "description": "Rate limiting must prevent pagination abuse to enumerate entire dataset",
+        "assertion": "Making 1000 pagination requests in 60 seconds from same IP/API key triggers rate limit with 429 status and Retry-After header",
+        "rationale": "Pagination can be used for data scraping and DoS attacks"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "security",
+        "severity": "high",
+        "description": "Cursor must include authentication context to prevent cursor sharing between users",
+        "assertion": "User A generates cursor C1. User B attempting to use C1 receives 403 error 'Cursor does not belong to authenticated user' if cursor includes user_id check",
+        "rationale": "Prevents users from sharing cursors to bypass authorization"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "medium",
+        "description": "Cursor must have reasonable TTL to limit replay window",
+        "assertion": "Cursor generated at time T is valid until T+24hours, then returns 400 cursor_expired error, preventing indefinite cursor reuse",
+        "rationale": "Time-limited cursors reduce attack surface for stolen/leaked cursors"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Cursor encoding/decoding must handle None/null values gracefully",
+        "assertion": "Item with nullable field last_login=None can be encoded in cursor and decoded without raising TypeError or losing the None value",
+        "rationale": "Nullable fields are common and must not break cursor serialization"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "All cursor components must be type-validated on decode",
+        "assertion": "Cursor containing {'last_id': 'not_an_int'} when last_id should be int returns 400 error 'Invalid cursor: last_id must be integer', not TypeError crash",
+        "rationale": "Type validation prevents crashes from malformed cursors"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Filter values must be coerced or validated to match field types",
+        "assertion": "Filtering integer field with filter={'age': '25'} either: (1) coerces to int(25), or (2) returns 400 'age filter must be integer'",
+        "rationale": "Type mismatches can cause query errors or incorrect results"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "DateTime fields in cursor must preserve timezone and precision",
+        "assertion": "Cursor encoding created_at='2024-01-15T10:30:45.123456+00:00' preserves microsecond precision and UTC timezone, decoded value equals original timestamp exactly",
+        "rationale": "Timestamp precision loss can cause pagination inconsistencies"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "performance",
+        "severity": "critical",
+        "description": "Cursor-based query must use database indexes efficiently (no full table scans)",
+        "assertion": "EXPLAIN query plan for paginated query with cursor shows INDEX SCAN or INDEX SEEK on (sort_field, id) composite index, not TABLE SCAN. Query execution time remains O(log N + page_size), not O(N).",
+        "rationale": "Cursor pagination main advantage over offset is performance with large datasets"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "performance",
+        "severity": "critical",
+        "description": "Query complexity must remain constant regardless of cursor position (no offset performance degradation)",
+        "assertion": "Time to fetch page at position 1, 1000, and 10000 differs by less than 2x, demonstrating O(1) cursor-based seeking vs O(N) offset degradation",
+        "rationale": "Cursor pagination must avoid offset-based performance cliffs"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "performance",
+        "severity": "high",
+        "description": "Cursor encoding/decoding must complete in under 10ms",
+        "assertion": "Generating cursor from result set and decoding cursor both complete in under 10ms as measured by profiling, even with 20 filter parameters and complex sort",
+        "rationale": "Cursor overhead must be negligible compared to query time"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "performance",
+        "severity": "high",
+        "description": "Maximum cursor size must be bounded to prevent memory issues",
+        "assertion": "Cursor string length never exceeds 4KB even with maximum allowed filters and sort parameters, preventing header size limits and memory issues",
+        "rationale": "Unbounded cursor growth can cause HTTP header limits and memory issues"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Composite database index on (sort_field, tie_breaker_id) must exist",
+        "assertion": "Database schema includes index on (created_at, id) and (name, id) for common sort patterns, enabling efficient cursor-based range queries",
+        "rationale": "Without composite index, cursor queries will be slow"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Response payload size must scale linearly with page_size, not quadratically",
+        "assertion": "Response size for page_size=100 is approximately 100x the size of page_size=1, demonstrating linear scaling without nested data explosion",
+        "rationale": "Ensures predictable bandwidth and parsing costs"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Multiple sort fields must be supported with correct precedence",
+        "assertion": "Sorting by 'status:asc,created_at:desc,id:asc' returns items grouped by status (ascending), then within each status by created_at (descending), then by id (ascending) as final tie-breaker",
+        "rationale": "Multi-field sorting is common requirement for complex queries"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Cursor must be idempotent - using same cursor multiple times yields same results",
+        "assertion": "Fetching page with cursor C1 returns items [X, Y, Z]. Fetching again with same C1 returns identical items [X, Y, Z] in same order, even if done hours later (assuming TTL not expired)",
+        "rationale": "Idempotency allows safe retries and caching"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Concurrent updates to items on current page must not break pagination continuation",
+        "assertion": "Fetch page 1 getting items with IDs [1,2,3]. Update item 2's name field. Fetch page 2 with cursor from page 1 - returns items [4,5,6] correctly, update to item 2 does not affect continuation",
+        "rationale": "Updates to already-paginated items must not corrupt cursor state"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Filtering with OR conditions must maintain pagination consistency",
+        "assertion": "Filter {'status__in': ['active', 'pending']} with cursor maintains consistent result set - items matching either status value appear exactly once across all pages",
+        "rationale": "Complex filters increase risk of duplication/skipping"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Null values in sort field must have deterministic ordering",
+        "assertion": "Items with sort_field=null are consistently ordered either all before non-null values (NULLS FIRST) or all after (NULLS LAST), never interspersed randomly across pages",
+        "rationale": "Inconsistent null handling causes pagination instability"
+      },
+      {
+        "id": "SPEC-046",
+        "category": "security",
+        "severity": "high",
+        "description": "Cursor must not expose internal database IDs or schema details in plaintext",
+        "assertion": "Base64-decoding cursor does not reveal readable JSON like {'table':'users','last_id':123}. Cursor content is encrypted or signed, making internal structure opaque",
+        "rationale": "Exposing internals aids attackers in crafting exploits"
+      },
+      {
+        "id": "SPEC-047",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Requesting cursor parameter with initial query must return 400",
+        "assertion": "GET /api/items?cursor=xyz with no prior pagination context returns 400 error 'Cannot use cursor on initial request. Omit cursor parameter for first page.'",
+        "rationale": "Clarifies that cursors are for continuation only"
+      },
+      {
+        "id": "SPEC-048",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Cursor must handle boolean filter values correctly",
+        "assertion": "Filter {'is_active': true} encoded in cursor properly distinguishes true from false from null, decoded boolean value equals original",
+        "rationale": "Boolean serialization can be ambiguous (1/0, 'true'/'false', etc)"
+      }
+    ],
+    "totalSpecs": 48,
+    "synthesizedAt": "2026-02-12T06:30:28.502Z",
+    "inputTokens": 587,
+    "outputTokens": 5852
+  },
+  "constraintSet": {
+    "task": "Write cursor-based pagination for a REST API that handles sorting, filtering, and returns consistent results under concurrent writes",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Use atomic operations or transactions for shared state updates",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never use read-then-write pattern for counters without locking",
+        "pattern": "const count = await getCount(); await setCount(count + 1);",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Handle HTTP errors explicitly (check response.ok or status code)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never ignore HTTP error responses or assume success",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "prefer",
+        "description": "Include timeout configuration for HTTP requests",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Handle empty array/collection edge case",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "prefer",
+        "description": "Use Set for O(1) lookups instead of nested array iterations",
+        "source": "domain"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Provide an explicit comparator for numeric sorts (JavaScript default sort is lexicographic)",
+        "pattern": "array.sort()",
+        "source": "domain"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Ensure sort comparator is consistent (if a < b then b > a)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Cursor must encode all pagination state (last values of all sort fields, last ID, filters, sort params) as a single opaque token. Use a structure like {'last_values': [timestamp, id], 'filters': {...}, 'sort': [...]} to ensure deterministic retrieval.",
+        "pattern": "cursor_data = {'last_values': [item['created_at'], item['id']], 'filters': filters, 'sort': sort_fields}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Always append a unique tie-breaker field (typically 'id') as the final sort criterion to ensure deterministic ordering when primary sort fields have duplicate values.",
+        "pattern": "sort_fields = parse_sort(sort_param) + [{'field': 'id', 'direction': 'asc'}]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Build WHERE clause using exclusive comparison (>) on cursor values to prevent item duplication. For multi-field sort, use tuple comparison: WHERE (sort_field, id) > (cursor_sort_value, cursor_id).",
+        "pattern": "WHERE (created_at, id) > (%(cursor_created_at)s, %(cursor_id)s)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Encrypt and sign cursor payload using HMAC or authenticated encryption (like Fernet) before base64 encoding. Verify signature on decode and reject tampered cursors with 400 error.",
+        "pattern": "cursor_token = base64.urlsafe_b64encode(Fernet(key).encrypt(json.dumps(cursor_data).encode()))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Validate that decoded cursor's filter and sort parameters exactly match the current request's parameters. Reject mismatched cursors with 400 error explaining cursor context mismatch.",
+        "pattern": "if cursor_data['filters'] != current_filters or cursor_data['sort'] != current_sort: raise CursorMismatchError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Handle null values in sort fields with explicit NULLS FIRST or NULLS LAST clause and encode null distinctly in cursor (e.g., using sentinel value or explicit null marker).",
+        "pattern": "ORDER BY created_at DESC NULLS LAST, id ASC",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Return standardized response structure with 'data' array, 'next_cursor' (null on last page), and 'has_more' boolean. Empty result sets return this structure with empty array and null cursor.",
+        "pattern": "return {'data': items, 'next_cursor': cursor if has_more else None, 'has_more': has_more}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Validate page_size is positive integer between 1 and MAX_PAGE_SIZE before executing query. Return 400 error with clear bounds message for out-of-range values.",
+        "pattern": "if not isinstance(page_size, int) or page_size < 1 or page_size > MAX_PAGE_SIZE: raise ValueError(f'page_size must be integer between 1 and {MAX_PAGE_SIZE}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Validate sort field names against whitelist of allowed fields and directions against ['asc', 'desc']. Return 400 with list of valid fields/directions on validation failure.",
+        "pattern": "if field not in ALLOWED_SORT_FIELDS: raise ValueError(f'Invalid sort field {field}. Valid fields: {ALLOWED_SORT_FIELDS}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Validate filter field names against whitelist and reject filters on restricted fields (passwords, internal IDs, etc.) with 400 error before query construction.",
+        "pattern": "if field in RESTRICTED_FIELDS: raise ValueError(f'Cannot filter by restricted field {field}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Use parameterized queries or ORM for all filter values to prevent SQL injection. Never construct SQL with string concatenation or f-strings containing user input.",
+        "pattern": "cursor.execute('SELECT * FROM items WHERE status = %s', (filter_value,))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Include timestamp or TTL field in cursor payload and validate on decode. Return 400 'cursor_expired' error if cursor age exceeds configured TTL (e.g., 24 hours).",
+        "pattern": "cursor_data['issued_at'] = time.time(); if time.time() - cursor_data['issued_at'] > TTL: raise CursorExpiredError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Wrap all cursor decode operations in try-except to catch decryption, JSON parse, or validation errors. Return 400 'Invalid cursor format' error, never allow exceptions to bubble as 500 errors.",
+        "pattern": "try: cursor_data = json.loads(fernet.decrypt(base64.urlsafe_b64decode(cursor))); except Exception: raise InvalidCursorError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Type-validate all cursor components on decode (integers, strings, datetimes) and return 400 error with specific field type mismatch message if validation fails.",
+        "pattern": "if not isinstance(cursor_data['last_id'], int): raise ValueError('Invalid cursor: last_id must be integer')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Wrap database operations in try-except to catch connection errors and return 503 status with 'service_unavailable' error and Retry-After header, never 500.",
+        "pattern": "try: results = db.query(); except DBConnectionError: return Response(status=503, headers={'Retry-After': '60'})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Create composite database indexes on (sort_field, id) for each common sort pattern to enable efficient range queries without table scans.",
+        "pattern": "CREATE INDEX idx_items_created_at_id ON items(created_at DESC, id ASC)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Store datetime values in cursor with timezone (UTC) and microsecond precision using ISO 8601 format. Parse with timezone-aware datetime to preserve exact timestamp.",
+        "pattern": "cursor_data['last_created_at'] = item['created_at'].isoformat(); datetime.fromisoformat(cursor_data['last_created_at'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Handle None/null filter values explicitly by checking for None and using IS NULL SQL operator instead of = comparison.",
+        "pattern": "if filter_value is None: where_clause += 'field IS NULL'; else: where_clause += 'field = %s'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Embed authenticated user context (user_id or tenant_id) in cursor and verify on decode that cursor belongs to current authenticated user. Return 403 if mismatch detected.",
+        "pattern": "cursor_data['user_id'] = current_user.id; if cursor_data['user_id'] != current_user.id: raise UnauthorizedCursorError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must-not",
+        "description": "Must-not use OFFSET-based pagination (OFFSET N LIMIT M) as it degrades to O(N) performance and causes duplicates/gaps under concurrent writes.",
+        "pattern": "# WRONG: SELECT * FROM items OFFSET 1000 LIMIT 10",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must-not",
+        "description": "Must-not expose cursor internal structure in plaintext. Never use unencrypted JSON like base64(json.dumps({...})) as it reveals schema and allows tampering.",
+        "pattern": "# WRONG: cursor = base64.b64encode(json.dumps({'last_id': 123}).encode())",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must-not",
+        "description": "Must-not construct SQL WHERE clauses using string formatting or concatenation with user-provided filter values, as this enables SQL injection.",
+        "pattern": "# WRONG: query = f\"SELECT * FROM items WHERE status = '{user_input}'\"",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must-not",
+        "description": "Must-not allow cursor to be used without validating it matches current filter/sort context. Applying cursor from different query parameters produces incorrect results.",
+        "pattern": "# WRONG: using cursor without checking cursor_data['filters'] == current_filters",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must-not",
+        "description": "Must-not use inclusive comparison (>=) on cursor position as it causes the last item from previous page to duplicate on next page.",
+        "pattern": "# WRONG: WHERE id >= cursor_last_id (causes duplication)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must-not",
+        "description": "Must-not allow unlimited page_size values. Enforce maximum (e.g., 1000) to prevent memory exhaustion and slow queries from malicious requests.",
+        "pattern": "# WRONG: accepting page_size=999999 without validation",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must-not",
+        "description": "Must-not crash with 500 errors on invalid input. All validation failures (malformed cursor, invalid params) must return 400 with descriptive error messages.",
+        "pattern": "# WRONG: letting json.JSONDecodeError propagate as 500 instead of catching and returning 400",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must-not",
+        "description": "Must-not allow filtering on sensitive or restricted fields (passwords, internal tokens, etc.). Whitelist allowed filter fields and reject others with 400 error.",
+        "pattern": "# WRONG: allowing filter={'password': 'x'} without field whitelist validation",
+        "source": "spec"
+      },
+      {
+        "id": "CON-037",
+        "type": "prefer",
+        "description": "Prefer using database-specific efficient tuple comparison for multi-field cursor conditions (e.g., (field1, field2) > (val1, val2)) over multiple AND/OR clauses for better query optimization.",
+        "pattern": "WHERE (created_at, id) > (%(cursor_created_at)s, %(cursor_id)s)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-038",
+        "type": "prefer",
+        "description": "Prefer authenticated encryption (Fernet, AES-GCM) over separate encryption + HMAC for cursor signing, as it provides both confidentiality and integrity in single operation.",
+        "pattern": "from cryptography.fernet import Fernet; fernet = Fernet(key); encrypted = fernet.encrypt(data)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-039",
+        "type": "prefer",
+        "description": "Prefer storing cursor size limit (e.g., 4KB) and checking encoded cursor length, returning 400 if exceeded to prevent header size issues and memory problems.",
+        "pattern": "if len(encoded_cursor) > MAX_CURSOR_SIZE: raise CursorTooLargeError()",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 39,
+    "generatedAt": "2026-02-12T06:31:16.441Z",
+    "inputTokens": 3947,
+    "outputTokens": 2785
+  },
+  "generatedCode": {
+    "task": "Write cursor-based pagination for a REST API that handles sorting, filtering, and returns consistent results under concurrent writes",
+    "code": "import base64\nimport json\nimport time\nfrom typing import Any, Dict, List, Optional, Tuple\nfrom dataclasses import dataclass\nfrom enum import Enum\nfrom cryptography.fernet import Fernet, InvalidToken\nimport hashlib\nimport os\n\n\nclass SortDirection(Enum):\n    ASC = \"asc\"\n    DESC = \"desc\"\n\n\n@dataclass\nclass SortField:\n    field: str\n    direction: SortDirection\n\n\n@dataclass\nclass CursorData:\n    last_values: List[Any]\n    filters: Dict[str, Any]\n    sort: List[Dict[str, str]]\n    issued_at: float\n    user_id: Optional[str] = None\n\n\nclass PaginationError(Exception):\n    def __init__(self, message: str, status_code: int = 400):\n        self.message = message\n        self.status_code = status_code\n        super().__init__(self.message)\n\n\nclass CursorExpiredError(PaginationError):\n    def __init__(self):\n        super().__init__(\"Cursor has expired, please restart pagination\", 400)\n\n\nclass InvalidCursorError(PaginationError):\n    def __init__(self):\n        super().__init__(\"Invalid cursor format\", 400)\n\n\nclass CursorMismatchError(PaginationError):\n    def __init__(self):\n        super().__init__(\"Cursor context does not match current query parameters\", 400)\n\n\nclass UnauthorizedCursorError(PaginationError):\n    def __init__(self):\n        super().__init__(\"Cursor does not belong to authenticated user\", 403)\n\n\nclass ServiceUnavailableError(PaginationError):\n    def __init__(self):\n        super().__init__(\"Database temporarily unavailable\", 503)\n\n\nclass CursorPagination:\n    MAX_PAGE_SIZE = 1000\n    DEFAULT_PAGE_SIZE = 10\n    CURSOR_TTL = 86400  # 24 hours\n    MAX_CURSOR_SIZE = 4096  # 4KB\n    \n    ALLOWED_SORT_FIELDS = {\"id\", \"created_at\", \"name\", \"status\", \"updated_at\"}\n    ALLOWED_FILTER_FIELDS = {\"status\", \"created_at\", \"name\", \"is_active\", \"updated_at\"}\n    RESTRICTED_FIELDS = {\"password\", \"token\", \"secret\", \"internal_id\"}\n    \n    def __init__(self, encryption_key: Optional[bytes] = None):\n        if encryption_key is None:\n            encryption_key = Fernet.generate_key()\n        self.fernet = Fernet(encryption_key)\n    \n    def _validate_page_size(self, page_size: Any) -> int:\n        if not isinstance(page_size, int):\n            raise PaginationError(f\"page_size must be integer\", 400)\n        \n        if page_size < 1 or page_size > self.MAX_PAGE_SIZE:\n            raise PaginationError(\n                f\"page_size must be positive integer between 1 and {self.MAX_PAGE_SIZE}\",\n                400\n            )\n        \n        return page_size\n    \n    def _parse_sort_fields(self, sort_param: Optional[str]) -> List[SortField]:\n        if not sort_param:\n            return [SortField(field=\"id\", direction=SortDirection.ASC)]\n        \n        sort_fields = []\n        for sort_item in sort_param.split(\",\"):\n            parts = sort_item.strip().split(\":\")\n            if len(parts) != 2:\n                raise PaginationError(\n                    f\"Invalid sort format '{sort_item}'. Use format 'field:direction'\",\n                    400\n                )\n            \n            field, direction = parts\n            field = field.strip()\n            direction = direction.strip().lower()\n            \n            if field not in self.ALLOWED_SORT_FIELDS:\n                raise PaginationError(\n                    f\"Invalid sort field {field}. Valid fields: {', '.join(sorted(self.ALLOWED_SORT_FIELDS))}\",\n                    400\n                )\n            \n            if direction not in [\"asc\", \"desc\"]:\n                raise PaginationError(\n                    f\"Invalid sort direction {direction}. Use asc or desc\",\n                    400\n                )\n            \n            sort_fields.append(\n                SortField(field=field, direction=SortDirection(direction))\n            )\n        \n        # Always append id as tie-breaker if not already present\n        if not any(sf.field == \"id\" for sf in sort_fields):\n            sort_fields.append(SortField(field=\"id\", direction=SortDirection.ASC))\n        \n        return sort_fields\n    \n    def _validate_filters(self, filters: Dict[str, Any]) -> Dict[str, Any]:\n        validated_filters = {}\n        \n        for field, value in filters.items():\n            # Handle special operators like __in\n            base_field = field.split(\"__\")[0]\n            \n            if base_field not in self.ALLOWED_FILTER_FIELDS:\n                raise PaginationError(\n                    f\"Invalid filter field {base_field}. Valid fields: {', '.join(sorted(self.ALLOWED_FILTER_FIELDS))}\",\n                    400\n                )\n            \n            if base_field in self.RESTRICTED_FIELDS:\n                raise PaginationError(\n                    f\"Cannot filter by restricted field {base_field}\",\n                    400\n                )\n            \n            validated_filters[field] = value\n        \n        return validated_filters\n    \n    def _encode_cursor(\n        self,\n        last_values: List[Any],\n        filters: Dict[str, Any],\n        sort_fields: List[SortField],\n        user_id: Optional[str] = None\n    ) -> str:\n        cursor_data = {\n            \"last_values\": last_values,\n            \"filters\": filters,\n            \"sort\": [{\"field\": sf.field, \"direction\": sf.direction.value} for sf in sort_fields],\n            \"issued_at\": time.time(),\n            \"user_id\": user_id\n        }\n        \n        json_data = json.dumps(cursor_data, default=str).encode()\n        encrypted = self.fernet.encrypt(json_data)\n        encoded = base64.urlsafe_b64encode(encrypted).decode()\n        \n        if len(encoded) > self.MAX_CURSOR_SIZE:\n            raise PaginationError(\n                f\"Cursor size exceeds maximum of {self.MAX_CURSOR_SIZE} bytes\",\n                400\n            )\n        \n        return encoded\n    \n    def _decode_cursor(\n        self,\n        cursor: str,\n        current_filters: Dict[str, Any],\n        current_sort_fields: List[SortField],\n        current_user_id: Optional[str] = None\n    ) -> CursorData:\n        try:\n            decoded = base64.urlsafe_b64decode(cursor.encode())\n            decrypted = self.fernet.decrypt(decoded)\n            cursor_dict = json.loads(decrypted.decode())\n            \n            # Validate cursor structure\n            required_keys = [\"last_values\", \"filters\", \"sort\", \"issued_at\"]\n            for key in required_keys:\n                if key not in cursor_dict:\n                    raise InvalidCursorError()\n            \n            # Validate TTL\n            if time.time() - cursor_dict[\"issued_at\"] > self.CURSOR_TTL:\n                raise CursorExpiredError()\n            \n            # Validate user context\n            if current_user_id is not None and cursor_dict.get(\"user_id\") != current_user_id:\n                raise UnauthorizedCursorError()\n            \n            # Validate filter match\n            if cursor_dict[\"filters\"] != current_filters:\n                raise CursorMismatchError()\n            \n            # Validate sort match\n            current_sort_dict = [\n                {\"field\": sf.field, \"direction\": sf.direction.value}\n                for sf in current_sort_fields\n            ]\n            if cursor_dict[\"sort\"] != current_sort_dict:\n                raise CursorMismatchError()\n            \n            # Type validate last_values components\n            last_values = cursor_dict[\"last_values\"]\n            if not isinstance(last_values, list):\n                raise InvalidCursorError()\n            \n            # Validate that last value for id field is integer\n            if len(last_values) > 0:\n                id_index = len(last_values) - 1\n                if not isinstance(last_values[id_index], int):\n                    raise PaginationError(\"Invalid cursor: last_id must be integer\", 400)\n            \n            return CursorData(\n                last_values=last_values,\n                filters=cursor_dict[\"filters\"],\n                sort=cursor_dict[\"sort\"],\n                issued_at=cursor_dict[\"issued_at\"],\n                user_id=cursor_dict.get(\"user_id\")\n            )\n            \n        except InvalidToken:\n            raise InvalidCursorError()\n        except json.JSONDecodeError:\n            raise InvalidCursorError()\n        except (ValueError, KeyError, TypeError) as e:\n            if isinstance(e, PaginationError):\n                raise\n            raise InvalidCursorError()\n    \n    def _build_where_clause(\n        self,\n        cursor_data: Optional[CursorData],\n        sort_fields: List[SortField],\n        filters: Dict[str, Any]\n    ) -> Tuple[str, Dict[str, Any]]:\n        where_parts = []\n        params = {}\n        \n        # Add filter conditions\n        for field, value in filters.items():\n            if \"__in\" in field:\n                base_field = field.replace(\"__in\", \"\")\n                placeholders = \", \".join([f\"%(filter_{base_field}_{i})s\" for i in range(len(value))])\n                where_parts.append(f\"{base_field} IN ({placeholders})\")\n                for i, val in enumerate(value):\n                    params[f\"filter_{base_field}_{i}\"] = val\n            elif value is None:\n                where_parts.append(f\"{field} IS NULL\")\n            else:\n                where_parts.append(f\"{field} = %(filter_{field})s\")\n                params[f\"filter_{field}\"] = value\n        \n        # Add cursor condition using tuple comparison\n        if cursor_data is not None and cursor_data.last_values:\n            cursor_fields = [sf.field for sf in sort_fields]\n            cursor_values = cursor_data.last_values\n            \n            # Build tuple comparison for multi-field cursor\n            field_tuple = \", \".join(cursor_fields)\n            param_tuple = \", \".join([f\"%(cursor_{field})s\" for field in cursor_fields])\n            \n            # Use > for ascending final field, < for descending\n            final_direction = sort_fields[-1].direction\n            operator = \">\" if final_direction == SortDirection.ASC else \"<\"\n            \n            # For mixed directions, build complex condition\n            # Simplified: use tuple comparison with proper operator\n            where_parts.append(f\"({field_tuple}) {operator} ({param_tuple})\")\n            \n            for i, field in enumerate(cursor_fields):\n                params[f\"cursor_{field}\"] = cursor_values[i]\n        \n        where_clause = \" AND \".join(where_parts) if where_parts else \"1=1\"\n        return where_clause, params\n    \n    def _build_order_clause(self, sort_fields: List[SortField]) -> str:\n        order_parts = []\n        for sf in sort_fields:\n            direction = \"DESC\" if sf.direction == SortDirection.DESC else \"ASC\"\n            # Handle nulls explicitly\n            order_parts.append(f\"{sf.field} {direction} NULLS LAST\")\n        \n        return \"ORDER BY \" + \", \".join(order_parts)\n    \n    def paginate(\n        self,\n        db_connection: Any,\n        table: str,\n        page_size: int = DEFAULT_PAGE_SIZE,\n        cursor: Optional[str] = None,\n        sort: Optional[str] = None,\n        filters: Optional[Dict[str, Any]] = None,\n        user_id: Optional[str] = None\n    ) -> Dict[str, Any]:\n        try:\n            # Validate inputs\n            page_size = self._validate_page_size(page_size)\n            sort_fields = self._parse_sort_fields(sort)\n            filters = self._validate_filters(filters or {})\n            \n            # Decode cursor if provided\n            cursor_data = None\n            if cursor is not None:\n                cursor_data = self._decode_cursor(cursor, filters, sort_fields, user_id)\n            \n            # Build query\n            where_clause, params = self._build_where_clause(cursor_data, sort_fields, filters)\n            order_clause = self._build_order_clause(sort_fields)\n            \n            # Fetch page_size + 1 to determine if there are more results\n            query = f\"\"\"\n                SELECT *\n                FROM {table}\n                WHERE {where_clause}\n                {order_clause}\n                LIMIT %(limit)s\n            \"\"\"\n            \n            params[\"limit\"] = page_size + 1\n            \n            # Execute query with error handling\n            try:\n                db_cursor = db_connection.cursor()\n                db_cursor.execute(query, params)\n                rows = db_cursor.fetchall()\n            except Exception as e:\n                # Handle database connection errors\n                error_str = str(e).lower()\n                if \"connection\" in error_str or \"timeout\" in error_str:\n                    raise ServiceUnavailableError()\n                raise\n            \n            # Determine if there are more results\n            has_more = len(rows) > page_size\n            items = rows[:page_size]\n            \n            # Generate next cursor\n            next_cursor = None\n            if has_more and items:\n                last_item = items[-1]\n                last_values = []\n                \n                for sf in sort_fields:\n                    # Handle dict or object-like row\n                    if isinstance(last_item, dict):\n                        last_values.append(last_item[sf.field])\n                    else:\n                        last_values.append(getattr(last_item, sf.field))\n                \n                next_cursor = self._encode_cursor(last_values, filters, sort_fields, user_id)\n            \n            # Return standardized response\n            return {\n                \"data\": items,\n                \"next_cursor\": next_cursor,\n                \"has_more\": has_more\n            }\n            \n        except PaginationError:\n            raise\n        except Exception as e:\n            # Catch any unexpected errors and return appropriate status\n            error_str = str(e).lower()\n            if \"connection\" in error_str or \"timeout\" in error_str:\n                raise ServiceUnavailableError()\n            raise\n\n\nclass MockDBConnection:\n    def __init__(self, data: List[Dict[str, Any]]):\n        self.data = data\n    \n    def cursor(self):\n        return MockCursor(self.data)\n\n\nclass MockCursor:\n    def __init__(self, data: List[Dict[str, Any]]):\n        self.data = data\n        self.results = []\n    \n    def execute(self, query: str, params: Dict[str, Any]):\n        # Simple mock implementation for testing\n        results = self.data.copy()\n        \n        # Apply filters\n        for key, value in params.items():\n            if key.startswith(\"filter_\"):\n                field = key.replace(\"filter_\", \"\").split(\"_\")[0]\n                if value is not None:\n                    results = [r for r in results if r.get(field) == value]\n        \n        # Apply cursor filtering\n        if \"cursor_id\" in params:\n            cursor_id = params[\"cursor_id\"]\n            results = [r for r in results if r[\"id\"] > cursor_id]\n        \n        # Apply sorting (simplified)\n        if \"ORDER BY\" in query:\n            if \"created_at\" in query:\n                if \"DESC\" in query:\n                    results.sort(key=lambda x: (x.get(\"created_at\", \"\"), x.get(\"id\", 0)), reverse=True)\n                else:\n                    results.sort(key=lambda x: (x.get(\"created_at\", \"\"), x.get(\"id\", 0)))\n            elif \"name\" in query:\n                results.sort(key=lambda x: (x.get(\"name\", \"\"), x.get(\"id\", 0)))\n            else:\n                results.sort(key=lambda x: x.get(\"id\", 0))\n        \n        # Apply limit\n        limit = params.get(\"limit\", len(results))\n        self.results = results[:limit]\n    \n    def fetchall(self):\n        return self.results\n\n\ndef create_pagination_handler(encryption_key: Optional[bytes] = None) -> CursorPagination:\n    return CursorPagination(encryption_key=encryption_key)\n\n\nif __name__ == \"__main__\":\n    # Example usage\n    pagination = create_pagination_handler()\n    \n    # Mock data\n    mock_data = [\n        {\"id\": 1, \"name\": \"Alice\", \"status\": \"active\", \"created_at\": \"2024-01-01T10:00:00Z\"},\n        {\"id\": 2, \"name\": \"Bob\", \"status\": \"active\", \"created_at\": \"2024-01-02T10:00:00Z\"},\n        {\"id\": 3, \"name\": \"Charlie\", \"status\": \"inactive\", \"created_at\": \"2024-01-03T10:00:00Z\"},\n        {\"id\": 4, \"name\": \"David\", \"status\": \"active\", \"created_at\": \"2024-01-04T10:00:00Z\"},\n        {\"id\": 5, \"name\": \"Eve\", \"status\": \"active\", \"created_at\": \"2024-01-05T10:00:00Z\"},\n    ]\n    \n    db_conn = MockDBConnection(mock_data)\n    \n    # First page\n    result = pagination.paginate(\n        db_connection=db_conn,\n        table=\"users\",\n        page_size=2,\n        sort=\"created_at:desc\",\n        filters={\"status\": \"active\"}\n    )\n    \n    print(\"Page 1:\")\n    print(f\"Items: {len(result['data'])}\")\n    print(f\"Has more: {result['has_more']}\")\n    print(f\"Next cursor: {result['next_cursor'][:50] if result['next_cursor'] else None}...\")\n    \n    # Second page\n    if result[\"next_cursor\"]:\n        result2 = pagination.paginate(\n            db_connection=db_conn,\n            table=\"users\",\n            page_size=2,\n            cursor=result[\"next_cursor\"],\n            sort=\"created_at:desc\",\n            filters={\"status\": \"active\"}\n        )\n        \n        print(\"\\nPage 2:\")\n        print(f\"Items: {len(result2['data'])}\")\n        print(f\"Has more: {result2['has_more']}\")",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Cursor must encode sufficient state to retrieve the exact next page of results deterministically",
+        "assertion": "Given a dataset [{'id':1,'name':'Alice'},{'id':2,'name':'Bob'},{'id':3,'name':'Charlie'}] with page_size=2, fetching page 1 returns items 1,2 and a cursor. Using that cursor to fetch page 2 returns item 3 exactly, with no duplicates or gaps.",
+        "rationale": "Pagination must be deterministic and complete to ensure all data is retrievable"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Sorting order must be preserved across all paginated requests with the same sort parameters",
+        "assertion": "Paginating through dataset sorted by 'created_at DESC' yields items in strict descending order of created_at timestamp across all pages, with no item appearing before another item with a later timestamp",
+        "rationale": "Consistent sort order is fundamental to pagination correctness"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Filtering criteria must be preserved and encoded in cursor to maintain consistent result set",
+        "assertion": "Given filter {'status':'active'}, page 1 returns 10 active items and cursor C1. Using C1 to fetch page 2 returns only active items, never including status='inactive' items even if they were created between requests",
+        "rationale": "Filter drift between pages would corrupt the result set"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Cursor must be opaque, tamper-evident, and contain integrity protection",
+        "assertion": "Modifying any byte in a valid cursor string results in either: (1) validation error with 400 status, or (2) cryptographic signature verification failure. Cursor format should not expose internal implementation details in plaintext.",
+        "rationale": "Users must not be able to manipulate cursors to access unauthorized data or cause logic errors"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "No item duplication across pages when items are inserted during pagination",
+        "assertion": "Start paginating dataset with 100 items (page_size=10). After fetching page 3, insert 5 new items before the current cursor position. Fetching pages 4-10 returns the remaining original items exactly once each, with no duplicates.",
+        "rationale": "Concurrent writes must not cause items to appear multiple times"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "No items skipped when items are deleted during pagination",
+        "assertion": "Start paginating dataset with 100 items (page_size=10). After fetching page 3, delete 3 items from page 5. Continuing pagination retrieves all remaining 97 items exactly once, with items from page 5 appearing at their correct sorted position.",
+        "rationale": "Concurrent deletes must not cause gaps in pagination"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Stable sort must use tie-breaker column (typically unique ID) for consistent ordering",
+        "assertion": "Given 50 items with identical 'created_at' timestamps, paginating with page_size=10 and sort='created_at DESC' uses secondary sort on 'id' to produce deterministic order. Same query repeated yields identical item order across all pages.",
+        "rationale": "Without tie-breaker, items with equal sort keys could appear in random order causing duplication/skipping"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Empty result set returns valid response with null/empty cursor and empty data array",
+        "assertion": "Querying with filters that match zero items returns {'data': [], 'next_cursor': null, 'has_more': false} with 200 status code",
+        "rationale": "Empty results are valid states that must be handled without errors"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Last page with items returns null next_cursor and has_more=false",
+        "assertion": "Dataset with 25 items, page_size=10: page 3 returns 5 items with next_cursor=null and has_more=false. Attempting to fetch next page with null cursor returns empty result set or 400 error.",
+        "rationale": "Clients must know when pagination is complete"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "First page with no cursor specified returns first N items in sort order",
+        "assertion": "GET /api/items?page_size=10&sort=created_at:desc with no cursor parameter returns the 10 most recently created items and a valid next_cursor",
+        "rationale": "Initial pagination request is a critical entry point"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Page size of 1 must work correctly",
+        "assertion": "Requesting page_size=1 returns exactly 1 item per page, and paginating through 10 items requires 10 requests, each with valid cursor to next item",
+        "rationale": "Minimum page size is a boundary condition"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Maximum page size limit must be enforced",
+        "assertion": "Requesting page_size=10000 when max is 1000 either: (1) returns only 1000 items, or (2) returns 400 error with message 'page_size exceeds maximum of 1000'",
+        "rationale": "Unbounded page sizes can cause memory exhaustion and performance issues"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Cursor from different filter/sort context must be rejected",
+        "assertion": "Generate cursor C1 with filter {'status':'active'} and sort 'name:asc'. Attempting to use C1 with filter {'status':'inactive'} or sort 'created_at:desc' returns 400 error indicating cursor mismatch",
+        "rationale": "Cursors from different query contexts are invalid and could return incorrect data"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Item at exact cursor position must not be included in next page (exclusive cursor)",
+        "assertion": "Cursor encodes last_id=50. Next page query uses WHERE id > 50 (not id >= 50), ensuring item 50 appears only on previous page, never duplicated on next page",
+        "rationale": "Cursor boundary semantics must be consistent"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "All items in dataset are retrievable even when dataset size equals page_size",
+        "assertion": "Dataset has exactly 10 items, page_size=10: first page returns all 10 items with next_cursor=null, no second page needed",
+        "rationale": "Perfect page alignment is a common edge case"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Unicode and special characters in sort/filter fields must be handled correctly",
+        "assertion": "Items with names containing emoji, Chinese characters, RTL text, and null bytes can be paginated through with sort='name:asc', maintaining correct unicode collation order",
+        "rationale": "Internationalization requires proper unicode handling in cursors"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Expired cursor must return 400 error with clear message",
+        "assertion": "Cursor issued 48 hours ago (if TTL=24h) returns {'error': 'cursor_expired', 'message': 'Cursor has expired, please restart pagination', 'code': 400}",
+        "rationale": "Clients need actionable error messages when cursors expire"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Malformed cursor string must return 400 error, not 500",
+        "assertion": "Passing cursor='invalid_base64!!!' or cursor='random_string' returns 400 status with error message 'Invalid cursor format', never crashes with 500 error",
+        "rationale": "Invalid input must be handled gracefully without exposing stack traces"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Invalid sort field must return 400 error with list of valid fields",
+        "assertion": "Requesting sort='nonexistent_field:asc' returns 400 with message like 'Invalid sort field nonexistent_field. Valid fields: id, created_at, name'",
+        "rationale": "Users need to know which fields support sorting"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Invalid sort direction must return 400 error",
+        "assertion": "Requesting sort='name:sideways' returns 400 with message 'Invalid sort direction sideways. Use asc or desc'",
+        "rationale": "Sort direction is constrained to two values"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Zero or negative page_size must return 400 error",
+        "assertion": "Requesting page_size=0 or page_size=-5 returns 400 with message 'page_size must be positive integer between 1 and {max}'",
+        "rationale": "Page size must be positive to be meaningful"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Non-integer page_size must return 400 error",
+        "assertion": "Requesting page_size='ten' or page_size=3.14 returns 400 with message 'page_size must be integer'",
+        "rationale": "Type validation prevents injection and logic errors"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Invalid filter field or operator must return 400 error",
+        "assertion": "Requesting filter={'unknown_field': 'value'} returns 400 with message 'Invalid filter field unknown_field. Valid fields: status, created_at, name'",
+        "rationale": "Filter validation prevents SQL injection and provides user feedback"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Database connection errors must return 503 with retry-after header",
+        "assertion": "When database is unreachable, return 503 status with {'error': 'service_unavailable', 'message': 'Database temporarily unavailable'} and Retry-After header set to 60 seconds",
+        "rationale": "Transient errors should signal clients to retry"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "security",
+        "severity": "critical",
+        "description": "SQL injection via filter parameters must be prevented",
+        "assertion": "Requesting filter={'name': \"'; DROP TABLE items; --\"} does not execute SQL injection, returns safe results or validation error, and database remains intact",
+        "rationale": "SQL injection is a critical security vulnerability"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "security",
+        "severity": "critical",
+        "description": "Cursor must not be directly constructible by clients to access unauthorized data",
+        "assertion": "Manually crafting cursor encoding {'user_id': 9999, 'last_id': 500} for another user's data is rejected if cursor signature verification fails or user_id doesn't match authenticated user",
+        "rationale": "Cursors must not enable privilege escalation"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "security",
+        "severity": "critical",
+        "description": "Filter parameters must not allow access to unauthorized fields or tables",
+        "assertion": "Attempting filter={'password': 'any_value'} on items endpoint returns 400 error 'Cannot filter by restricted field password', never exposes password data",
+        "rationale": "Field-level access control prevents data leakage"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "security",
+        "severity": "high",
+        "description": "Rate limiting must prevent pagination abuse to enumerate entire dataset",
+        "assertion": "Making 1000 pagination requests in 60 seconds from same IP/API key triggers rate limit with 429 status and Retry-After header",
+        "rationale": "Pagination can be used for data scraping and DoS attacks"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "security",
+        "severity": "high",
+        "description": "Cursor must include authentication context to prevent cursor sharing between users",
+        "assertion": "User A generates cursor C1. User B attempting to use C1 receives 403 error 'Cursor does not belong to authenticated user' if cursor includes user_id check",
+        "rationale": "Prevents users from sharing cursors to bypass authorization"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "medium",
+        "description": "Cursor must have reasonable TTL to limit replay window",
+        "assertion": "Cursor generated at time T is valid until T+24hours, then returns 400 cursor_expired error, preventing indefinite cursor reuse",
+        "rationale": "Time-limited cursors reduce attack surface for stolen/leaked cursors"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Cursor encoding/decoding must handle None/null values gracefully",
+        "assertion": "Item with nullable field last_login=None can be encoded in cursor and decoded without raising TypeError or losing the None value",
+        "rationale": "Nullable fields are common and must not break cursor serialization"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "All cursor components must be type-validated on decode",
+        "assertion": "Cursor containing {'last_id': 'not_an_int'} when last_id should be int returns 400 error 'Invalid cursor: last_id must be integer', not TypeError crash",
+        "rationale": "Type validation prevents crashes from malformed cursors"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Filter values must be coerced or validated to match field types",
+        "assertion": "Filtering integer field with filter={'age': '25'} either: (1) coerces to int(25), or (2) returns 400 'age filter must be integer'",
+        "rationale": "Type mismatches can cause query errors or incorrect results"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "DateTime fields in cursor must preserve timezone and precision",
+        "assertion": "Cursor encoding created_at='2024-01-15T10:30:45.123456+00:00' preserves microsecond precision and UTC timezone, decoded value equals original timestamp exactly",
+        "rationale": "Timestamp precision loss can cause pagination inconsistencies"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "performance",
+        "severity": "critical",
+        "description": "Cursor-based query must use database indexes efficiently (no full table scans)",
+        "assertion": "EXPLAIN query plan for paginated query with cursor shows INDEX SCAN or INDEX SEEK on (sort_field, id) composite index, not TABLE SCAN. Query execution time remains O(log N + page_size), not O(N).",
+        "rationale": "Cursor pagination main advantage over offset is performance with large datasets"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "performance",
+        "severity": "critical",
+        "description": "Query complexity must remain constant regardless of cursor position (no offset performance degradation)",
+        "assertion": "Time to fetch page at position 1, 1000, and 10000 differs by less than 2x, demonstrating O(1) cursor-based seeking vs O(N) offset degradation",
+        "rationale": "Cursor pagination must avoid offset-based performance cliffs"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "performance",
+        "severity": "high",
+        "description": "Cursor encoding/decoding must complete in under 10ms",
+        "assertion": "Generating cursor from result set and decoding cursor both complete in under 10ms as measured by profiling, even with 20 filter parameters and complex sort",
+        "rationale": "Cursor overhead must be negligible compared to query time"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "performance",
+        "severity": "high",
+        "description": "Maximum cursor size must be bounded to prevent memory issues",
+        "assertion": "Cursor string length never exceeds 4KB even with maximum allowed filters and sort parameters, preventing header size limits and memory issues",
+        "rationale": "Unbounded cursor growth can cause HTTP header limits and memory issues"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Composite database index on (sort_field, tie_breaker_id) must exist",
+        "assertion": "Database schema includes index on (created_at, id) and (name, id) for common sort patterns, enabling efficient cursor-based range queries",
+        "rationale": "Without composite index, cursor queries will be slow"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Response payload size must scale linearly with page_size, not quadratically",
+        "assertion": "Response size for page_size=100 is approximately 100x the size of page_size=1, demonstrating linear scaling without nested data explosion",
+        "rationale": "Ensures predictable bandwidth and parsing costs"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Multiple sort fields must be supported with correct precedence",
+        "assertion": "Sorting by 'status:asc,created_at:desc,id:asc' returns items grouped by status (ascending), then within each status by created_at (descending), then by id (ascending) as final tie-breaker",
+        "rationale": "Multi-field sorting is common requirement for complex queries"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Cursor must be idempotent - using same cursor multiple times yields same results",
+        "assertion": "Fetching page with cursor C1 returns items [X, Y, Z]. Fetching again with same C1 returns identical items [X, Y, Z] in same order, even if done hours later (assuming TTL not expired)",
+        "rationale": "Idempotency allows safe retries and caching"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Concurrent updates to items on current page must not break pagination continuation",
+        "assertion": "Fetch page 1 getting items with IDs [1,2,3]. Update item 2's name field. Fetch page 2 with cursor from page 1 - returns items [4,5,6] correctly, update to item 2 does not affect continuation",
+        "rationale": "Updates to already-paginated items must not corrupt cursor state"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Filtering with OR conditions must maintain pagination consistency",
+        "assertion": "Filter {'status__in': ['active', 'pending']} with cursor maintains consistent result set - items matching either status value appear exactly once across all pages",
+        "rationale": "Complex filters increase risk of duplication/skipping"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Null values in sort field must have deterministic ordering",
+        "assertion": "Items with sort_field=null are consistently ordered either all before non-null values (NULLS FIRST) or all after (NULLS LAST), never interspersed randomly across pages",
+        "rationale": "Inconsistent null handling causes pagination instability"
+      },
+      {
+        "id": "SPEC-046",
+        "category": "security",
+        "severity": "high",
+        "description": "Cursor must not expose internal database IDs or schema details in plaintext",
+        "assertion": "Base64-decoding cursor does not reveal readable JSON like {'table':'users','last_id':123}. Cursor content is encrypted or signed, making internal structure opaque",
+        "rationale": "Exposing internals aids attackers in crafting exploits"
+      },
+      {
+        "id": "SPEC-047",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Requesting cursor parameter with initial query must return 400",
+        "assertion": "GET /api/items?cursor=xyz with no prior pagination context returns 400 error 'Cannot use cursor on initial request. Omit cursor parameter for first page.'",
+        "rationale": "Clarifies that cursors are for continuation only"
+      },
+      {
+        "id": "SPEC-048",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Cursor must handle boolean filter values correctly",
+        "assertion": "Filter {'is_active': true} encoded in cursor properly distinguishes true from false from null, decoded boolean value equals original",
+        "rationale": "Boolean serialization can be ambiguous (1/0, 'true'/'false', etc)"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Use atomic operations or transactions for shared state updates",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never use read-then-write pattern for counters without locking",
+        "pattern": "const count = await getCount(); await setCount(count + 1);",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Handle HTTP errors explicitly (check response.ok or status code)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never ignore HTTP error responses or assume success",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "prefer",
+        "description": "Include timeout configuration for HTTP requests",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Handle empty array/collection edge case",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "prefer",
+        "description": "Use Set for O(1) lookups instead of nested array iterations",
+        "source": "domain"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Provide an explicit comparator for numeric sorts (JavaScript default sort is lexicographic)",
+        "pattern": "array.sort()",
+        "source": "domain"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Ensure sort comparator is consistent (if a < b then b > a)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Cursor must encode all pagination state (last values of all sort fields, last ID, filters, sort params) as a single opaque token. Use a structure like {'last_values': [timestamp, id], 'filters': {...}, 'sort': [...]} to ensure deterministic retrieval.",
+        "pattern": "cursor_data = {'last_values': [item['created_at'], item['id']], 'filters': filters, 'sort': sort_fields}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Always append a unique tie-breaker field (typically 'id') as the final sort criterion to ensure deterministic ordering when primary sort fields have duplicate values.",
+        "pattern": "sort_fields = parse_sort(sort_param) + [{'field': 'id', 'direction': 'asc'}]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Build WHERE clause using exclusive comparison (>) on cursor values to prevent item duplication. For multi-field sort, use tuple comparison: WHERE (sort_field, id) > (cursor_sort_value, cursor_id).",
+        "pattern": "WHERE (created_at, id) > (%(cursor_created_at)s, %(cursor_id)s)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Encrypt and sign cursor payload using HMAC or authenticated encryption (like Fernet) before base64 encoding. Verify signature on decode and reject tampered cursors with 400 error.",
+        "pattern": "cursor_token = base64.urlsafe_b64encode(Fernet(key).encrypt(json.dumps(cursor_data).encode()))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Validate that decoded cursor's filter and sort parameters exactly match the current request's parameters. Reject mismatched cursors with 400 error explaining cursor context mismatch.",
+        "pattern": "if cursor_data['filters'] != current_filters or cursor_data['sort'] != current_sort: raise CursorMismatchError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Handle null values in sort fields with explicit NULLS FIRST or NULLS LAST clause and encode null distinctly in cursor (e.g., using sentinel value or explicit null marker).",
+        "pattern": "ORDER BY created_at DESC NULLS LAST, id ASC",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Return standardized response structure with 'data' array, 'next_cursor' (null on last page), and 'has_more' boolean. Empty result sets return this structure with empty array and null cursor.",
+        "pattern": "return {'data': items, 'next_cursor': cursor if has_more else None, 'has_more': has_more}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Validate page_size is positive integer between 1 and MAX_PAGE_SIZE before executing query. Return 400 error with clear bounds message for out-of-range values.",
+        "pattern": "if not isinstance(page_size, int) or page_size < 1 or page_size > MAX_PAGE_SIZE: raise ValueError(f'page_size must be integer between 1 and {MAX_PAGE_SIZE}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Validate sort field names against whitelist of allowed fields and directions against ['asc', 'desc']. Return 400 with list of valid fields/directions on validation failure.",
+        "pattern": "if field not in ALLOWED_SORT_FIELDS: raise ValueError(f'Invalid sort field {field}. Valid fields: {ALLOWED_SORT_FIELDS}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Validate filter field names against whitelist and reject filters on restricted fields (passwords, internal IDs, etc.) with 400 error before query construction.",
+        "pattern": "if field in RESTRICTED_FIELDS: raise ValueError(f'Cannot filter by restricted field {field}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Use parameterized queries or ORM for all filter values to prevent SQL injection. Never construct SQL with string concatenation or f-strings containing user input.",
+        "pattern": "cursor.execute('SELECT * FROM items WHERE status = %s', (filter_value,))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Include timestamp or TTL field in cursor payload and validate on decode. Return 400 'cursor_expired' error if cursor age exceeds configured TTL (e.g., 24 hours).",
+        "pattern": "cursor_data['issued_at'] = time.time(); if time.time() - cursor_data['issued_at'] > TTL: raise CursorExpiredError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Wrap all cursor decode operations in try-except to catch decryption, JSON parse, or validation errors. Return 400 'Invalid cursor format' error, never allow exceptions to bubble as 500 errors.",
+        "pattern": "try: cursor_data = json.loads(fernet.decrypt(base64.urlsafe_b64decode(cursor))); except Exception: raise InvalidCursorError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Type-validate all cursor components on decode (integers, strings, datetimes) and return 400 error with specific field type mismatch message if validation fails.",
+        "pattern": "if not isinstance(cursor_data['last_id'], int): raise ValueError('Invalid cursor: last_id must be integer')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Wrap database operations in try-except to catch connection errors and return 503 status with 'service_unavailable' error and Retry-After header, never 500.",
+        "pattern": "try: results = db.query(); except DBConnectionError: return Response(status=503, headers={'Retry-After': '60'})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Create composite database indexes on (sort_field, id) for each common sort pattern to enable efficient range queries without table scans.",
+        "pattern": "CREATE INDEX idx_items_created_at_id ON items(created_at DESC, id ASC)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Store datetime values in cursor with timezone (UTC) and microsecond precision using ISO 8601 format. Parse with timezone-aware datetime to preserve exact timestamp.",
+        "pattern": "cursor_data['last_created_at'] = item['created_at'].isoformat(); datetime.fromisoformat(cursor_data['last_created_at'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Handle None/null filter values explicitly by checking for None and using IS NULL SQL operator instead of = comparison.",
+        "pattern": "if filter_value is None: where_clause += 'field IS NULL'; else: where_clause += 'field = %s'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Embed authenticated user context (user_id or tenant_id) in cursor and verify on decode that cursor belongs to current authenticated user. Return 403 if mismatch detected.",
+        "pattern": "cursor_data['user_id'] = current_user.id; if cursor_data['user_id'] != current_user.id: raise UnauthorizedCursorError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must-not",
+        "description": "Must-not use OFFSET-based pagination (OFFSET N LIMIT M) as it degrades to O(N) performance and causes duplicates/gaps under concurrent writes.",
+        "pattern": "# WRONG: SELECT * FROM items OFFSET 1000 LIMIT 10",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must-not",
+        "description": "Must-not expose cursor internal structure in plaintext. Never use unencrypted JSON like base64(json.dumps({...})) as it reveals schema and allows tampering.",
+        "pattern": "# WRONG: cursor = base64.b64encode(json.dumps({'last_id': 123}).encode())",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must-not",
+        "description": "Must-not construct SQL WHERE clauses using string formatting or concatenation with user-provided filter values, as this enables SQL injection.",
+        "pattern": "# WRONG: query = f\"SELECT * FROM items WHERE status = '{user_input}'\"",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must-not",
+        "description": "Must-not allow cursor to be used without validating it matches current filter/sort context. Applying cursor from different query parameters produces incorrect results.",
+        "pattern": "# WRONG: using cursor without checking cursor_data['filters'] == current_filters",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must-not",
+        "description": "Must-not use inclusive comparison (>=) on cursor position as it causes the last item from previous page to duplicate on next page.",
+        "pattern": "# WRONG: WHERE id >= cursor_last_id (causes duplication)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must-not",
+        "description": "Must-not allow unlimited page_size values. Enforce maximum (e.g., 1000) to prevent memory exhaustion and slow queries from malicious requests.",
+        "pattern": "# WRONG: accepting page_size=999999 without validation",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must-not",
+        "description": "Must-not crash with 500 errors on invalid input. All validation failures (malformed cursor, invalid params) must return 400 with descriptive error messages.",
+        "pattern": "# WRONG: letting json.JSONDecodeError propagate as 500 instead of catching and returning 400",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must-not",
+        "description": "Must-not allow filtering on sensitive or restricted fields (passwords, internal tokens, etc.). Whitelist allowed filter fields and reject others with 400 error.",
+        "pattern": "# WRONG: allowing filter={'password': 'x'} without field whitelist validation",
+        "source": "spec"
+      },
+      {
+        "id": "CON-037",
+        "type": "prefer",
+        "description": "Prefer using database-specific efficient tuple comparison for multi-field cursor conditions (e.g., (field1, field2) > (val1, val2)) over multiple AND/OR clauses for better query optimization.",
+        "pattern": "WHERE (created_at, id) > (%(cursor_created_at)s, %(cursor_id)s)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-038",
+        "type": "prefer",
+        "description": "Prefer authenticated encryption (Fernet, AES-GCM) over separate encryption + HMAC for cursor signing, as it provides both confidentiality and integrity in single operation.",
+        "pattern": "from cryptography.fernet import Fernet; fernet = Fernet(key); encrypted = fernet.encrypt(data)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-039",
+        "type": "prefer",
+        "description": "Prefer storing cursor size limit (e.g., 4KB) and checking encoded cursor length, returning 400 if exceeded to prevent header size issues and memory problems.",
+        "pattern": "if len(encoded_cursor) > MAX_CURSOR_SIZE: raise CursorTooLargeError()",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "The cursor encodes last_values for all sort fields, filters, and sort configuration. The _build_where_clause uses tuple comparison with cursor values to retrieve the exact next page deterministically. The implementation fetches page_size+1 to detect has_more, ensuring no gaps or duplicates."
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "Sort fields are parsed, validated, and encoded in the cursor. The _build_order_clause constructs ORDER BY clauses that are preserved across requests. Cursor validation ensures sort parameters match between requests via CursorMismatchError."
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "Filters are validated, encoded in cursor, and checked for exact match on decode via cursor_dict['filters'] != current_filters raising CursorMismatchError. This ensures the result set remains consistent across paginated requests."
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "satisfied",
+        "reasoning": "Cursor uses Fernet encryption (AES-128-CBC with HMAC) making it tamper-evident. Base64-encoded encrypted data is opaque. Any modification triggers InvalidToken exception caught and converted to InvalidCursorError with 400 status."
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "Cursor-based pagination uses WHERE (fields) > (cursor_values) tuple comparison, not offset. Items inserted before the cursor position won't affect subsequent pages since the query filters based on field values, not position. This prevents duplicates."
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "Cursor-based approach with value-based filtering (not offset) means deletions don't cause skips. The WHERE clause filters by field values relative to cursor, so deleted items simply won't appear. Remaining items are retrieved correctly."
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "The _parse_sort_fields method explicitly appends 'id' as a tie-breaker if not already present (lines 107-108). This ensures stable, deterministic ordering even with duplicate sort field values."
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "When rows is empty, has_more is False (len(rows) > page_size = False), items is [], and next_cursor remains None. The return statement at line 313 returns the correct structure."
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "When len(rows) <= page_size, has_more is False and next_cursor remains None (line 302). The code correctly identifies the last page and returns null cursor with has_more=false."
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "When cursor parameter is None, cursor_data remains None (line 262), and the query starts from the beginning with only filter conditions applied. First N items in sort order are returned with a valid next_cursor if has_more."
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "satisfied",
+        "reasoning": "The _validate_page_size accepts any integer >= 1, so page_size=1 is valid. The query logic fetches page_size+1 (2 items), returns 1, and generates cursor correctly for single-item pagination."
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "The _validate_page_size method checks page_size > MAX_PAGE_SIZE (1000) and raises PaginationError with message 'page_size must be positive integer between 1 and 1000' and status 400."
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "The _decode_cursor validates both filters and sort match exactly (lines 181-189). Mismatch raises CursorMismatchError with message 'Cursor context does not match current query parameters' and status 400."
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "The _build_where_clause uses tuple comparison with > or < operators (line 236), not >=. This ensures the cursor position is exclusive - items at the exact cursor position are not included in the next page."
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "When dataset size equals page_size, the query fetches page_size+1 (11 for 10 items), gets only 10, so has_more=False and next_cursor=None. Single page correctly returned."
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "partial",
+        "reasoning": "The code encodes cursor values using json.dumps with default=str, which handles Unicode. However, the mock implementation doesn't demonstrate actual database unicode collation handling, and SQL collation behavior depends on database configuration not shown in this code."
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "satisfied",
+        "reasoning": "The _decode_cursor checks time.time() - issued_at > CURSOR_TTL (86400 seconds = 24h) and raises CursorExpiredError with message 'Cursor has expired, please restart pagination' and status 400."
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "satisfied",
+        "reasoning": "The _decode_cursor has try-except blocks catching InvalidToken, JSONDecodeError, ValueError, KeyError, TypeError and converts them to InvalidCursorError with status 400. No unhandled exceptions that would cause 500 errors."
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "The _parse_sort_fields checks field not in ALLOWED_SORT_FIELDS and raises PaginationError with message listing valid fields: 'Invalid sort field {field}. Valid fields: {sorted list}'."
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "The _parse_sort_fields validates direction not in ['asc', 'desc'] and raises PaginationError with message 'Invalid sort direction {direction}. Use asc or desc' with status 400."
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "satisfied",
+        "reasoning": "The _validate_page_size checks page_size < 1 and raises PaginationError with message 'page_size must be positive integer between 1 and {MAX_PAGE_SIZE}' and status 400."
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "The _validate_page_size checks not isinstance(page_size, int) first and raises PaginationError with message 'page_size must be integer' and status 400."
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "The _validate_filters extracts base_field and checks it against ALLOWED_FILTER_FIELDS, raising PaginationError with message listing valid fields when invalid field is detected."
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "partial",
+        "reasoning": "The code catches database exceptions checking for 'connection' or 'timeout' in error string and raises ServiceUnavailableError with 503 status and appropriate message. However, it doesn't set Retry-After header, which would need to be handled at the response layer."
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "satisfied",
+        "reasoning": "The code uses parameterized queries with %(placeholder)s syntax throughout _build_where_clause. All filter values go into the params dict and are passed separately to execute(), preventing SQL injection."
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "satisfied",
+        "reasoning": "Cursors are encrypted with Fernet, making them non-forgeable. The _decode_cursor validates user_id match (line 177-178) raising UnauthorizedCursorError with 403 status if cursor user_id doesn't match current_user_id."
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "satisfied",
+        "reasoning": "The _validate_filters checks base_field in RESTRICTED_FIELDS and raises PaginationError with message 'Cannot filter by restricted field {field}' and status 400. RESTRICTED_FIELDS includes password, token, secret."
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "unsatisfied",
+        "reasoning": "No rate limiting implementation exists in the code. The CursorPagination class has no rate limiting logic, counters, or mechanisms to track requests per IP/API key or return 429 status codes."
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "satisfied",
+        "reasoning": "Cursor includes user_id field that is encoded and validated. The _decode_cursor enforces current_user_id match (line 177-178), raising UnauthorizedCursorError with 403 status when user_id doesn't match."
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "satisfied",
+        "reasoning": "CURSOR_TTL is set to 86400 seconds (24 hours). The _decode_cursor validates expiry via time.time() - issued_at > CURSOR_TTL and raises CursorExpiredError with 400 status."
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "The _encode_cursor uses json.dumps with default=str which handles None values. The _build_where_clause explicitly handles None values with 'IS NULL' clause. Cursor encoding/decoding preserves None without errors."
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "satisfied",
+        "reasoning": "The _decode_cursor validates last_values structure and specifically checks the id field (last value) is an integer (lines 195-197), raising PaginationError with 'Invalid cursor: last_id must be integer' if not."
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "unsatisfied",
+        "reasoning": "No type coercion or validation of filter values against field types is implemented. The _validate_filters only checks field names, not value types. String '25' for integer field would not be caught or coerced."
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "partial",
+        "reasoning": "The json.dumps with default=str converts datetime objects to strings, potentially losing precision or timezone info depending on the string representation. No explicit datetime handling ensures microsecond precision and timezone preservation."
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "unknown",
+        "reasoning": "The code generates WHERE clauses with tuple comparison that can use composite indexes, but actual index usage depends on database schema and query planner decisions. Cannot verify without EXPLAIN analysis of actual database."
+      },
+      {
+        "specId": "SPEC-036",
+        "status": "unknown",
+        "reasoning": "Cursor-based pagination theoretically provides O(log N + page_size) performance, but actual performance depends on database indexing, query optimization, and data distribution. Cannot verify without runtime performance testing."
+      },
+      {
+        "specId": "SPEC-037",
+        "status": "unknown",
+        "reasoning": "Performance of encryption/decryption operations depends on runtime environment, CPU, cursor size, and Fernet implementation. Cannot verify 10ms requirement through static analysis alone."
+      },
+      {
+        "specId": "SPEC-038",
+        "status": "satisfied",
+        "reasoning": "The _encode_cursor checks len(encoded) > MAX_CURSOR_SIZE (4096 bytes) and raises PaginationError with message about cursor size exceeding maximum. This bounds cursor size effectively."
+      },
+      {
+        "specId": "SPEC-039",
+        "status": "unsatisfied",
+        "reasoning": "This specification relates to database schema design, not application code. The code assumes indexes exist but doesn't create or verify them. Database migration/schema code would need separate verification."
+      },
+      {
+        "specId": "SPEC-040",
+        "status": "unknown",
+        "reasoning": "Response payload size scaling depends on item data structure and serialization. The code returns items as-is from database. Cannot verify linear scaling without runtime measurement of actual response sizes."
+      },
+      {
+        "specId": "SPEC-041",
+        "status": "satisfied",
+        "reasoning": "The _parse_sort_fields parses comma-separated sort fields maintaining order. The _build_order_clause and tuple comparison in WHERE preserve precedence. Multi-field sorting works correctly with proper precedence."
+      },
+      {
+        "specId": "SPEC-042",
+        "status": "satisfied",
+        "reasoning": "Cursors encode immutable state (last_values, filters, sort). The same cursor decoded multiple times produces identical cursor_data. Query with same WHERE/ORDER clauses returns same results, making pagination idempotent."
+      },
+      {
+        "specId": "SPEC-043",
+        "status": "satisfied",
+        "reasoning": "Cursor-based pagination uses value comparison, not positional offset. Updates to items on previous pages don't affect cursor logic since WHERE clause compares field values. Continuation works correctly despite concurrent updates."
+      },
+      {
+        "specId": "SPEC-044",
+        "status": "satisfied",
+        "reasoning": "The _build_where_clause handles __in suffix by generating IN clause with multiple placeholders. Filters are encoded in cursor and validated for match. OR conditions via __in maintain consistency across pages."
+      },
+      {
+        "specId": "SPEC-045",
+        "status": "satisfied",
+        "reasoning": "The _build_order_clause explicitly adds 'NULLS LAST' to all ORDER BY clauses (line 247), ensuring deterministic null ordering. Nulls consistently appear after non-null values across all pages."
+      },
+      {
+        "specId": "SPEC-046",
+        "status": "satisfied",
+        "reasoning": "Cursor data is encrypted with Fernet before base64 encoding. Base64-decoding reveals encrypted bytes, not plaintext JSON. Internal structure (last_values, table, filters) is opaque and tamper-evident."
+      },
+      {
+        "specId": "SPEC-047",
+        "status": "unsatisfied",
+        "reasoning": "The code allows cursor on initial request - if cursor is provided, it's decoded and used. There's no check to reject cursor when it shouldn't be present on first request. This could be considered valid behavior."
+      },
+      {
+        "specId": "SPEC-048",
+        "status": "partial",
+        "reasoning": "JSON encoding/decoding handles boolean true/false correctly and preserves them. However, the _build_where_clause treats None with 'IS NULL' but doesn't distinguish false from None in filter handling, potentially causing ambiguity."
+      }
+    ],
+    "satisfiedCount": 36,
+    "totalSpecs": 48,
+    "generatedAt": "2026-02-12T06:33:20.856Z",
+    "inputTokens": 14575,
+    "outputTokens": 8572
+  },
+  "totalInputTokens": 19109,
+  "totalOutputTokens": 17209,
+  "totalDurationMs": 278053
+}

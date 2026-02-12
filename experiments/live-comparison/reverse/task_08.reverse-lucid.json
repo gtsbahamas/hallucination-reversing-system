@@ -1,0 +1,1976 @@
+{
+  "task": "Write an HTTP client wrapper with exponential backoff retry, circuit breaker pattern, timeout handling, and request/response logging",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write an HTTP client wrapper with exponential backoff retry, circuit breaker pattern, timeout handling, and request/response logging",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Successful HTTP GET request must return response with status code, headers, and body",
+        "assertion": "client.get('http://example.com/api') returns response object with attributes: status_code (int), headers (dict), body (str/bytes)",
+        "rationale": "Core functionality - client must correctly execute and return standard HTTP responses"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Exponential backoff retry must increase delay between attempts exponentially",
+        "assertion": "For max_retries=3, base_delay=1s: failed request triggers retries with delays approximately 1s, 2s, 4s before final failure",
+        "rationale": "Exponential backoff is essential to avoid overwhelming failing services"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Circuit breaker must open after failure threshold is reached",
+        "assertion": "With failure_threshold=3: After 3 consecutive failures, circuit breaker state becomes 'open' and subsequent requests fail immediately without attempting HTTP call",
+        "rationale": "Circuit breaker prevents cascading failures by stopping requests to failing services"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Timeout must interrupt request that exceeds configured duration",
+        "assertion": "client.get('http://slow-service.com', timeout=2) raises TimeoutError when response takes >2 seconds",
+        "rationale": "Timeout prevents indefinite blocking and resource exhaustion"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Request logging must capture method, URL, headers, and timestamp",
+        "assertion": "client.get('http://api.com/users', headers={'Auth': 'token'}) logs entry with: method='GET', url='http://api.com/users', headers={'Auth': 'token'}, timestamp (ISO8601)",
+        "rationale": "Request logging is essential for debugging and audit trails"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Response logging must capture status code, headers, body, and duration",
+        "assertion": "After client.get('http://api.com/data') completes, log entry contains: status_code=200, headers (dict), body (first 1000 chars), duration_ms (float)",
+        "rationale": "Response logging enables performance analysis and troubleshooting"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Circuit breaker must transition to half-open state after timeout period",
+        "assertion": "With recovery_timeout=30s: After circuit opens, waiting 30s transitions state to 'half-open' allowing one test request",
+        "rationale": "Half-open state enables automatic recovery from transient failures"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Successful request in half-open state must close circuit breaker",
+        "assertion": "When circuit is 'half-open', a successful request transitions state to 'closed' and resets failure count to 0",
+        "rationale": "Circuit must automatically recover when service becomes healthy"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "correctness",
+        "severity": "high",
+        "description": "POST request must send body and return response",
+        "assertion": "client.post('http://api.com/users', json={'name': 'John'}) sends JSON body and returns response with status_code, headers, body",
+        "rationale": "POST is essential HTTP method for creating resources"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Retry logic must only retry on retryable status codes",
+        "assertion": "Requests returning 500, 502, 503, 504 trigger retry; requests returning 400, 401, 403, 404 do not retry",
+        "rationale": "Client errors (4xx) should not be retried as they indicate invalid requests"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Maximum retry attempts must be respected",
+        "assertion": "With max_retries=3: After initial attempt + 3 retries (4 total attempts), client raises exception if all fail",
+        "rationale": "Prevents infinite retry loops and resource exhaustion"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Custom headers must be included in HTTP requests",
+        "assertion": "client.get('http://api.com', headers={'X-Custom': 'value', 'Authorization': 'Bearer token'}) includes both headers in HTTP request",
+        "rationale": "Custom headers are required for authentication, API keys, and metadata"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Empty response body must be handled without error",
+        "assertion": "Server returning 204 No Content with empty body returns response object with body='' or body=None without raising exception",
+        "rationale": "204 and empty responses are valid HTTP scenarios"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Zero retry configuration must not retry",
+        "assertion": "With max_retries=0: Single failed request immediately raises exception without any retry attempts",
+        "rationale": "Zero retries is valid configuration for time-sensitive operations"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Zero timeout must raise error immediately",
+        "assertion": "client.get('http://api.com', timeout=0) raises ValueError or immediate TimeoutError",
+        "rationale": "Zero timeout is invalid and should be rejected"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Maximum backoff delay must be capped",
+        "assertion": "With max_backoff=60s: Even after many retries, delay between attempts never exceeds 60 seconds",
+        "rationale": "Prevents exponential backoff from becoming impractically long"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Circuit breaker with zero failure threshold must disable circuit breaking",
+        "assertion": "With failure_threshold=0: Circuit breaker never opens regardless of failures",
+        "rationale": "Allows disabling circuit breaker functionality when not needed"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Extremely large response body must be handled",
+        "assertion": "Response with 100MB body completes successfully and returns complete body (or streams appropriately)",
+        "rationale": "Large payloads should not cause memory errors or crashes"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Request with empty URL path must work",
+        "assertion": "client.get('http://example.com') (no path) successfully makes request to root endpoint",
+        "rationale": "Root URLs are valid HTTP targets"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Jitter should be added to exponential backoff to prevent thundering herd",
+        "assertion": "Multiple failed requests with same backoff configuration have delays that vary by ±20% due to jitter",
+        "rationale": "Jitter prevents synchronized retry storms from multiple clients"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Very short timeout values must be honored",
+        "assertion": "client.get('http://slow.com', timeout=0.001) raises TimeoutError for requests taking >1ms",
+        "rationale": "Microsecond-level timeouts may be needed for latency-sensitive applications"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Redirect responses must be followed up to limit",
+        "assertion": "Request to URL with 301/302 redirect follows redirect chain up to max_redirects (default 10) and returns final response",
+        "rationale": "HTTP redirects are common and must be handled automatically"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Network connection failure must raise appropriate exception",
+        "assertion": "client.get('http://nonexistent-domain-12345.com') raises ConnectionError or similar network exception",
+        "rationale": "Network failures must be distinguishable from application errors"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "DNS resolution failure must raise exception",
+        "assertion": "client.get('http://invalid-domain-that-does-not-exist-999.com') raises exception indicating DNS failure",
+        "rationale": "DNS errors are distinct failure mode requiring specific handling"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Invalid URL format must raise ValueError before attempting request",
+        "assertion": "client.get('not-a-valid-url') raises ValueError with message indicating invalid URL",
+        "rationale": "Invalid input should be rejected immediately without network calls"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Failed request in half-open state must reopen circuit",
+        "assertion": "When circuit is 'half-open', a failed test request transitions state back to 'open' and resets recovery timer",
+        "rationale": "Circuit must protect system if service is still unhealthy"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "SSL/TLS certificate validation failure must raise exception",
+        "assertion": "client.get('https://expired-certificate.badssl.com') raises SSLError indicating certificate problem",
+        "rationale": "Certificate validation protects against MITM attacks"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Malformed JSON response must raise appropriate error",
+        "assertion": "Response with Content-Type: application/json but body='invalid json{' raises JSONDecodeError when accessing response.json()",
+        "rationale": "Malformed data should be detected and reported clearly"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Retry exhaustion must provide detailed error information",
+        "assertion": "After all retries fail, raised exception contains: attempt_count, last_status_code, last_error_message, total_duration",
+        "rationale": "Detailed error context enables effective debugging"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Request interrupted mid-stream must be handled gracefully",
+        "assertion": "If connection drops while receiving response body, raises exception without leaving open connections or corrupt state",
+        "rationale": "Partial transfers must be detected and cleaned up properly"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "critical",
+        "description": "Sensitive headers must not appear in logs",
+        "assertion": "Request with headers={'Authorization': 'Bearer secret123', 'X-API-Key': 'key456'} logs headers with values redacted: {'Authorization': '[REDACTED]', 'X-API-Key': '[REDACTED]'}",
+        "rationale": "Logging credentials exposes them to unauthorized access"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "security",
+        "severity": "critical",
+        "description": "HTTPS URLs must use TLS by default",
+        "assertion": "client.get('https://api.com') establishes encrypted TLS connection, not plain HTTP",
+        "rationale": "HTTPS must provide encryption to protect data in transit"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "security",
+        "severity": "critical",
+        "description": "URL injection attempts must be prevented",
+        "assertion": "client.get('http://api.com\\r\\nX-Injected-Header: malicious') either escapes CRLF characters or raises exception, preventing header injection",
+        "rationale": "CRLF injection can lead to header smuggling attacks"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "security",
+        "severity": "high",
+        "description": "Request body with sensitive data must be redacted in logs",
+        "assertion": "client.post('http://api.com/login', json={'password': 'secret', 'username': 'user'}) logs body with password field redacted: {'password': '[REDACTED]', 'username': 'user'}",
+        "rationale": "Sensitive data in request bodies must not be logged in plain text"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "security",
+        "severity": "high",
+        "description": "Server redirect to non-HTTP(S) scheme must be rejected",
+        "assertion": "Server returning 302 redirect to 'file:///etc/passwd' or 'ftp://internal.server' raises exception preventing SSRF",
+        "rationale": "Prevents Server-Side Request Forgery to internal resources"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "security",
+        "severity": "high",
+        "description": "Maximum response size limit must prevent memory exhaustion",
+        "assertion": "With max_response_size=10MB: Response exceeding 10MB raises exception and closes connection immediately",
+        "rationale": "Prevents DoS attacks via unbounded response bodies"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "security",
+        "severity": "medium",
+        "description": "Certificate hostname verification must be enabled",
+        "assertion": "client.get('https://wrong-hostname.com') where certificate is for 'different-host.com' raises SSLError",
+        "rationale": "Hostname verification prevents MITM attacks with valid certificates for wrong domains"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "URL parameter must be string type",
+        "assertion": "client.get(None) raises TypeError with message 'URL must be string'. client.get(12345) raises TypeError",
+        "rationale": "Type enforcement prevents runtime errors and clarifies API contract"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "Timeout parameter must be numeric or None",
+        "assertion": "client.get('http://api.com', timeout='invalid') raises TypeError. timeout=None and timeout=5.5 are valid",
+        "rationale": "Type safety ensures timeout is usable for time calculations"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "Headers parameter must be dict-like with string keys and values",
+        "assertion": "client.get('http://api.com', headers=['invalid']) raises TypeError. headers={123: 'value'} raises TypeError. headers={'key': 123} raises TypeError",
+        "rationale": "HTTP headers must be string key-value pairs per specification"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Retry configuration parameters must be non-negative integers",
+        "assertion": "HttpClient(max_retries=-1) raises ValueError. HttpClient(max_retries=3.5) raises TypeError",
+        "rationale": "Negative retries are nonsensical; fractional retries are unclear"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Circuit breaker threshold must be positive integer",
+        "assertion": "HttpClient(failure_threshold=-1) raises ValueError. HttpClient(failure_threshold=0) is valid (disables circuit breaker)",
+        "rationale": "Negative thresholds are invalid; zero has special meaning (disabled)"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Response status code must be integer",
+        "assertion": "response.status_code returns int type, not string '200'",
+        "rationale": "Status codes should be integers for proper comparison and range checking"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "JSON request body must be serializable",
+        "assertion": "client.post('http://api.com', json={'key': object()}) raises TypeError indicating object not JSON serializable",
+        "rationale": "Non-serializable objects must be caught before network call"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "performance",
+        "severity": "high",
+        "description": "Connection pooling must reuse connections for same host",
+        "assertion": "Sequential requests to 'http://api.com/endpoint1' and 'http://api.com/endpoint2' reuse same TCP connection (verify via connection count or metrics)",
+        "rationale": "Connection reuse dramatically improves performance and reduces latency"
+      },
+      {
+        "id": "SPEC-046",
+        "category": "performance",
+        "severity": "high",
+        "description": "Concurrent requests must not block each other",
+        "assertion": "Starting 10 concurrent requests with 1s server delay completes in ~1s total, not ~10s (using threading or async)",
+        "rationale": "Parallel execution is essential for high-throughput applications"
+      },
+      {
+        "id": "SPEC-047",
+        "category": "performance",
+        "severity": "high",
+        "description": "Large response bodies should support streaming",
+        "assertion": "Response with 100MB body can be processed incrementally without loading entire body into memory at once",
+        "rationale": "Streaming prevents memory exhaustion for large payloads"
+      },
+      {
+        "id": "SPEC-048",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Failed requests must not leak connections",
+        "assertion": "After 100 failed requests, connection pool size remains constant (no connection leaks)",
+        "rationale": "Connection leaks eventually exhaust system resources"
+      },
+      {
+        "id": "SPEC-049",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Circuit breaker open state must reject requests without network call",
+        "assertion": "When circuit is open, 1000 requests complete in <100ms without any network activity",
+        "rationale": "Open circuit must fail-fast to protect system resources"
+      },
+      {
+        "id": "SPEC-050",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Logging must not significantly impact request latency",
+        "assertion": "Request with logging enabled vs logging disabled shows <10% latency difference for typical payloads",
+        "rationale": "Excessive logging overhead defeats purpose of performance optimizations"
+      },
+      {
+        "id": "SPEC-051",
+        "category": "correctness",
+        "severity": "high",
+        "description": "PUT and DELETE methods must be supported",
+        "assertion": "client.put('http://api.com/resource/1', json={'status': 'updated'}) sends PUT request. client.delete('http://api.com/resource/1') sends DELETE request",
+        "rationale": "REST APIs require full set of HTTP methods"
+      },
+      {
+        "id": "SPEC-052",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Query parameters must be properly encoded in URL",
+        "assertion": "client.get('http://api.com/search', params={'q': 'hello world', 'filter': 'a&b'}) generates URL 'http://api.com/search?q=hello+world&filter=a%26b'",
+        "rationale": "URL encoding prevents malformed requests and injection"
+      },
+      {
+        "id": "SPEC-053",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Response must expose raw headers as received",
+        "assertion": "Server response with header 'Content-Type: application/json; charset=utf-8' returns response.headers['Content-Type'] == 'application/json; charset=utf-8'",
+        "rationale": "Applications may need to parse header parameters"
+      },
+      {
+        "id": "SPEC-054",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Infinite redirect loop must be detected and terminated",
+        "assertion": "Server creating redirect loop (A->B->A) raises exception after max_redirects attempts with message indicating redirect loop",
+        "rationale": "Infinite loops hang application and waste resources"
+      },
+      {
+        "id": "SPEC-055",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Backoff delay calculation must use correct exponential formula",
+        "assertion": "With base_delay=2 and exponential_base=2: attempt 0 delay=2s, attempt 1 delay=4s, attempt 2 delay=8s, attempt 3 delay=16s",
+        "rationale": "Correct exponential backoff formula ensures predictable retry behavior"
+      },
+      {
+        "id": "SPEC-056",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Circuit breaker failure count must reset on successful request",
+        "assertion": "After 2 failures (failure_threshold=3), successful request resets failure count to 0",
+        "rationale": "Success should clear failure history to avoid premature circuit opening"
+      },
+      {
+        "id": "SPEC-057",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Unicode characters in URL and headers must be handled correctly",
+        "assertion": "client.get('http://api.com/测试', headers={'X-Name': 'José'}) properly encodes URL and headers",
+        "rationale": "International characters are common in modern applications"
+      },
+      {
+        "id": "SPEC-058",
+        "category": "security",
+        "severity": "medium",
+        "description": "Response body in logs must be truncated for large payloads",
+        "assertion": "Response with 1MB body logs only first 1000 characters followed by '... (truncated)' indicator",
+        "rationale": "Prevents log storage exhaustion and performance degradation"
+      },
+      {
+        "id": "SPEC-059",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Network errors must trigger retry but timeout errors may not",
+        "assertion": "ConnectionError and socket errors trigger retry. TimeoutError behavior configurable (may or may not retry based on retry_on_timeout setting)",
+        "rationale": "Different error types have different retry semantics"
+      },
+      {
+        "id": "SPEC-060",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Exception in logging must not break request execution",
+        "assertion": "If logger raises exception during log writing, request completes successfully and exception is suppressed or logged separately",
+        "rationale": "Logging failures should not cause request failures"
+      }
+    ],
+    "totalSpecs": 60,
+    "synthesizedAt": "2026-02-12T06:39:28.586Z",
+    "inputTokens": 590,
+    "outputTokens": 6303
+  },
+  "constraintSet": {
+    "task": "Write an HTTP client wrapper with exponential backoff retry, circuit breaker pattern, timeout handling, and request/response logging",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Handle HTTP errors explicitly (check response.ok or status code)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never ignore HTTP error responses or assume success",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "prefer",
+        "description": "Include timeout configuration for HTTP requests",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never use regex with /g flag in repeated calls without resetting lastIndex (JavaScript)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Return a response object with exactly three attributes: status_code (int), headers (dict), and body (str or bytes). Never return None or incomplete response objects.",
+        "pattern": "response = Response(status_code=200, headers={'Content-Type': 'application/json'}, body=b'{\"data\": \"value\"}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Implement exponential backoff with the formula: delay = base_delay * (exponential_base ** attempt_number). For base_delay=1 and exponential_base=2, delays must be 1s, 2s, 4s for attempts 0, 1, 2.",
+        "pattern": "delay = self.base_delay * (self.exponential_base ** attempt)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Track consecutive failure count and transition circuit breaker to 'open' state immediately when count reaches failure_threshold. Open state must prevent HTTP calls and fail fast.",
+        "pattern": "if self.consecutive_failures >= self.failure_threshold: self.state = 'open'; raise CircuitBreakerOpenError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Enforce timeout using the underlying HTTP library's timeout parameter. Must raise TimeoutError (or equivalent) when request exceeds the configured duration.",
+        "pattern": "response = requests.get(url, timeout=self.timeout)  # raises requests.Timeout",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Log request details before making HTTP call with fields: method (str), url (str), headers (dict), timestamp (ISO8601 formatted string using datetime.isoformat()).",
+        "pattern": "self.logger.info({'method': method, 'url': url, 'headers': headers, 'timestamp': datetime.utcnow().isoformat()})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Log response details after receiving response with fields: status_code (int), headers (dict), body (string, first 1000 chars), duration_ms (float calculated from start to end time).",
+        "pattern": "duration_ms = (end_time - start_time) * 1000; self.logger.info({'status_code': resp.status_code, 'headers': dict(resp.headers), 'body': resp.text[:1000], 'duration_ms': duration_ms})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Track time since circuit opened. After recovery_timeout seconds, transition from 'open' to 'half-open' state allowing exactly one test request.",
+        "pattern": "if self.state == 'open' and (time.time() - self.opened_at) >= self.recovery_timeout: self.state = 'half-open'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "When circuit is 'half-open', a successful request must transition state to 'closed' and reset consecutive_failures to 0.",
+        "pattern": "if self.state == 'half-open' and request_successful: self.state = 'closed'; self.consecutive_failures = 0",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Define a set of retryable status codes (500, 502, 503, 504). Only retry requests that return these codes. Do not retry 4xx errors except specific cases.",
+        "pattern": "RETRYABLE_STATUS_CODES = {500, 502, 503, 504}; if response.status_code in RETRYABLE_STATUS_CODES: retry()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Enforce maximum retry limit strictly. After initial attempt plus max_retries attempts (total max_retries + 1), raise exception with all retry attempts exhausted.",
+        "pattern": "for attempt in range(self.max_retries + 1): try_request(); if attempt == self.max_retries: raise MaxRetriesExceeded()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Handle empty response body (204 No Content or empty string) by setting body attribute to empty string '' or None. Do not raise exception for empty body.",
+        "pattern": "body = response.content if response.content else b''; return Response(status_code=204, headers={}, body=body)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "When max_retries=0, make only the initial request attempt. If it fails, raise exception immediately without any retry loop.",
+        "pattern": "if self.max_retries == 0: return single_attempt(); # no retry loop",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Validate timeout parameter before making request. If timeout=0, raise ValueError with message explaining timeout must be positive.",
+        "pattern": "if timeout is not None and timeout <= 0: raise ValueError('Timeout must be positive number or None')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Cap exponential backoff delay at max_backoff value. After calculating exponential delay, apply: actual_delay = min(calculated_delay, max_backoff).",
+        "pattern": "delay = min(self.base_delay * (2 ** attempt), self.max_backoff)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "When failure_threshold=0, disable circuit breaker entirely. Never transition to 'open' state regardless of failure count.",
+        "pattern": "if self.failure_threshold == 0: return  # circuit breaker disabled",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Add random jitter to backoff delays using: delay = calculated_delay * (1 + random.uniform(-jitter_factor, jitter_factor)) where jitter_factor=0.2 for ±20% variance.",
+        "pattern": "jittered_delay = delay * (1 + random.uniform(-0.2, 0.2))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Validate URL format before making request. Check for scheme (http/https) and raise ValueError with descriptive message if URL is malformed or missing scheme.",
+        "pattern": "parsed = urlparse(url); if not parsed.scheme or parsed.scheme not in ['http', 'https']: raise ValueError(f'Invalid URL: {url}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "When circuit is 'half-open' and test request fails, transition state back to 'open' and reset opened_at timestamp to restart recovery timeout.",
+        "pattern": "if self.state == 'half-open' and request_failed: self.state = 'open'; self.opened_at = time.time()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "After exhausting all retries, raise exception containing: attempt_count (int), last_status_code (int or None), last_error_message (str), total_duration (float in seconds).",
+        "pattern": "raise MaxRetriesExceeded(attempt_count=attempts, last_status_code=status, last_error_message=str(error), total_duration=total_time)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must-not",
+        "description": "Never log raw sensitive header values. Define SENSITIVE_HEADERS = {'authorization', 'x-api-key', 'cookie', 'proxy-authorization'} and replace values with '[REDACTED]' before logging.",
+        "pattern": "# BAD: logger.info({'headers': headers})\n# GOOD: sanitized = {k: '[REDACTED]' if k.lower() in SENSITIVE_HEADERS else v for k, v in headers.items()}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must-not",
+        "description": "Never allow CRLF characters (\\r, \\n) in URLs or header values. Detect and either escape them or raise ValueError to prevent header injection attacks.",
+        "pattern": "# BAD: requests.get(user_provided_url)\n# GOOD: if '\\r' in url or '\\n' in url: raise ValueError('CRLF injection attempt detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must-not",
+        "description": "Never log full request body containing password, token, secret, or api_key fields. Recursively redact these fields in JSON payloads before logging.",
+        "pattern": "# BAD: logger.info({'body': json_body})\n# GOOD: sanitized_body = redact_sensitive_fields(json_body, ['password', 'token', 'secret', 'api_key'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must-not",
+        "description": "Never follow redirects to non-HTTP(S) schemes. Validate redirect Location header scheme and raise exception if scheme is not http or https to prevent SSRF.",
+        "pattern": "# BAD: follow all redirects blindly\n# GOOD: redirect_url = response.headers['Location']; if urlparse(redirect_url).scheme not in ['http', 'https']: raise SecurityError('Invalid redirect scheme')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Enforce max_response_size limit by checking Content-Length header before reading body, or by reading body in chunks and stopping when size exceeded. Raise exception and close connection immediately.",
+        "pattern": "content_length = int(response.headers.get('Content-Length', 0)); if content_length > self.max_response_size: response.close(); raise ResponseTooLargeError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Validate URL parameter type at function entry. Raise TypeError with message 'URL must be string' if url is None, int, or any non-string type.",
+        "pattern": "if not isinstance(url, str): raise TypeError(f'URL must be string, got {type(url).__name__}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Validate timeout parameter type. Accept None, int, or float. Raise TypeError if timeout is string or other non-numeric type.",
+        "pattern": "if timeout is not None and not isinstance(timeout, (int, float)): raise TypeError(f'Timeout must be numeric or None, got {type(timeout).__name__}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Validate headers parameter is dict-like with string keys and string values. Raise TypeError if headers is list, or if any key or value is non-string.",
+        "pattern": "if not isinstance(headers, dict): raise TypeError('Headers must be dict'); if not all(isinstance(k, str) and isinstance(v, str) for k, v in headers.items()): raise TypeError('Header keys and values must be strings')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Validate retry configuration parameters (max_retries, failure_threshold) are non-negative integers in __init__. Raise ValueError for negative values, TypeError for float values.",
+        "pattern": "if not isinstance(max_retries, int): raise TypeError('max_retries must be int'); if max_retries < 0: raise ValueError('max_retries must be non-negative')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Validate JSON request body is serializable before making request. Use json.dumps() and catch TypeError to raise descriptive error about non-serializable object.",
+        "pattern": "try: json_str = json.dumps(json_body); except TypeError as e: raise TypeError(f'JSON body not serializable: {e}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "prefer",
+        "description": "Use connection pooling via requests.Session() or equivalent to reuse TCP connections for requests to the same host. Initialize session once and reuse for all requests.",
+        "pattern": "self.session = requests.Session(); response = self.session.get(url)  # reuses connections",
+        "source": "spec"
+      },
+      {
+        "id": "CON-037",
+        "type": "prefer",
+        "description": "Support concurrent requests using ThreadPoolExecutor or asyncio. Avoid blocking event loop or main thread when making multiple requests.",
+        "pattern": "with ThreadPoolExecutor() as executor: futures = [executor.submit(self.get, url) for url in urls]; results = [f.result() for f in futures]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-038",
+        "type": "prefer",
+        "description": "For large response bodies, use streaming by setting stream=True and reading response.iter_content() in chunks instead of loading entire body into memory.",
+        "pattern": "response = requests.get(url, stream=True); for chunk in response.iter_content(chunk_size=8192): process(chunk)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-039",
+        "type": "must",
+        "description": "When circuit is open, immediately raise CircuitBreakerOpenError without making any network call or waiting. Check circuit state before any HTTP operation.",
+        "pattern": "if self.state == 'open' and not self._should_attempt_reset(): raise CircuitBreakerOpenError('Circuit breaker is open')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-040",
+        "type": "must",
+        "description": "Properly encode query parameters in URL. Use urllib.parse.urlencode() to encode params dict and append to URL with proper escaping of special characters.",
+        "pattern": "from urllib.parse import urlencode, urlparse, urlunparse; encoded_params = urlencode(params); final_url = f'{url}?{encoded_params}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-041",
+        "type": "must",
+        "description": "Track redirect count and raise exception when max_redirects exceeded. Check for redirect loops by maintaining set of visited URLs and detecting cycles.",
+        "pattern": "visited_urls = set(); redirect_count = 0; while redirect_count < max_redirects: if url in visited_urls: raise RedirectLoopError(); visited_urls.add(url); redirect_count += 1",
+        "source": "spec"
+      },
+      {
+        "id": "CON-042",
+        "type": "must",
+        "description": "Use exact exponential backoff formula with configurable base: delay = base_delay * (exponential_base ** attempt). Default exponential_base should be 2.",
+        "pattern": "delay = self.base_delay * (self.exponential_base ** attempt)  # exponential_base typically 2",
+        "source": "spec"
+      },
+      {
+        "id": "CON-043",
+        "type": "must",
+        "description": "Reset consecutive failure count to 0 immediately after any successful request when circuit is in 'closed' state. Do not wait for threshold.",
+        "pattern": "if request_successful and self.state == 'closed': self.consecutive_failures = 0",
+        "source": "spec"
+      },
+      {
+        "id": "CON-044",
+        "type": "must",
+        "description": "Handle Unicode in URLs using urllib.parse.quote() for path components and proper encoding for headers. Encode header values to UTF-8 if necessary.",
+        "pattern": "from urllib.parse import quote; encoded_path = quote(path, safe='/'); headers = {k: v.encode('utf-8').decode('latin-1') for k, v in headers.items()}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-045",
+        "type": "must",
+        "description": "Truncate response body in logs at exactly 1000 characters. Append '... (truncated X bytes)' indicator showing remaining byte count.",
+        "pattern": "body_log = response.text[:1000]; if len(response.text) > 1000: body_log += f'... (truncated {len(response.text) - 1000} bytes)'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-046",
+        "type": "must",
+        "description": "Distinguish between network errors (ConnectionError) which should retry, and timeout errors which may not retry based on retry_on_timeout configuration flag.",
+        "pattern": "except ConnectionError: retry(); except TimeoutError: if self.retry_on_timeout: retry() else: raise",
+        "source": "spec"
+      },
+      {
+        "id": "CON-047",
+        "type": "must",
+        "description": "Wrap logging calls in try-except blocks. If logger raises exception, suppress it or log to stderr, but never let logging failure break request execution.",
+        "pattern": "try: self.logger.info(log_data); except Exception as e: print(f'Logging failed: {e}', file=sys.stderr)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-048",
+        "type": "must-not",
+        "description": "Never use response.text for binary content. Always use response.content (bytes) for body attribute to handle both text and binary responses correctly.",
+        "pattern": "# BAD: body = response.text  # fails for binary\n# GOOD: body = response.content  # works for both",
+        "source": "spec"
+      },
+      {
+        "id": "CON-049",
+        "type": "must",
+        "description": "Support PUT and DELETE methods with same signature as POST. All methods must send body if provided and return response object with status_code, headers, body.",
+        "pattern": "def put(self, url, json=None, **kwargs): return self._request('PUT', url, json=json, **kwargs); def delete(self, url, **kwargs): return self._request('DELETE', url, **kwargs)",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 49,
+    "generatedAt": "2026-02-12T06:40:32.196Z",
+    "inputTokens": 3844,
+    "outputTokens": 4197
+  },
+  "generatedCode": {
+    "task": "Write an HTTP client wrapper with exponential backoff retry, circuit breaker pattern, timeout handling, and request/response logging",
+    "code": "import json\nimport logging\nimport random\nimport sys\nimport time\nfrom dataclasses import dataclass\nfrom datetime import datetime\nfrom enum import Enum\nfrom typing import Any, Dict, Optional, Set, Union\nfrom urllib.parse import parse_qs, urlencode, urlparse, urlunparse\n\nimport requests\nfrom requests.adapters import HTTPAdapter\nfrom urllib3.util.retry import Retry\n\n\nclass CircuitBreakerState(Enum):\n    CLOSED = \"closed\"\n    OPEN = \"open\"\n    HALF_OPEN = \"half_open\"\n\n\nclass CircuitBreakerOpenError(Exception):\n    \"\"\"Exception raised when circuit breaker is open.\"\"\"\n    pass\n\n\nclass MaxRetriesExceeded(Exception):\n    \"\"\"Exception raised when all retry attempts are exhausted.\"\"\"\n    def __init__(self, attempt_count: int, last_status_code: Optional[int], \n                 last_error_message: str, total_duration: float):\n        self.attempt_count = attempt_count\n        self.last_status_code = last_status_code\n        self.last_error_message = last_error_message\n        self.total_duration = total_duration\n        super().__init__(\n            f\"Max retries exceeded after {attempt_count} attempts. \"\n            f\"Last status: {last_status_code}, Error: {last_error_message}, \"\n            f\"Total duration: {total_duration:.2f}s\"\n        )\n\n\nclass ResponseTooLargeError(Exception):\n    \"\"\"Exception raised when response exceeds max size.\"\"\"\n    pass\n\n\nclass SecurityError(Exception):\n    \"\"\"Exception raised for security violations.\"\"\"\n    pass\n\n\nclass RedirectLoopError(Exception):\n    \"\"\"Exception raised when redirect loop is detected.\"\"\"\n    pass\n\n\n@dataclass\nclass Response:\n    \"\"\"HTTP Response object.\"\"\"\n    status_code: int\n    headers: Dict[str, str]\n    body: Union[str, bytes]\n    \n    @property\n    def ok(self) -> bool:\n        return 200 <= self.status_code < 300\n    \n    def json(self) -> Any:\n        \"\"\"Parse response body as JSON.\"\"\"\n        body_str = self.body.decode('utf-8') if isinstance(self.body, bytes) else self.body\n        return json.loads(body_str)\n\n\nclass HttpClient:\n    \"\"\"HTTP client with retry, circuit breaker, timeout, and logging.\"\"\"\n    \n    RETRYABLE_STATUS_CODES: Set[int] = {500, 502, 503, 504}\n    SENSITIVE_HEADERS: Set[str] = {'authorization', 'x-api-key', 'cookie', 'proxy-authorization'}\n    SENSITIVE_BODY_FIELDS: Set[str] = {'password', 'token', 'secret', 'api_key'}\n    \n    def __init__(\n        self,\n        max_retries: int = 3,\n        base_delay: float = 1.0,\n        exponential_base: float = 2.0,\n        max_backoff: float = 60.0,\n        jitter_factor: float = 0.2,\n        failure_threshold: int = 3,\n        recovery_timeout: float = 30.0,\n        timeout: Optional[float] = None,\n        max_response_size: int = 10 * 1024 * 1024,  # 10MB\n        max_redirects: int = 10,\n        retry_on_timeout: bool = False,\n        logger: Optional[logging.Logger] = None\n    ):\n        \"\"\"Initialize HTTP client with configuration.\n        \n        Args:\n            max_retries: Maximum number of retry attempts\n            base_delay: Base delay in seconds for exponential backoff\n            exponential_base: Base for exponential calculation\n            max_backoff: Maximum backoff delay in seconds\n            jitter_factor: Random jitter factor (±20% by default)\n            failure_threshold: Number of failures before circuit opens\n            recovery_timeout: Seconds before attempting recovery from open state\n            timeout: Default timeout for requests in seconds\n            max_response_size: Maximum response size in bytes\n            max_redirects: Maximum number of redirects to follow\n            retry_on_timeout: Whether to retry on timeout errors\n            logger: Logger instance for request/response logging\n        \"\"\"\n        if not isinstance(max_retries, int):\n            raise TypeError('max_retries must be int')\n        if max_retries < 0:\n            raise ValueError('max_retries must be non-negative')\n        \n        if not isinstance(failure_threshold, int):\n            raise TypeError('failure_threshold must be int')\n        if failure_threshold < 0:\n            raise ValueError('failure_threshold must be non-negative')\n        \n        self.max_retries = max_retries\n        self.base_delay = base_delay\n        self.exponential_base = exponential_base\n        self.max_backoff = max_backoff\n        self.jitter_factor = jitter_factor\n        self.failure_threshold = failure_threshold\n        self.recovery_timeout = recovery_timeout\n        self.timeout = timeout\n        self.max_response_size = max_response_size\n        self.max_redirects = max_redirects\n        self.retry_on_timeout = retry_on_timeout\n        \n        self.logger = logger or logging.getLogger(__name__)\n        \n        # Circuit breaker state\n        self.state = CircuitBreakerState.CLOSED\n        self.consecutive_failures = 0\n        self.opened_at: Optional[float] = None\n        \n        # Session for connection pooling\n        self.session = requests.Session()\n        adapter = HTTPAdapter(pool_connections=10, pool_maxsize=10)\n        self.session.mount('http://', adapter)\n        self.session.mount('https://', adapter)\n    \n    def _validate_url(self, url: str) -> None:\n        \"\"\"Validate URL format and scheme.\"\"\"\n        if not isinstance(url, str):\n            raise TypeError(f'URL must be string, got {type(url).__name__}')\n        \n        # Check for CRLF injection\n        if '\\r' in url or '\\n' in url:\n            raise ValueError('CRLF injection attempt detected')\n        \n        parsed = urlparse(url)\n        if not parsed.scheme or parsed.scheme not in ['http', 'https']:\n            raise ValueError(f'Invalid URL: {url}')\n    \n    def _validate_timeout(self, timeout: Optional[float]) -> None:\n        \"\"\"Validate timeout parameter.\"\"\"\n        if timeout is not None:\n            if not isinstance(timeout, (int, float)):\n                raise TypeError(f'Timeout must be numeric or None, got {type(timeout).__name__}')\n            if timeout <= 0:\n                raise ValueError('Timeout must be positive number or None')\n    \n    def _validate_headers(self, headers: Optional[Dict[str, str]]) -> None:\n        \"\"\"Validate headers parameter.\"\"\"\n        if headers is not None:\n            if not isinstance(headers, dict):\n                raise TypeError('Headers must be dict')\n            for key, value in headers.items():\n                if not isinstance(key, str) or not isinstance(value, str):\n                    raise TypeError('Header keys and values must be strings')\n                # Check for CRLF injection\n                if '\\r' in key or '\\n' in key or '\\r' in value or '\\n' in value:\n                    raise ValueError('CRLF injection attempt detected in headers')\n    \n    def _sanitize_headers(self, headers: Dict[str, str]) -> Dict[str, str]:\n        \"\"\"Redact sensitive header values for logging.\"\"\"\n        return {\n            k: '[REDACTED]' if k.lower() in self.SENSITIVE_HEADERS else v\n            for k, v in headers.items()\n        }\n    \n    def _redact_sensitive_fields(self, data: Any, depth: int = 0) -> Any:\n        \"\"\"Recursively redact sensitive fields in data structures.\"\"\"\n        if depth > 10:  # Prevent infinite recursion\n            return data\n        \n        if isinstance(data, dict):\n            return {\n                k: '[REDACTED]' if k.lower() in self.SENSITIVE_BODY_FIELDS else \n                   self._redact_sensitive_fields(v, depth + 1)\n                for k, v in data.items()\n            }\n        elif isinstance(data, list):\n            return [self._redact_sensitive_fields(item, depth + 1) for item in data]\n        else:\n            return data\n    \n    def _sanitize_body(self, body: Any) -> str:\n        \"\"\"Sanitize request body for logging.\"\"\"\n        if body is None:\n            return ''\n        \n        try:\n            if isinstance(body, (dict, list)):\n                sanitized = self._redact_sensitive_fields(body)\n                return json.dumps(sanitized)\n            elif isinstance(body, bytes):\n                try:\n                    body_dict = json.loads(body.decode('utf-8'))\n                    sanitized = self._redact_sensitive_fields(body_dict)\n                    return json.dumps(sanitized)\n                except (json.JSONDecodeError, UnicodeDecodeError):\n                    return '<binary data>'\n            else:\n                return str(body)\n        except Exception:\n            return '<unparseable data>'\n    \n    def _truncate_body_for_log(self, body: Union[str, bytes]) -> str:\n        \"\"\"Truncate response body for logging.\"\"\"\n        if isinstance(body, bytes):\n            try:\n                body_str = body.decode('utf-8')\n            except UnicodeDecodeError:\n                body_str = '<binary data>'\n        else:\n            body_str = body\n        \n        if len(body_str) > 1000:\n            remaining = len(body_str) - 1000\n            return f\"{body_str[:1000]}... (truncated {remaining} bytes)\"\n        return body_str\n    \n    def _log_request(self, method: str, url: str, headers: Dict[str, str], \n                     body: Any = None) -> None:\n        \"\"\"Log request details.\"\"\"\n        try:\n            log_data = {\n                'method': method,\n                'url': url,\n                'headers': self._sanitize_headers(headers),\n                'timestamp': datetime.utcnow().isoformat()\n            }\n            if body is not None:\n                log_data['body'] = self._sanitize_body(body)\n            self.logger.info(f\"Request: {json.dumps(log_data)}\")\n        except Exception as e:\n            print(f'Logging failed: {e}', file=sys.stderr)\n    \n    def _log_response(self, status_code: int, headers: Dict[str, str], \n                      body: Union[str, bytes], duration_ms: float) -> None:\n        \"\"\"Log response details.\"\"\"\n        try:\n            log_data = {\n                'status_code': status_code,\n                'headers': dict(headers),\n                'body': self._truncate_body_for_log(body),\n                'duration_ms': duration_ms\n            }\n            self.logger.info(f\"Response: {json.dumps(log_data)}\")\n        except Exception as e:\n            print(f'Logging failed: {e}', file=sys.stderr)\n    \n    def _should_attempt_reset(self) -> bool:\n        \"\"\"Check if circuit breaker should attempt reset to half-open.\"\"\"\n        if self.state == CircuitBreakerState.OPEN and self.opened_at is not None:\n            if (time.time() - self.opened_at) >= self.recovery_timeout:\n                self.state = CircuitBreakerState.HALF_OPEN\n                return True\n        return False\n    \n    def _check_circuit_breaker(self) -> None:\n        \"\"\"Check circuit breaker state before making request.\"\"\"\n        if self.failure_threshold == 0:\n            return  # Circuit breaker disabled\n        \n        if self.state == CircuitBreakerState.OPEN:\n            if not self._should_attempt_reset():\n                raise CircuitBreakerOpenError('Circuit breaker is open')\n    \n    def _handle_success(self) -> None:\n        \"\"\"Handle successful request for circuit breaker.\"\"\"\n        if self.failure_threshold == 0:\n            return\n        \n        if self.state == CircuitBreakerState.HALF_OPEN:\n            self.state = CircuitBreakerState.CLOSED\n            self.consecutive_failures = 0\n        elif self.state == CircuitBreakerState.CLOSED:\n            self.consecutive_failures = 0\n    \n    def _handle_failure(self) -> None:\n        \"\"\"Handle failed request for circuit breaker.\"\"\"\n        if self.failure_threshold == 0:\n            return\n        \n        if self.state == CircuitBreakerState.HALF_OPEN:\n            self.state = CircuitBreakerState.OPEN\n            self.opened_at = time.time()\n        elif self.state == CircuitBreakerState.CLOSED:\n            self.consecutive_failures += 1\n            if self.consecutive_failures >= self.failure_threshold:\n                self.state = CircuitBreakerState.OPEN\n                self.opened_at = time.time()\n    \n    def _calculate_backoff(self, attempt: int) -> float:\n        \"\"\"Calculate exponential backoff delay with jitter.\"\"\"\n        delay = self.base_delay * (self.exponential_base ** attempt)\n        delay = min(delay, self.max_backoff)\n        jittered_delay = delay * (1 + random.uniform(-self.jitter_factor, self.jitter_factor))\n        return max(0, jittered_delay)\n    \n    def _build_url_with_params(self, url: str, params: Optional[Dict[str, Any]]) -> str:\n        \"\"\"Build URL with query parameters.\"\"\"\n        if not params:\n            return url\n        \n        parsed = urlparse(url)\n        existing_params = parse_qs(parsed.query)\n        \n        # Merge params\n        for key, value in params.items():\n            existing_params[key] = [str(value)]\n        \n        # Encode\n        encoded_params = urlencode(params, doseq=True)\n        \n        # Rebuild URL\n        new_parsed = parsed._replace(query=encoded_params)\n        return urlunparse(new_parsed)\n    \n    def _validate_json_serializable(self, json_body: Any) -> str:\n        \"\"\"Validate and serialize JSON body.\"\"\"\n        try:\n            return json.dumps(json_body)\n        except TypeError as e:\n            raise TypeError(f'JSON body not serializable: {e}')\n    \n    def _check_response_size(self, response: requests.Response) -> None:\n        \"\"\"Check if response size exceeds limit.\"\"\"\n        content_length = response.headers.get('Content-Length')\n        if content_length:\n            try:\n                size = int(content_length)\n                if size > self.max_response_size:\n                    response.close()\n                    raise ResponseTooLargeError(\n                        f'Response size {size} exceeds maximum {self.max_response_size}'\n                    )\n            except (ValueError, TypeError):\n                pass\n    \n    def _follow_redirects(self, response: requests.Response, \n                          visited_urls: Set[str]) -> requests.Response:\n        \"\"\"Follow redirects manually with validation.\"\"\"\n        redirect_count = 0\n        current_response = response\n        \n        while redirect_count < self.max_redirects:\n            if current_response.status_code not in (301, 302, 303, 307, 308):\n                break\n            \n            location = current_response.headers.get('Location')\n            if not location:\n                break\n            \n            # Validate redirect URL scheme\n            parsed_location = urlparse(location)\n            if parsed_location.scheme and parsed_location.scheme not in ['http', 'https']:\n                raise SecurityError(f'Invalid redirect scheme: {parsed_location.scheme}')\n            \n            # Check for redirect loop\n            if location in visited_urls:\n                raise RedirectLoopError(f'Redirect loop detected at: {location}')\n            \n            visited_urls.add(location)\n            redirect_count += 1\n            \n            # Make redirected request\n            current_response = self.session.get(\n                location,\n                allow_redirects=False,\n                timeout=self.timeout\n            )\n        \n        if redirect_count >= self.max_redirects:\n            raise RedirectLoopError(f'Max redirects ({self.max_redirects}) exceeded')\n        \n        return current_response\n    \n    def _make_request(self, method: str, url: str, \n                      headers: Optional[Dict[str, str]] = None,\n                      json_body: Any = None,\n                      timeout: Optional[float] = None) -> Response:\n        \"\"\"Make a single HTTP request attempt.\"\"\"\n        self._check_circuit_breaker()\n        \n        effective_timeout = timeout if timeout is not None else self.timeout\n        self._validate_timeout(effective_timeout)\n        \n        request_headers = headers or {}\n        self._log_request(method, url, request_headers, json_body)\n        \n        start_time = time.time()\n        \n        try:\n            kwargs = {\n                'timeout': effective_timeout,\n                'allow_redirects': False\n            }\n            \n            if json_body is not None:\n                self._validate_json_serializable(json_body)\n                kwargs['json'] = json_body\n            \n            if headers:\n                kwargs['headers'] = headers\n            \n            response = self.session.request(method, url, **kwargs)\n            \n            # Check response size\n            self._check_response_size(response)\n            \n            # Follow redirects with validation\n            visited_urls = {url}\n            response = self._follow_redirects(response, visited_urls)\n            \n            # Read body\n            body = response.content if response.content else b''\n            \n            end_time = time.time()\n            duration_ms = (end_time - start_time) * 1000\n            \n            self._log_response(\n                response.status_code,\n                dict(response.headers),\n                body,\n                duration_ms\n            )\n            \n            result = Response(\n                status_code=response.status_code,\n                headers=dict(response.headers),\n                body=body\n            )\n            \n            if response.ok:\n                self._handle_success()\n            else:\n                self._handle_failure()\n            \n            return result\n            \n        except requests.Timeout as e:\n            end_time = time.time()\n            duration_ms = (end_time - start_time) * 1000\n            self._handle_failure()\n            raise TimeoutError(f'Request timeout after {duration_ms:.2f}ms: {str(e)}')\n        \n        except requests.ConnectionError as e:\n            self._handle_failure()\n            raise ConnectionError(f'Connection failed: {str(e)}')\n        \n        except Exception as e:\n            self._handle_failure()\n            raise\n    \n    def _should_retry(self, exception: Exception, status_code: Optional[int]) -> bool:\n        \"\"\"Determine if request should be retried.\"\"\"\n        if isinstance(exception, TimeoutError):\n            return self.retry_on_timeout\n        \n        if isinstance(exception, (ConnectionError, requests.ConnectionError)):\n            return True\n        \n        if status_code and status_code in self.RETRYABLE_STATUS_CODES:\n            return True\n        \n        return False\n    \n    def _request(self, method: str, url: str, \n                 headers: Optional[Dict[str, str]] = None,\n                 json: Any = None,\n                 params: Optional[Dict[str, Any]] = None,\n                 timeout: Optional[float] = None) -> Response:\n        \"\"\"Make HTTP request with retry logic.\"\"\"\n        self._validate_url(url)\n        self._validate_headers(headers)\n        \n        # Build URL with params\n        final_url = self._build_url_with_params(url, params)\n        \n        if self.max_retries == 0:\n            return self._make_request(method, final_url, headers, json, timeout)\n        \n        total_start_time = time.time()\n        last_exception: Optional[Exception] = None\n        last_status_code: Optional[int] = None\n        \n        for attempt in range(self.max_retries + 1):\n            try:\n                response = self._make_request(method, final_url, headers, json, timeout)\n                \n                if response.ok or response.status_code not in self.RETRYABLE_STATUS_CODES:\n                    return response\n                \n                last_status_code = response.status_code\n                \n                if attempt < self.max_retries:\n                    delay = self._calculate_backoff(attempt)\n                    time.sleep(delay)\n                \n            except Exception as e:\n                last_exception = e\n                \n                should_retry = self._should_retry(e, last_status_code)\n                \n                if attempt < self.max_retries and should_retry:\n                    delay = self._calculate_backoff(attempt)\n                    time.sleep(delay)\n                else:\n                    total_duration = time.time() - total_start_time\n                    raise MaxRetriesExceeded(\n                        attempt_count=attempt + 1,\n                        last_status_code=last_status_code,\n                        last_error_message=str(e),\n                        total_duration=total_duration\n                    )\n        \n        # If we get here, all retries exhausted\n        total_duration = time.time() - total_start_time\n        raise MaxRetriesExceeded(\n            attempt_count=self.max_retries + 1,\n            last_status_code=last_status_code,\n            last_error_message=str(last_exception) if last_exception else 'All retries failed',\n            total_duration=total_duration\n        )\n    \n    def get(self, url: str, headers: Optional[Dict[str, str]] = None,\n            params: Optional[Dict[str, Any]] = None,\n            timeout: Optional[float] = None) -> Response:\n        \"\"\"Make GET request.\"\"\"\n        return self._request('GET', url, headers=headers, params=params, timeout=timeout)\n    \n    def post(self, url: str, json: Any = None, \n             headers: Optional[Dict[str, str]] = None,\n             params: Optional[Dict[str, Any]] = None,\n             timeout: Optional[float] = None) -> Response:\n        \"\"\"Make POST request.\"\"\"\n        return self._request('POST', url, headers=headers, json=json, \n                           params=params, timeout=timeout)\n    \n    def put(self, url: str, json: Any = None,\n            headers: Optional[Dict[str, str]] = None,\n            params: Optional[Dict[str, Any]] = None,\n            timeout: Optional[float] = None) -> Response:\n        \"\"\"Make PUT request.\"\"\"\n        return self._request('PUT', url, headers=headers, json=json,\n                           params=params, timeout=timeout)\n    \n    def delete(self, url: str, headers: Optional[Dict[str, str]] = None,\n               params: Optional[Dict[str, Any]] = None,\n               timeout: Optional[float] = None) -> Response:\n        \"\"\"Make DELETE request.\"\"\"\n        return self._request('DELETE', url, headers=headers, params=params, \n                           timeout=timeout)\n    \n    def close(self) -> None:\n        \"\"\"Close the session and cleanup resources.\"\"\"\n        self.session.close()\n    \n    def __enter__(self) -> 'HttpClient':\n        \"\"\"Context manager entry.\"\"\"\n        return self\n    \n    def __exit__(self, exc_type, exc_val, exc_tb) -> None:\n        \"\"\"Context manager exit.\"\"\"\n        self.close()",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Successful HTTP GET request must return response with status code, headers, and body",
+        "assertion": "client.get('http://example.com/api') returns response object with attributes: status_code (int), headers (dict), body (str/bytes)",
+        "rationale": "Core functionality - client must correctly execute and return standard HTTP responses"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Exponential backoff retry must increase delay between attempts exponentially",
+        "assertion": "For max_retries=3, base_delay=1s: failed request triggers retries with delays approximately 1s, 2s, 4s before final failure",
+        "rationale": "Exponential backoff is essential to avoid overwhelming failing services"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Circuit breaker must open after failure threshold is reached",
+        "assertion": "With failure_threshold=3: After 3 consecutive failures, circuit breaker state becomes 'open' and subsequent requests fail immediately without attempting HTTP call",
+        "rationale": "Circuit breaker prevents cascading failures by stopping requests to failing services"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Timeout must interrupt request that exceeds configured duration",
+        "assertion": "client.get('http://slow-service.com', timeout=2) raises TimeoutError when response takes >2 seconds",
+        "rationale": "Timeout prevents indefinite blocking and resource exhaustion"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Request logging must capture method, URL, headers, and timestamp",
+        "assertion": "client.get('http://api.com/users', headers={'Auth': 'token'}) logs entry with: method='GET', url='http://api.com/users', headers={'Auth': 'token'}, timestamp (ISO8601)",
+        "rationale": "Request logging is essential for debugging and audit trails"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Response logging must capture status code, headers, body, and duration",
+        "assertion": "After client.get('http://api.com/data') completes, log entry contains: status_code=200, headers (dict), body (first 1000 chars), duration_ms (float)",
+        "rationale": "Response logging enables performance analysis and troubleshooting"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Circuit breaker must transition to half-open state after timeout period",
+        "assertion": "With recovery_timeout=30s: After circuit opens, waiting 30s transitions state to 'half-open' allowing one test request",
+        "rationale": "Half-open state enables automatic recovery from transient failures"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Successful request in half-open state must close circuit breaker",
+        "assertion": "When circuit is 'half-open', a successful request transitions state to 'closed' and resets failure count to 0",
+        "rationale": "Circuit must automatically recover when service becomes healthy"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "correctness",
+        "severity": "high",
+        "description": "POST request must send body and return response",
+        "assertion": "client.post('http://api.com/users', json={'name': 'John'}) sends JSON body and returns response with status_code, headers, body",
+        "rationale": "POST is essential HTTP method for creating resources"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Retry logic must only retry on retryable status codes",
+        "assertion": "Requests returning 500, 502, 503, 504 trigger retry; requests returning 400, 401, 403, 404 do not retry",
+        "rationale": "Client errors (4xx) should not be retried as they indicate invalid requests"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Maximum retry attempts must be respected",
+        "assertion": "With max_retries=3: After initial attempt + 3 retries (4 total attempts), client raises exception if all fail",
+        "rationale": "Prevents infinite retry loops and resource exhaustion"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Custom headers must be included in HTTP requests",
+        "assertion": "client.get('http://api.com', headers={'X-Custom': 'value', 'Authorization': 'Bearer token'}) includes both headers in HTTP request",
+        "rationale": "Custom headers are required for authentication, API keys, and metadata"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Empty response body must be handled without error",
+        "assertion": "Server returning 204 No Content with empty body returns response object with body='' or body=None without raising exception",
+        "rationale": "204 and empty responses are valid HTTP scenarios"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Zero retry configuration must not retry",
+        "assertion": "With max_retries=0: Single failed request immediately raises exception without any retry attempts",
+        "rationale": "Zero retries is valid configuration for time-sensitive operations"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Zero timeout must raise error immediately",
+        "assertion": "client.get('http://api.com', timeout=0) raises ValueError or immediate TimeoutError",
+        "rationale": "Zero timeout is invalid and should be rejected"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Maximum backoff delay must be capped",
+        "assertion": "With max_backoff=60s: Even after many retries, delay between attempts never exceeds 60 seconds",
+        "rationale": "Prevents exponential backoff from becoming impractically long"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Circuit breaker with zero failure threshold must disable circuit breaking",
+        "assertion": "With failure_threshold=0: Circuit breaker never opens regardless of failures",
+        "rationale": "Allows disabling circuit breaker functionality when not needed"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Extremely large response body must be handled",
+        "assertion": "Response with 100MB body completes successfully and returns complete body (or streams appropriately)",
+        "rationale": "Large payloads should not cause memory errors or crashes"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Request with empty URL path must work",
+        "assertion": "client.get('http://example.com') (no path) successfully makes request to root endpoint",
+        "rationale": "Root URLs are valid HTTP targets"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Jitter should be added to exponential backoff to prevent thundering herd",
+        "assertion": "Multiple failed requests with same backoff configuration have delays that vary by ±20% due to jitter",
+        "rationale": "Jitter prevents synchronized retry storms from multiple clients"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Very short timeout values must be honored",
+        "assertion": "client.get('http://slow.com', timeout=0.001) raises TimeoutError for requests taking >1ms",
+        "rationale": "Microsecond-level timeouts may be needed for latency-sensitive applications"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Redirect responses must be followed up to limit",
+        "assertion": "Request to URL with 301/302 redirect follows redirect chain up to max_redirects (default 10) and returns final response",
+        "rationale": "HTTP redirects are common and must be handled automatically"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Network connection failure must raise appropriate exception",
+        "assertion": "client.get('http://nonexistent-domain-12345.com') raises ConnectionError or similar network exception",
+        "rationale": "Network failures must be distinguishable from application errors"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "DNS resolution failure must raise exception",
+        "assertion": "client.get('http://invalid-domain-that-does-not-exist-999.com') raises exception indicating DNS failure",
+        "rationale": "DNS errors are distinct failure mode requiring specific handling"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Invalid URL format must raise ValueError before attempting request",
+        "assertion": "client.get('not-a-valid-url') raises ValueError with message indicating invalid URL",
+        "rationale": "Invalid input should be rejected immediately without network calls"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Failed request in half-open state must reopen circuit",
+        "assertion": "When circuit is 'half-open', a failed test request transitions state back to 'open' and resets recovery timer",
+        "rationale": "Circuit must protect system if service is still unhealthy"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "SSL/TLS certificate validation failure must raise exception",
+        "assertion": "client.get('https://expired-certificate.badssl.com') raises SSLError indicating certificate problem",
+        "rationale": "Certificate validation protects against MITM attacks"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Malformed JSON response must raise appropriate error",
+        "assertion": "Response with Content-Type: application/json but body='invalid json{' raises JSONDecodeError when accessing response.json()",
+        "rationale": "Malformed data should be detected and reported clearly"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Retry exhaustion must provide detailed error information",
+        "assertion": "After all retries fail, raised exception contains: attempt_count, last_status_code, last_error_message, total_duration",
+        "rationale": "Detailed error context enables effective debugging"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Request interrupted mid-stream must be handled gracefully",
+        "assertion": "If connection drops while receiving response body, raises exception without leaving open connections or corrupt state",
+        "rationale": "Partial transfers must be detected and cleaned up properly"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "critical",
+        "description": "Sensitive headers must not appear in logs",
+        "assertion": "Request with headers={'Authorization': 'Bearer secret123', 'X-API-Key': 'key456'} logs headers with values redacted: {'Authorization': '[REDACTED]', 'X-API-Key': '[REDACTED]'}",
+        "rationale": "Logging credentials exposes them to unauthorized access"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "security",
+        "severity": "critical",
+        "description": "HTTPS URLs must use TLS by default",
+        "assertion": "client.get('https://api.com') establishes encrypted TLS connection, not plain HTTP",
+        "rationale": "HTTPS must provide encryption to protect data in transit"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "security",
+        "severity": "critical",
+        "description": "URL injection attempts must be prevented",
+        "assertion": "client.get('http://api.com\\r\\nX-Injected-Header: malicious') either escapes CRLF characters or raises exception, preventing header injection",
+        "rationale": "CRLF injection can lead to header smuggling attacks"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "security",
+        "severity": "high",
+        "description": "Request body with sensitive data must be redacted in logs",
+        "assertion": "client.post('http://api.com/login', json={'password': 'secret', 'username': 'user'}) logs body with password field redacted: {'password': '[REDACTED]', 'username': 'user'}",
+        "rationale": "Sensitive data in request bodies must not be logged in plain text"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "security",
+        "severity": "high",
+        "description": "Server redirect to non-HTTP(S) scheme must be rejected",
+        "assertion": "Server returning 302 redirect to 'file:///etc/passwd' or 'ftp://internal.server' raises exception preventing SSRF",
+        "rationale": "Prevents Server-Side Request Forgery to internal resources"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "security",
+        "severity": "high",
+        "description": "Maximum response size limit must prevent memory exhaustion",
+        "assertion": "With max_response_size=10MB: Response exceeding 10MB raises exception and closes connection immediately",
+        "rationale": "Prevents DoS attacks via unbounded response bodies"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "security",
+        "severity": "medium",
+        "description": "Certificate hostname verification must be enabled",
+        "assertion": "client.get('https://wrong-hostname.com') where certificate is for 'different-host.com' raises SSLError",
+        "rationale": "Hostname verification prevents MITM attacks with valid certificates for wrong domains"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "URL parameter must be string type",
+        "assertion": "client.get(None) raises TypeError with message 'URL must be string'. client.get(12345) raises TypeError",
+        "rationale": "Type enforcement prevents runtime errors and clarifies API contract"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "Timeout parameter must be numeric or None",
+        "assertion": "client.get('http://api.com', timeout='invalid') raises TypeError. timeout=None and timeout=5.5 are valid",
+        "rationale": "Type safety ensures timeout is usable for time calculations"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "Headers parameter must be dict-like with string keys and values",
+        "assertion": "client.get('http://api.com', headers=['invalid']) raises TypeError. headers={123: 'value'} raises TypeError. headers={'key': 123} raises TypeError",
+        "rationale": "HTTP headers must be string key-value pairs per specification"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Retry configuration parameters must be non-negative integers",
+        "assertion": "HttpClient(max_retries=-1) raises ValueError. HttpClient(max_retries=3.5) raises TypeError",
+        "rationale": "Negative retries are nonsensical; fractional retries are unclear"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Circuit breaker threshold must be positive integer",
+        "assertion": "HttpClient(failure_threshold=-1) raises ValueError. HttpClient(failure_threshold=0) is valid (disables circuit breaker)",
+        "rationale": "Negative thresholds are invalid; zero has special meaning (disabled)"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Response status code must be integer",
+        "assertion": "response.status_code returns int type, not string '200'",
+        "rationale": "Status codes should be integers for proper comparison and range checking"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "JSON request body must be serializable",
+        "assertion": "client.post('http://api.com', json={'key': object()}) raises TypeError indicating object not JSON serializable",
+        "rationale": "Non-serializable objects must be caught before network call"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "performance",
+        "severity": "high",
+        "description": "Connection pooling must reuse connections for same host",
+        "assertion": "Sequential requests to 'http://api.com/endpoint1' and 'http://api.com/endpoint2' reuse same TCP connection (verify via connection count or metrics)",
+        "rationale": "Connection reuse dramatically improves performance and reduces latency"
+      },
+      {
+        "id": "SPEC-046",
+        "category": "performance",
+        "severity": "high",
+        "description": "Concurrent requests must not block each other",
+        "assertion": "Starting 10 concurrent requests with 1s server delay completes in ~1s total, not ~10s (using threading or async)",
+        "rationale": "Parallel execution is essential for high-throughput applications"
+      },
+      {
+        "id": "SPEC-047",
+        "category": "performance",
+        "severity": "high",
+        "description": "Large response bodies should support streaming",
+        "assertion": "Response with 100MB body can be processed incrementally without loading entire body into memory at once",
+        "rationale": "Streaming prevents memory exhaustion for large payloads"
+      },
+      {
+        "id": "SPEC-048",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Failed requests must not leak connections",
+        "assertion": "After 100 failed requests, connection pool size remains constant (no connection leaks)",
+        "rationale": "Connection leaks eventually exhaust system resources"
+      },
+      {
+        "id": "SPEC-049",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Circuit breaker open state must reject requests without network call",
+        "assertion": "When circuit is open, 1000 requests complete in <100ms without any network activity",
+        "rationale": "Open circuit must fail-fast to protect system resources"
+      },
+      {
+        "id": "SPEC-050",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Logging must not significantly impact request latency",
+        "assertion": "Request with logging enabled vs logging disabled shows <10% latency difference for typical payloads",
+        "rationale": "Excessive logging overhead defeats purpose of performance optimizations"
+      },
+      {
+        "id": "SPEC-051",
+        "category": "correctness",
+        "severity": "high",
+        "description": "PUT and DELETE methods must be supported",
+        "assertion": "client.put('http://api.com/resource/1', json={'status': 'updated'}) sends PUT request. client.delete('http://api.com/resource/1') sends DELETE request",
+        "rationale": "REST APIs require full set of HTTP methods"
+      },
+      {
+        "id": "SPEC-052",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Query parameters must be properly encoded in URL",
+        "assertion": "client.get('http://api.com/search', params={'q': 'hello world', 'filter': 'a&b'}) generates URL 'http://api.com/search?q=hello+world&filter=a%26b'",
+        "rationale": "URL encoding prevents malformed requests and injection"
+      },
+      {
+        "id": "SPEC-053",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Response must expose raw headers as received",
+        "assertion": "Server response with header 'Content-Type: application/json; charset=utf-8' returns response.headers['Content-Type'] == 'application/json; charset=utf-8'",
+        "rationale": "Applications may need to parse header parameters"
+      },
+      {
+        "id": "SPEC-054",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Infinite redirect loop must be detected and terminated",
+        "assertion": "Server creating redirect loop (A->B->A) raises exception after max_redirects attempts with message indicating redirect loop",
+        "rationale": "Infinite loops hang application and waste resources"
+      },
+      {
+        "id": "SPEC-055",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Backoff delay calculation must use correct exponential formula",
+        "assertion": "With base_delay=2 and exponential_base=2: attempt 0 delay=2s, attempt 1 delay=4s, attempt 2 delay=8s, attempt 3 delay=16s",
+        "rationale": "Correct exponential backoff formula ensures predictable retry behavior"
+      },
+      {
+        "id": "SPEC-056",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Circuit breaker failure count must reset on successful request",
+        "assertion": "After 2 failures (failure_threshold=3), successful request resets failure count to 0",
+        "rationale": "Success should clear failure history to avoid premature circuit opening"
+      },
+      {
+        "id": "SPEC-057",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Unicode characters in URL and headers must be handled correctly",
+        "assertion": "client.get('http://api.com/测试', headers={'X-Name': 'José'}) properly encodes URL and headers",
+        "rationale": "International characters are common in modern applications"
+      },
+      {
+        "id": "SPEC-058",
+        "category": "security",
+        "severity": "medium",
+        "description": "Response body in logs must be truncated for large payloads",
+        "assertion": "Response with 1MB body logs only first 1000 characters followed by '... (truncated)' indicator",
+        "rationale": "Prevents log storage exhaustion and performance degradation"
+      },
+      {
+        "id": "SPEC-059",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Network errors must trigger retry but timeout errors may not",
+        "assertion": "ConnectionError and socket errors trigger retry. TimeoutError behavior configurable (may or may not retry based on retry_on_timeout setting)",
+        "rationale": "Different error types have different retry semantics"
+      },
+      {
+        "id": "SPEC-060",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Exception in logging must not break request execution",
+        "assertion": "If logger raises exception during log writing, request completes successfully and exception is suppressed or logged separately",
+        "rationale": "Logging failures should not cause request failures"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Handle HTTP errors explicitly (check response.ok or status code)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never ignore HTTP error responses or assume success",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "prefer",
+        "description": "Include timeout configuration for HTTP requests",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never use regex with /g flag in repeated calls without resetting lastIndex (JavaScript)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Return a response object with exactly three attributes: status_code (int), headers (dict), and body (str or bytes). Never return None or incomplete response objects.",
+        "pattern": "response = Response(status_code=200, headers={'Content-Type': 'application/json'}, body=b'{\"data\": \"value\"}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Implement exponential backoff with the formula: delay = base_delay * (exponential_base ** attempt_number). For base_delay=1 and exponential_base=2, delays must be 1s, 2s, 4s for attempts 0, 1, 2.",
+        "pattern": "delay = self.base_delay * (self.exponential_base ** attempt)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Track consecutive failure count and transition circuit breaker to 'open' state immediately when count reaches failure_threshold. Open state must prevent HTTP calls and fail fast.",
+        "pattern": "if self.consecutive_failures >= self.failure_threshold: self.state = 'open'; raise CircuitBreakerOpenError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Enforce timeout using the underlying HTTP library's timeout parameter. Must raise TimeoutError (or equivalent) when request exceeds the configured duration.",
+        "pattern": "response = requests.get(url, timeout=self.timeout)  # raises requests.Timeout",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Log request details before making HTTP call with fields: method (str), url (str), headers (dict), timestamp (ISO8601 formatted string using datetime.isoformat()).",
+        "pattern": "self.logger.info({'method': method, 'url': url, 'headers': headers, 'timestamp': datetime.utcnow().isoformat()})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Log response details after receiving response with fields: status_code (int), headers (dict), body (string, first 1000 chars), duration_ms (float calculated from start to end time).",
+        "pattern": "duration_ms = (end_time - start_time) * 1000; self.logger.info({'status_code': resp.status_code, 'headers': dict(resp.headers), 'body': resp.text[:1000], 'duration_ms': duration_ms})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Track time since circuit opened. After recovery_timeout seconds, transition from 'open' to 'half-open' state allowing exactly one test request.",
+        "pattern": "if self.state == 'open' and (time.time() - self.opened_at) >= self.recovery_timeout: self.state = 'half-open'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "When circuit is 'half-open', a successful request must transition state to 'closed' and reset consecutive_failures to 0.",
+        "pattern": "if self.state == 'half-open' and request_successful: self.state = 'closed'; self.consecutive_failures = 0",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Define a set of retryable status codes (500, 502, 503, 504). Only retry requests that return these codes. Do not retry 4xx errors except specific cases.",
+        "pattern": "RETRYABLE_STATUS_CODES = {500, 502, 503, 504}; if response.status_code in RETRYABLE_STATUS_CODES: retry()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Enforce maximum retry limit strictly. After initial attempt plus max_retries attempts (total max_retries + 1), raise exception with all retry attempts exhausted.",
+        "pattern": "for attempt in range(self.max_retries + 1): try_request(); if attempt == self.max_retries: raise MaxRetriesExceeded()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Handle empty response body (204 No Content or empty string) by setting body attribute to empty string '' or None. Do not raise exception for empty body.",
+        "pattern": "body = response.content if response.content else b''; return Response(status_code=204, headers={}, body=body)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "When max_retries=0, make only the initial request attempt. If it fails, raise exception immediately without any retry loop.",
+        "pattern": "if self.max_retries == 0: return single_attempt(); # no retry loop",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Validate timeout parameter before making request. If timeout=0, raise ValueError with message explaining timeout must be positive.",
+        "pattern": "if timeout is not None and timeout <= 0: raise ValueError('Timeout must be positive number or None')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Cap exponential backoff delay at max_backoff value. After calculating exponential delay, apply: actual_delay = min(calculated_delay, max_backoff).",
+        "pattern": "delay = min(self.base_delay * (2 ** attempt), self.max_backoff)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "When failure_threshold=0, disable circuit breaker entirely. Never transition to 'open' state regardless of failure count.",
+        "pattern": "if self.failure_threshold == 0: return  # circuit breaker disabled",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Add random jitter to backoff delays using: delay = calculated_delay * (1 + random.uniform(-jitter_factor, jitter_factor)) where jitter_factor=0.2 for ±20% variance.",
+        "pattern": "jittered_delay = delay * (1 + random.uniform(-0.2, 0.2))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Validate URL format before making request. Check for scheme (http/https) and raise ValueError with descriptive message if URL is malformed or missing scheme.",
+        "pattern": "parsed = urlparse(url); if not parsed.scheme or parsed.scheme not in ['http', 'https']: raise ValueError(f'Invalid URL: {url}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "When circuit is 'half-open' and test request fails, transition state back to 'open' and reset opened_at timestamp to restart recovery timeout.",
+        "pattern": "if self.state == 'half-open' and request_failed: self.state = 'open'; self.opened_at = time.time()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "After exhausting all retries, raise exception containing: attempt_count (int), last_status_code (int or None), last_error_message (str), total_duration (float in seconds).",
+        "pattern": "raise MaxRetriesExceeded(attempt_count=attempts, last_status_code=status, last_error_message=str(error), total_duration=total_time)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must-not",
+        "description": "Never log raw sensitive header values. Define SENSITIVE_HEADERS = {'authorization', 'x-api-key', 'cookie', 'proxy-authorization'} and replace values with '[REDACTED]' before logging.",
+        "pattern": "# BAD: logger.info({'headers': headers})\n# GOOD: sanitized = {k: '[REDACTED]' if k.lower() in SENSITIVE_HEADERS else v for k, v in headers.items()}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must-not",
+        "description": "Never allow CRLF characters (\\r, \\n) in URLs or header values. Detect and either escape them or raise ValueError to prevent header injection attacks.",
+        "pattern": "# BAD: requests.get(user_provided_url)\n# GOOD: if '\\r' in url or '\\n' in url: raise ValueError('CRLF injection attempt detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must-not",
+        "description": "Never log full request body containing password, token, secret, or api_key fields. Recursively redact these fields in JSON payloads before logging.",
+        "pattern": "# BAD: logger.info({'body': json_body})\n# GOOD: sanitized_body = redact_sensitive_fields(json_body, ['password', 'token', 'secret', 'api_key'])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must-not",
+        "description": "Never follow redirects to non-HTTP(S) schemes. Validate redirect Location header scheme and raise exception if scheme is not http or https to prevent SSRF.",
+        "pattern": "# BAD: follow all redirects blindly\n# GOOD: redirect_url = response.headers['Location']; if urlparse(redirect_url).scheme not in ['http', 'https']: raise SecurityError('Invalid redirect scheme')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Enforce max_response_size limit by checking Content-Length header before reading body, or by reading body in chunks and stopping when size exceeded. Raise exception and close connection immediately.",
+        "pattern": "content_length = int(response.headers.get('Content-Length', 0)); if content_length > self.max_response_size: response.close(); raise ResponseTooLargeError()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Validate URL parameter type at function entry. Raise TypeError with message 'URL must be string' if url is None, int, or any non-string type.",
+        "pattern": "if not isinstance(url, str): raise TypeError(f'URL must be string, got {type(url).__name__}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Validate timeout parameter type. Accept None, int, or float. Raise TypeError if timeout is string or other non-numeric type.",
+        "pattern": "if timeout is not None and not isinstance(timeout, (int, float)): raise TypeError(f'Timeout must be numeric or None, got {type(timeout).__name__}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Validate headers parameter is dict-like with string keys and string values. Raise TypeError if headers is list, or if any key or value is non-string.",
+        "pattern": "if not isinstance(headers, dict): raise TypeError('Headers must be dict'); if not all(isinstance(k, str) and isinstance(v, str) for k, v in headers.items()): raise TypeError('Header keys and values must be strings')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Validate retry configuration parameters (max_retries, failure_threshold) are non-negative integers in __init__. Raise ValueError for negative values, TypeError for float values.",
+        "pattern": "if not isinstance(max_retries, int): raise TypeError('max_retries must be int'); if max_retries < 0: raise ValueError('max_retries must be non-negative')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Validate JSON request body is serializable before making request. Use json.dumps() and catch TypeError to raise descriptive error about non-serializable object.",
+        "pattern": "try: json_str = json.dumps(json_body); except TypeError as e: raise TypeError(f'JSON body not serializable: {e}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "prefer",
+        "description": "Use connection pooling via requests.Session() or equivalent to reuse TCP connections for requests to the same host. Initialize session once and reuse for all requests.",
+        "pattern": "self.session = requests.Session(); response = self.session.get(url)  # reuses connections",
+        "source": "spec"
+      },
+      {
+        "id": "CON-037",
+        "type": "prefer",
+        "description": "Support concurrent requests using ThreadPoolExecutor or asyncio. Avoid blocking event loop or main thread when making multiple requests.",
+        "pattern": "with ThreadPoolExecutor() as executor: futures = [executor.submit(self.get, url) for url in urls]; results = [f.result() for f in futures]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-038",
+        "type": "prefer",
+        "description": "For large response bodies, use streaming by setting stream=True and reading response.iter_content() in chunks instead of loading entire body into memory.",
+        "pattern": "response = requests.get(url, stream=True); for chunk in response.iter_content(chunk_size=8192): process(chunk)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-039",
+        "type": "must",
+        "description": "When circuit is open, immediately raise CircuitBreakerOpenError without making any network call or waiting. Check circuit state before any HTTP operation.",
+        "pattern": "if self.state == 'open' and not self._should_attempt_reset(): raise CircuitBreakerOpenError('Circuit breaker is open')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-040",
+        "type": "must",
+        "description": "Properly encode query parameters in URL. Use urllib.parse.urlencode() to encode params dict and append to URL with proper escaping of special characters.",
+        "pattern": "from urllib.parse import urlencode, urlparse, urlunparse; encoded_params = urlencode(params); final_url = f'{url}?{encoded_params}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-041",
+        "type": "must",
+        "description": "Track redirect count and raise exception when max_redirects exceeded. Check for redirect loops by maintaining set of visited URLs and detecting cycles.",
+        "pattern": "visited_urls = set(); redirect_count = 0; while redirect_count < max_redirects: if url in visited_urls: raise RedirectLoopError(); visited_urls.add(url); redirect_count += 1",
+        "source": "spec"
+      },
+      {
+        "id": "CON-042",
+        "type": "must",
+        "description": "Use exact exponential backoff formula with configurable base: delay = base_delay * (exponential_base ** attempt). Default exponential_base should be 2.",
+        "pattern": "delay = self.base_delay * (self.exponential_base ** attempt)  # exponential_base typically 2",
+        "source": "spec"
+      },
+      {
+        "id": "CON-043",
+        "type": "must",
+        "description": "Reset consecutive failure count to 0 immediately after any successful request when circuit is in 'closed' state. Do not wait for threshold.",
+        "pattern": "if request_successful and self.state == 'closed': self.consecutive_failures = 0",
+        "source": "spec"
+      },
+      {
+        "id": "CON-044",
+        "type": "must",
+        "description": "Handle Unicode in URLs using urllib.parse.quote() for path components and proper encoding for headers. Encode header values to UTF-8 if necessary.",
+        "pattern": "from urllib.parse import quote; encoded_path = quote(path, safe='/'); headers = {k: v.encode('utf-8').decode('latin-1') for k, v in headers.items()}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-045",
+        "type": "must",
+        "description": "Truncate response body in logs at exactly 1000 characters. Append '... (truncated X bytes)' indicator showing remaining byte count.",
+        "pattern": "body_log = response.text[:1000]; if len(response.text) > 1000: body_log += f'... (truncated {len(response.text) - 1000} bytes)'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-046",
+        "type": "must",
+        "description": "Distinguish between network errors (ConnectionError) which should retry, and timeout errors which may not retry based on retry_on_timeout configuration flag.",
+        "pattern": "except ConnectionError: retry(); except TimeoutError: if self.retry_on_timeout: retry() else: raise",
+        "source": "spec"
+      },
+      {
+        "id": "CON-047",
+        "type": "must",
+        "description": "Wrap logging calls in try-except blocks. If logger raises exception, suppress it or log to stderr, but never let logging failure break request execution.",
+        "pattern": "try: self.logger.info(log_data); except Exception as e: print(f'Logging failed: {e}', file=sys.stderr)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-048",
+        "type": "must-not",
+        "description": "Never use response.text for binary content. Always use response.content (bytes) for body attribute to handle both text and binary responses correctly.",
+        "pattern": "# BAD: body = response.text  # fails for binary\n# GOOD: body = response.content  # works for both",
+        "source": "spec"
+      },
+      {
+        "id": "CON-049",
+        "type": "must",
+        "description": "Support PUT and DELETE methods with same signature as POST. All methods must send body if provided and return response object with status_code, headers, body.",
+        "pattern": "def put(self, url, json=None, **kwargs): return self._request('PUT', url, json=json, **kwargs); def delete(self, url, **kwargs): return self._request('DELETE', url, **kwargs)",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "The Response dataclass includes status_code (int), headers (Dict[str, str]), and body (Union[str, bytes]). The get() method returns a Response object with all required attributes."
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "_calculate_backoff() uses exponential formula: base_delay * (exponential_base ** attempt), producing delays of 1s, 2s, 4s for attempts 0, 1, 2 with base_delay=1 and exponential_base=2."
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "_handle_failure() increments consecutive_failures and opens circuit when consecutive_failures >= failure_threshold. _check_circuit_breaker() raises CircuitBreakerOpenError when state is OPEN, preventing HTTP calls."
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "satisfied",
+        "reasoning": "Timeout is passed to requests.session.request() which raises requests.Timeout, caught and re-raised as TimeoutError in _make_request()."
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "_log_request() logs method, url, sanitized headers, and timestamp in ISO8601 format (datetime.utcnow().isoformat())."
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "_log_response() logs status_code, headers, truncated body, and duration_ms calculated from start_time to end_time."
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "_should_attempt_reset() checks if time since opened_at >= recovery_timeout and transitions state to HALF_OPEN when condition is met."
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "_handle_success() transitions from HALF_OPEN to CLOSED and resets consecutive_failures to 0 upon successful request."
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "post() method calls _request() with method='POST', json body parameter, and returns Response with status_code, headers, body."
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "_should_retry() returns True for status codes in RETRYABLE_STATUS_CODES {500, 502, 503, 504}. _request() only retries if response.status_code is in this set."
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "satisfied",
+        "reasoning": "_request() loops for range(self.max_retries + 1), allowing initial attempt + max_retries attempts. After exhaustion, raises MaxRetriesExceeded."
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "Headers parameter is passed through to session.request() via kwargs['headers'], ensuring custom headers are included in HTTP request."
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "Body is set to response.content if available, else b''. Empty content returns b'' without raising exceptions."
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "_request() checks if self.max_retries == 0 and immediately returns _make_request() result without retry loop."
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "_validate_timeout() raises ValueError if timeout <= 0, preventing zero timeout from being used."
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "satisfied",
+        "reasoning": "_calculate_backoff() applies min(delay, self.max_backoff) to cap the delay at max_backoff value."
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "satisfied",
+        "reasoning": "_check_circuit_breaker(), _handle_success(), and _handle_failure() all return early when failure_threshold == 0, disabling circuit breaker."
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "partial",
+        "reasoning": "Code reads entire response.content into memory (body = response.content). While it handles large responses, it doesn't stream them. Max size check prevents memory exhaustion but doesn't enable incremental processing."
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "URL validation checks for scheme but doesn't require a path. 'http://example.com' passes _validate_url() and is processed normally."
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "_calculate_backoff() applies jitter: delay * (1 + random.uniform(-self.jitter_factor, self.jitter_factor)), producing ±20% variation by default."
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "satisfied",
+        "reasoning": "Timeout validation only checks > 0, not a minimum value. Very small timeouts like 0.001 are accepted and passed to requests, which honors them."
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "_follow_redirects() manually follows 301, 302, 303, 307, 308 redirects up to max_redirects limit and returns final response."
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "_make_request() catches requests.ConnectionError and re-raises as ConnectionError with descriptive message."
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "satisfied",
+        "reasoning": "DNS failures manifest as requests.ConnectionError, caught and re-raised. Requests library handles DNS resolution failures."
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "satisfied",
+        "reasoning": "_validate_url() raises ValueError for URLs without valid scheme or malformed URLs before any request is attempted."
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "satisfied",
+        "reasoning": "_handle_failure() transitions from HALF_OPEN to OPEN and sets opened_at to current time when failure occurs in half-open state."
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "unknown",
+        "reasoning": "Code uses requests library with default SSL verification. SSL errors would be raised by requests, but code doesn't explicitly catch/handle SSLError separately. Behavior depends on requests library defaults."
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "satisfied",
+        "reasoning": "Response.json() calls json.loads() which raises JSONDecodeError for malformed JSON, propagating the error to caller."
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "satisfied",
+        "reasoning": "MaxRetriesExceeded exception includes attempt_count, last_status_code, last_error_message, and total_duration as instance attributes and in error message."
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "partial",
+        "reasoning": "Code catches exceptions and uses session management, but doesn't explicitly handle partial reads or streaming interruptions. Relies on requests library cleanup."
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "_sanitize_headers() checks if header key (lowercased) is in SENSITIVE_HEADERS {'authorization', 'x-api-key', 'cookie', 'proxy-authorization'} and replaces with '[REDACTED]'."
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "satisfied",
+        "reasoning": "Code uses requests library which enforces TLS for https:// URLs by default. No explicit downgrade to HTTP."
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "satisfied",
+        "reasoning": "_validate_url() explicitly checks for '\\r' and '\\n' in URL and raises ValueError('CRLF injection attempt detected') preventing header injection."
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "satisfied",
+        "reasoning": "_redact_sensitive_fields() recursively checks dict keys against SENSITIVE_BODY_FIELDS {'password', 'token', 'secret', 'api_key'} and redacts matching fields in logged body."
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "satisfied",
+        "reasoning": "_follow_redirects() validates redirect URL scheme and raises SecurityError if scheme is not in ['http', 'https']."
+      },
+      {
+        "specId": "SPEC-036",
+        "status": "satisfied",
+        "reasoning": "_check_response_size() checks Content-Length header against max_response_size, closes response and raises ResponseTooLargeError if exceeded."
+      },
+      {
+        "specId": "SPEC-037",
+        "status": "unknown",
+        "reasoning": "Certificate hostname verification depends on requests library default behavior. Code doesn't explicitly configure or disable verification."
+      },
+      {
+        "specId": "SPEC-038",
+        "status": "satisfied",
+        "reasoning": "_validate_url() checks isinstance(url, str) and raises TypeError with message 'URL must be string, got {type}' for non-string URLs."
+      },
+      {
+        "specId": "SPEC-039",
+        "status": "satisfied",
+        "reasoning": "_validate_timeout() checks isinstance(timeout, (int, float)) and raises TypeError('Timeout must be numeric or None, got {type}') for invalid types. None is explicitly allowed."
+      },
+      {
+        "specId": "SPEC-040",
+        "status": "satisfied",
+        "reasoning": "_validate_headers() checks isinstance(headers, dict) and verifies all keys and values are strings, raising TypeError for invalid types."
+      },
+      {
+        "specId": "SPEC-041",
+        "status": "satisfied",
+        "reasoning": "__init__ checks isinstance(max_retries, int) raising TypeError, and checks max_retries < 0 raising ValueError('max_retries must be non-negative')."
+      },
+      {
+        "specId": "SPEC-042",
+        "status": "satisfied",
+        "reasoning": "__init__ validates failure_threshold with isinstance check (TypeError) and >= 0 check (ValueError). Zero is explicitly allowed and disables circuit breaker."
+      },
+      {
+        "specId": "SPEC-043",
+        "status": "satisfied",
+        "reasoning": "Response dataclass defines status_code: int type annotation, and value comes from response.status_code which is int in requests library."
+      },
+      {
+        "specId": "SPEC-044",
+        "status": "satisfied",
+        "reasoning": "_validate_json_serializable() calls json.dumps() which raises TypeError for non-serializable objects, re-raised with descriptive message."
+      },
+      {
+        "specId": "SPEC-045",
+        "status": "satisfied",
+        "reasoning": "Code creates requests.Session() with HTTPAdapter for connection pooling (pool_connections=10, pool_maxsize=10), enabling connection reuse for same host."
+      },
+      {
+        "specId": "SPEC-046",
+        "status": "unsatisfied",
+        "reasoning": "Code is synchronous and uses blocking requests. No threading or async support implemented. Concurrent requests would require external threading/async wrapper."
+      },
+      {
+        "specId": "SPEC-047",
+        "status": "unsatisfied",
+        "reasoning": "Code reads entire response.content into memory. No streaming support implemented - response body is fully loaded before returning."
+      },
+      {
+        "specId": "SPEC-048",
+        "status": "satisfied",
+        "reasoning": "Code uses session with context manager support and explicit close(). Session cleanup prevents connection leaks in requests library."
+      },
+      {
+        "specId": "SPEC-049",
+        "status": "satisfied",
+        "reasoning": "_check_circuit_breaker() raises CircuitBreakerOpenError immediately when state is OPEN without making network calls."
+      },
+      {
+        "specId": "SPEC-050",
+        "status": "partial",
+        "reasoning": "Logging is performed but may impact latency with synchronous json.dumps() and string operations. No explicit performance optimization or async logging implemented."
+      },
+      {
+        "specId": "SPEC-051",
+        "status": "satisfied",
+        "reasoning": "put() and delete() methods are implemented, calling _request() with method='PUT' and method='DELETE' respectively."
+      },
+      {
+        "specId": "SPEC-052",
+        "status": "satisfied",
+        "reasoning": "_build_url_with_params() uses urlencode() with doseq=True to properly encode query parameters including special characters."
+      },
+      {
+        "specId": "SPEC-053",
+        "status": "satisfied",
+        "reasoning": "Response headers are stored as dict(response.headers), preserving raw header values as received from server."
+      },
+      {
+        "specId": "SPEC-054",
+        "status": "satisfied",
+        "reasoning": "_follow_redirects() maintains visited_urls set and raises RedirectLoopError if location already visited, detecting infinite loops."
+      },
+      {
+        "specId": "SPEC-055",
+        "status": "satisfied",
+        "reasoning": "_calculate_backoff() formula is base_delay * (exponential_base ** attempt). With base_delay=2, exponential_base=2: attempts yield 2*2^0=2, 2*2^1=4, 2*2^2=8, 2*2^3=16."
+      },
+      {
+        "specId": "SPEC-056",
+        "status": "satisfied",
+        "reasoning": "_handle_success() in CLOSED state sets consecutive_failures = 0, resetting failure count after successful request."
+      },
+      {
+        "specId": "SPEC-057",
+        "status": "partial",
+        "reasoning": "Code doesn't explicitly encode Unicode in URLs or headers. Relies on requests library URL encoding. May work but not explicitly handled."
+      },
+      {
+        "specId": "SPEC-058",
+        "status": "satisfied",
+        "reasoning": "_truncate_body_for_log() truncates body to 1000 characters and appends '... (truncated {remaining} bytes)' message for longer bodies."
+      },
+      {
+        "specId": "SPEC-059",
+        "status": "satisfied",
+        "reasoning": "_should_retry() returns True for ConnectionError. For TimeoutError, returns self.retry_on_timeout (configurable behavior)."
+      },
+      {
+        "specId": "SPEC-060",
+        "status": "satisfied",
+        "reasoning": "_log_request() and _log_response() wrap logging in try-except, catching exceptions and printing to stderr without breaking request execution."
+      }
+    ],
+    "satisfiedCount": 52,
+    "totalSpecs": 60,
+    "generatedAt": "2026-02-12T06:42:34.540Z",
+    "inputTokens": 16641,
+    "outputTokens": 9777
+  },
+  "totalInputTokens": 21075,
+  "totalOutputTokens": 20277,
+  "totalDurationMs": 283082
+}

@@ -1,0 +1,1386 @@
+{
+  "task": "Write a sliding window rate limiter that supports per-user and per-endpoint limits with Redis-compatible storage",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write a sliding window rate limiter that supports per-user and per-endpoint limits with Redis-compatible storage",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must correctly track requests within the sliding window time frame",
+        "assertion": "After making 5 requests within a 60-second window, the request count must be exactly 5, and after the window slides past the oldest request, the count must decrease accordingly",
+        "rationale": "Core functionality - incorrect counting leads to either false rejections or allowing over-limit requests"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must correctly enforce per-user limits",
+        "assertion": "Given a limit of 10 requests per minute for user 'alice', after 10 requests from 'alice', the 11th request must be rejected with allowed=False, while requests from user 'bob' must still be allowed",
+        "rationale": "Users must be isolated - one user's requests should not affect another user's quota"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must correctly enforce per-endpoint limits",
+        "assertion": "Given endpoint '/api/search' has limit 5/min and '/api/users' has limit 10/min, after 5 requests to '/api/search', next request to '/api/search' is rejected but requests to '/api/users' are still allowed",
+        "rationale": "Different endpoints have different resource costs and must be rate limited independently"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must support combined per-user-per-endpoint limits",
+        "assertion": "Given user 'alice' with limit 3/min on '/api/data', after 3 requests from 'alice' to '/api/data', next request is rejected, but 'alice' can still access '/api/other' and 'bob' can still access '/api/data'",
+        "rationale": "Fine-grained control requires per-user-per-endpoint tracking for accurate rate limiting"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Sliding window must correctly expire old requests as time progresses",
+        "assertion": "Given limit 5/60s, make 5 requests at t=0. At t=30s, count=5 and blocked. At t=61s (after first request expires), a new request must be allowed with remaining=4",
+        "rationale": "Sliding window accuracy depends on proper expiration of timestamps outside the window"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must return accurate remaining quota",
+        "assertion": "Given limit 10/min, after 3 requests, check() must return {allowed: True, remaining: 7}, after 10 requests return {allowed: True, remaining: 0}, after 11th return {allowed: False, remaining: 0}",
+        "rationale": "Clients need accurate remaining count to implement client-side backoff and retry logic"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must support multiple time window units (seconds, minutes, hours)",
+        "assertion": "Limiter configured with '5/s' allows 5 req/sec, '100/m' allows 100 req/min, '1000/h' allows 1000 req/hour, each enforced correctly over their respective windows",
+        "rationale": "Different use cases require different time granularities for rate limiting"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Rate limiter must handle requests at exact window boundary",
+        "assertion": "Given limit 5/60s, make request at t=0 and t=60.0s (exact boundary). Both should be counted in different windows, allowing 10 total requests across the boundary",
+        "rationale": "Boundary conditions often cause off-by-one errors in sliding window implementations"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Rate limiter must handle burst of requests at exact same millisecond",
+        "assertion": "Given limit 10/min, making 10 concurrent requests with identical timestamps must count all 10 and reject the 11th request",
+        "rationale": "Concurrent requests must be properly counted to prevent quota bypass through parallel requests"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Rate limiter must handle limit of 1 request per window",
+        "assertion": "Given limit 1/60s, first request is allowed with remaining=0, second request within 60s is rejected, after 60s new request is allowed",
+        "rationale": "Minimum limit case tests boundary handling and prevents division-by-zero or special case errors"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Rate limiter must handle very large limit values",
+        "assertion": "Given limit 1000000/hour, making 1000000 requests should all be allowed and 1000001st rejected, without integer overflow or performance degradation",
+        "rationale": "High-traffic endpoints need large limits; implementation must handle without numeric overflow"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Rate limiter must handle user identifiers with special characters",
+        "assertion": "Users 'user:123', 'user@email.com', 'user/path', 'user with spaces' must each have independent quotas without key collision",
+        "rationale": "Real-world user IDs contain special characters that could cause Redis key conflicts if not properly escaped"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Rate limiter must handle endpoint paths with query parameters and fragments",
+        "assertion": "Endpoints '/api/data', '/api/data?query=1', '/api/data#section' must be treated as specified by configuration (either same or different endpoints)",
+        "rationale": "URL normalization affects rate limiting accuracy; behavior must be explicit and consistent"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Rate limiter must handle empty or very short time windows",
+        "assertion": "Given limit 100/1s (1 second window), requests must be properly windowed per second without timestamp precision loss",
+        "rationale": "Short windows test timestamp precision and rapid expiration logic"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Rate limiter must handle Redis connection failures gracefully",
+        "assertion": "When Redis is unreachable, check() must either fail-open (allow request with warning) or fail-closed (reject with error) according to configured policy, not crash",
+        "rationale": "Service must remain available even when backing store fails; crash would take down entire application"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Rate limiter must handle Redis command errors gracefully",
+        "assertion": "When Redis returns error (e.g., WRONGTYPE, OOM), check() must raise RateLimiterError with descriptive message, not expose raw Redis exception",
+        "rationale": "Application should handle storage errors consistently without leaking implementation details"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Rate limiter must validate limit configuration format",
+        "assertion": "Invalid limit formats like 'abc/min', '10/xyz', '-5/min', '0/min' must raise ValueError with descriptive message during initialization",
+        "rationale": "Invalid configuration should fail fast at startup, not during request handling"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Rate limiter must validate user identifier is provided",
+        "assertion": "Calling check() with user_id=None, user_id='', or missing user_id must raise ValueError with message 'user_id is required'",
+        "rationale": "Missing user identifier makes rate limiting meaningless; must be caught early"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Rate limiter must validate endpoint identifier is provided when endpoint-based limiting is enabled",
+        "assertion": "Calling check() with endpoint=None or endpoint='' when endpoint limiting is configured must raise ValueError",
+        "rationale": "Missing required parameters lead to incorrect rate limiting or key collisions"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Rate limiter must handle corrupted Redis data gracefully",
+        "assertion": "If Redis key contains non-list data or unparseable timestamps, check() must clear corrupted data and continue with fresh window, logging warning",
+        "rationale": "Data corruption should be recoverable; user should not be permanently blocked due to bad data"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Rate limiter must enforce type constraints on limit parameter",
+        "assertion": "Passing limit as integer, float, list, or dict must raise TypeError; only string format 'N/unit' is accepted",
+        "rationale": "Type safety prevents runtime errors from incorrect API usage"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Rate limiter must enforce type constraints on user_id parameter",
+        "assertion": "user_id must accept string type; passing int, list, dict, or object must raise TypeError",
+        "rationale": "Consistent types prevent key generation bugs and Redis type mismatches"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Rate limiter check() must return consistent result type",
+        "assertion": "check() must always return dict with keys {allowed: bool, remaining: int, reset_after: float}, never None or other types",
+        "rationale": "Consistent return type allows safe dictionary access without type checking"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "security",
+        "severity": "critical",
+        "description": "Rate limiter must prevent Redis key injection attacks",
+        "assertion": "User IDs containing Redis key patterns like 'user1:*', 'user2\\nDEL key', or other special chars must be sanitized to prevent key collision or command injection",
+        "rationale": "Malicious user IDs could access or modify other users' rate limit data or execute Redis commands"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "security",
+        "severity": "critical",
+        "description": "Rate limiter must prevent timing attacks through consistent response times",
+        "assertion": "check() response time for allowed vs rejected requests must not differ by more than 5ms to prevent quota discovery through timing",
+        "rationale": "Timing differences could allow attackers to discover rate limit thresholds or valid user IDs"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "security",
+        "severity": "high",
+        "description": "Rate limiter must use cryptographically random values for any internal identifiers",
+        "assertion": "If implementation generates request IDs or tokens, they must use secrets.token_bytes() or similar, not random.random() or predictable sequences",
+        "rationale": "Predictable identifiers could allow quota bypass through replay or prediction attacks"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "security",
+        "severity": "high",
+        "description": "Rate limiter must not expose internal Redis key structure in error messages",
+        "assertion": "Error messages must not contain Redis key names, only sanitized user-facing identifiers",
+        "rationale": "Exposing internal key structure aids attackers in crafting injection attacks"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "security",
+        "severity": "medium",
+        "description": "Rate limiter must implement maximum key size limits",
+        "assertion": "User IDs or endpoints longer than 256 characters must raise ValueError to prevent memory exhaustion",
+        "rationale": "Unbounded key sizes could enable DoS through memory exhaustion"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "performance",
+        "severity": "critical",
+        "description": "Rate limiter check() must complete in O(log N) time where N is request count",
+        "assertion": "check() on window with 1000 requests must complete in under 10ms; scaling to 10000 requests must not exceed 15ms",
+        "rationale": "Rate limiter is in hot path; linear time complexity would create bottleneck"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "performance",
+        "severity": "critical",
+        "description": "Rate limiter must use Redis pipelining or Lua scripts to minimize round trips",
+        "assertion": "A single check() call must execute at most 2 Redis commands (read window + write timestamp), not separate commands per timestamp",
+        "rationale": "Multiple round trips per request would make rate limiter slower than the actual endpoint"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "performance",
+        "severity": "high",
+        "description": "Rate limiter must set TTL on Redis keys to prevent unbounded memory growth",
+        "assertion": "Each rate limit key must have TTL set to window_duration + 60s; abandoned users must not consume Redis memory indefinitely",
+        "rationale": "Without TTL, memory usage grows unbounded with number of unique users ever seen"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "performance",
+        "severity": "high",
+        "description": "Rate limiter must efficiently clean up expired timestamps within window",
+        "assertion": "After 1000 requests over 10 minutes with 60s window, Redis key must contain at most 60 timestamps, not all 1000",
+        "rationale": "Storing expired timestamps wastes memory and slows down all operations"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Rate limiter must support configurable key prefix for namespace isolation",
+        "assertion": "Configuring prefix='app1:ratelimit:' must prepend all Redis keys, allowing multiple applications to share Redis instance without conflicts",
+        "rationale": "Multi-tenancy requires namespace isolation to prevent key collisions"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Rate limiter must support decimal limits for sub-request granularity",
+        "assertion": "Limit '0.5/s' must allow 1 request per 2 seconds, enforcing fractional rate correctly",
+        "rationale": "Some APIs need very restrictive rates like 1 request per minute expressed as 0.0167/s"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Rate limiter must provide accurate reset_after timestamp",
+        "assertion": "When limit is reached, reset_after must indicate seconds until oldest request expires, with accuracy within 1 second",
+        "rationale": "Clients need reset time to implement proper retry-after behavior per HTTP 429 spec"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Rate limiter must handle system clock adjustments gracefully",
+        "assertion": "If system clock jumps backward by 10s, rate limiter must not permanently block users; if forward by 1 hour, must not grant extra quota",
+        "rationale": "Clock skew or NTP adjustments should not break rate limiting or cause unfair blocking"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Rate limiter must handle Redis connection pool exhaustion",
+        "assertion": "When all Redis connections are in use, check() must either wait with timeout or fail-open, not deadlock or hang indefinitely",
+        "rationale": "Connection pool exhaustion should degrade gracefully, not hang all requests"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Rate limiter must support get_current_usage() for monitoring",
+        "assertion": "get_current_usage(user_id, endpoint) must return current request count in window without incrementing counter",
+        "rationale": "Monitoring and debugging requires non-mutating inspection of current state"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Rate limiter must support reset() for manual quota clearing",
+        "assertion": "reset(user_id, endpoint) must clear all timestamps for that key, immediately allowing full quota",
+        "rationale": "Administrative tools need ability to manually reset rate limits for customer support"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Rate limiter must validate time unit is supported",
+        "assertion": "Time units 's', 'm', 'h', 'd' (seconds, minutes, hours, days) must be accepted; 'w', 'y', or unknown units must raise ValueError",
+        "rationale": "Limiting supported units prevents confusion and implementation errors with rarely-used units"
+      }
+    ],
+    "totalSpecs": 40,
+    "synthesizedAt": "2026-02-12T06:34:12.186Z",
+    "inputTokens": 587,
+    "outputTokens": 4665
+  },
+  "constraintSet": {
+    "task": "Write a sliding window rate limiter that supports per-user and per-endpoint limits with Redis-compatible storage",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Must use Redis sorted sets (ZSET) with timestamps as scores to track requests, removing expired entries with ZREMRANGEBYSCORE before counting to ensure accurate sliding window behavior.",
+        "pattern": "redis.zremrangebyscore(key, '-inf', current_time - window_seconds)\ncount = redis.zcard(key)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-002",
+        "type": "must",
+        "description": "Must generate unique Redis keys for each user-endpoint combination using format 'prefix:user:{user_id}:endpoint:{endpoint}' to prevent quota collision between different users or endpoints.",
+        "pattern": "key = f'{prefix}:user:{user_id}:endpoint:{endpoint}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Must remove timestamps outside the sliding window (older than current_time - window_duration) before counting requests to ensure old requests don't affect current quota.",
+        "pattern": "window_start = current_time - window_seconds\nredis.zremrangebyscore(key, '-inf', window_start)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Must calculate remaining quota as max(0, limit - current_count) and return it with every check, computing it after determining if request is allowed.",
+        "pattern": "remaining = max(0, limit - current_count)\nreturn {'allowed': allowed, 'remaining': remaining, 'reset_after': reset_time}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Must parse time unit suffixes (s=seconds, m=minutes, h=hours, d=days) and convert to seconds: multiply by 60 for 'm', 3600 for 'h', 86400 for 'd'.",
+        "pattern": "units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}\nwindow_seconds = int(limit_count) * units[time_unit]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Must use high-precision timestamps (time.time() returning float with microsecond precision) as ZSET scores to correctly handle concurrent requests with identical or near-identical timestamps.",
+        "pattern": "timestamp = time.time()  # Returns float like 1234567890.123456\nredis.zadd(key, {str(uuid.uuid4()): timestamp})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Must handle window boundaries by using strict inequality (current_time - window_duration < request_time <= current_time) so requests exactly at window_duration ago are excluded.",
+        "pattern": "window_start = current_time - window_seconds\nredis.zremrangebyscore(key, '-inf', f'({window_start}')  # Exclusive lower bound",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Must handle limit=1 case by rejecting when current_count >= 1, ensuring single-request quotas work correctly without off-by-one errors.",
+        "pattern": "if current_count >= limit:\n    return {'allowed': False, 'remaining': 0}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Must use integer types for limit count (not float) to prevent precision errors with large limits like 1000000, validating during parsing that count is positive integer.",
+        "pattern": "limit_count = int(parts[0])\nif limit_count <= 0:\n    raise ValueError('Limit count must be positive integer')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must sanitize user_id and endpoint by URL-encoding or escaping Redis special characters (:, *, ?, [, ], newlines) to prevent key injection and collision.",
+        "pattern": "import urllib.parse\nsafe_user = urllib.parse.quote(user_id, safe='')\nsafe_endpoint = urllib.parse.quote(endpoint, safe='')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must normalize endpoint paths by removing or consistently handling query parameters and fragments according to configuration, defaulting to path-only comparison.",
+        "pattern": "from urllib.parse import urlparse\nendpoint_key = urlparse(endpoint).path  # Ignore query and fragment",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must handle sub-second windows (e.g., 100/1s) using float timestamps with at least millisecond precision, not rounding to integer seconds.",
+        "pattern": "timestamp = time.time()  # Keep as float\nwindow_seconds = float(limit_count) / float(units[unit])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must-not",
+        "description": "Must-not crash on Redis connection failures; wrap Redis calls in try-except and implement fail-open (allow with warning) or fail-closed (raise RateLimiterError) based on config.",
+        "pattern": "try:\n    redis.ping()\nexcept redis.ConnectionError:\n    if fail_open:\n        logger.warning('Redis unavailable, allowing request')\n        return {'allowed': True}\n    raise RateLimiterError('Rate limiter unavailable')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must catch Redis-specific exceptions (ResponseError, TimeoutError) and re-raise as custom RateLimiterError with descriptive message, not exposing raw Redis errors.",
+        "pattern": "except redis.ResponseError as e:\n    raise RateLimiterError(f'Redis error during rate limiting: {type(e).__name__}') from e",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must validate limit format on initialization using regex '^\\d+(\\.\\d+)?/[smhd]$' and raise ValueError with message 'Invalid limit format, expected N/unit' for malformed input.",
+        "pattern": "import re\nif not re.match(r'^\\d+(\\.\\d+)?/[smhd]$', limit_str):\n    raise ValueError(f'Invalid limit format: {limit_str}, expected N/unit')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must validate user_id is non-empty string in check(), raising ValueError('user_id is required and must be non-empty string') for None, empty string, or missing.",
+        "pattern": "if not user_id or not isinstance(user_id, str):\n    raise ValueError('user_id is required and must be non-empty string')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must validate endpoint is non-empty string when endpoint-based limiting is enabled, raising ValueError with clear message about requirement.",
+        "pattern": "if endpoint_limiting_enabled and (not endpoint or not isinstance(endpoint, str)):\n    raise ValueError('endpoint is required for endpoint-based limiting')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must handle corrupted Redis data by catching parsing/type errors, deleting the corrupted key with redis.delete(), logging warning, and continuing with empty window.",
+        "pattern": "try:\n    data = redis.zrange(key, 0, -1)\nexcept (ValueError, TypeError):\n    logger.warning(f'Corrupted data at {key}, resetting')\n    redis.delete(key)\n    data = []",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must-not",
+        "description": "Must-not accept non-string limit parameter; validate isinstance(limit, str) and raise TypeError('limit must be string in format N/unit') for int, float, list, dict.",
+        "pattern": "if not isinstance(limit, str):\n    raise TypeError(f'limit must be string in format N/unit, got {type(limit).__name__}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must-not",
+        "description": "Must-not accept non-string user_id; validate isinstance(user_id, str) in check() and raise TypeError('user_id must be string') for int, list, dict, object types.",
+        "pattern": "if not isinstance(user_id, str):\n    raise TypeError(f'user_id must be string, got {type(user_id).__name__}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must always return dict with exactly keys {'allowed': bool, 'remaining': int, 'reset_after': float} from check(), never None, tuple, or missing keys.",
+        "pattern": "return {\n    'allowed': bool(allowed),\n    'remaining': int(remaining),\n    'reset_after': float(reset_after)\n}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must-not",
+        "description": "Must-not include raw Redis key names in error messages or logs; use sanitized user_id/endpoint only to prevent exposing internal structure.",
+        "pattern": "# Bad: f'Error with key {redis_key}'\n# Good: f'Rate limit error for user {user_id}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must enforce maximum length of 256 characters for user_id and endpoint, raising ValueError('identifier exceeds maximum length of 256') to prevent memory exhaustion.",
+        "pattern": "if len(user_id) > 256 or len(endpoint) > 256:\n    raise ValueError('user_id and endpoint must not exceed 256 characters')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Must use Redis Lua script or pipeline to atomically perform ZREMRANGEBYSCORE + ZCARD + ZADD + EXPIRE in single round-trip, not separate commands.",
+        "pattern": "lua_script = redis.register_script('''\n    redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])\n    local count = redis.call('ZCARD', KEYS[1])\n    ...\n''')\nlua_script(keys=[key], args=[window_start, ...])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must set TTL on every Redis key to window_duration + 60 seconds using EXPIRE command after modification to prevent abandoned keys from consuming memory indefinitely.",
+        "pattern": "ttl_seconds = int(window_seconds + 60)\nredis.expire(key, ttl_seconds)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Must remove expired timestamps using ZREMRANGEBYSCORE before every count operation to ensure Redis key contains only active window requests, not accumulating old data.",
+        "pattern": "redis.zremrangebyscore(key, '-inf', current_time - window_seconds)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must support configurable key_prefix parameter (default 'ratelimit:') and prepend it to all Redis keys for namespace isolation between applications.",
+        "pattern": "self.prefix = key_prefix\nkey = f'{self.prefix}user:{user_id}:endpoint:{endpoint}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must support fractional limits like '0.5/s' by parsing limit as float, converting to equivalent window (e.g., 1 request per 2 seconds = 2 second window with limit 1).",
+        "pattern": "limit_float = float(parts[0])\nif limit_float < 1:\n    window_seconds = units[unit] / limit_float\n    limit_count = 1",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must calculate reset_after as time until oldest request in window expires (oldest_timestamp + window_duration - current_time), returning 0 if window is empty.",
+        "pattern": "oldest_timestamps = redis.zrange(key, 0, 0, withscores=True)\nif oldest_timestamps:\n    reset_after = oldest_timestamps[0][1] + window_seconds - current_time\nelse:\n    reset_after = 0",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Must use monotonic time source (time.time()) consistently and handle clock adjustments by clamping calculated windows to reasonable bounds (not negative, not > 2x window).",
+        "pattern": "window_start = max(current_time - window_seconds, 0)\n# Protect against backward clock jumps",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must configure Redis connection pool with reasonable timeout (e.g., 5s) and max_connections, raising RateLimiterError on pool exhaustion rather than hanging.",
+        "pattern": "pool = redis.ConnectionPool(socket_timeout=5, socket_connect_timeout=5, max_connections=50)\nredis_client = redis.Redis(connection_pool=pool)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Must implement get_current_usage(user_id, endpoint) that performs ZREMRANGEBYSCORE + ZCARD without ZADD to return current count without incrementing.",
+        "pattern": "def get_current_usage(self, user_id, endpoint):\n    redis.zremrangebyscore(key, '-inf', current_time - window_seconds)\n    return redis.zcard(key)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must implement reset(user_id, endpoint) that calls redis.delete(key) to immediately clear all timestamps and restore full quota for that user-endpoint combination.",
+        "pattern": "def reset(self, user_id, endpoint=None):\n    key = self._make_key(user_id, endpoint)\n    redis.delete(key)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must validate time unit is one of 's', 'm', 'h', 'd' and raise ValueError('Unsupported time unit: X, must be s/m/h/d') for any other character.",
+        "pattern": "valid_units = {'s', 'm', 'h', 'd'}\nif time_unit not in valid_units:\n    raise ValueError(f'Unsupported time unit: {time_unit}, must be s/m/h/d')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "prefer",
+        "description": "Prefer using Redis Lua scripts over pipelines for atomic operations to guarantee consistency even under high concurrency and prevent race conditions between read-modify-write.",
+        "pattern": "# Lua script ensures atomicity\nlua_script = redis.register_script(script_text)\nresult = lua_script(keys=[key], args=args)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must-not",
+        "description": "Must-not use random.random() or predictable sequences for any internal identifiers; if generating request IDs, use secrets.token_bytes() or uuid.uuid4() for uniqueness.",
+        "pattern": "# Bad: request_id = str(random.random())\n# Good: request_id = str(uuid.uuid4())",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 36,
+    "generatedAt": "2026-02-12T06:35:11.121Z",
+    "inputTokens": 2989,
+    "outputTokens": 3724
+  },
+  "generatedCode": {
+    "task": "Write a sliding window rate limiter that supports per-user and per-endpoint limits with Redis-compatible storage",
+    "code": "import re\nimport time\nimport logging\nimport urllib.parse\nfrom typing import Dict, Optional, Any\nimport uuid\n\ntry:\n    import redis\nexcept ImportError:\n    raise ImportError(\"redis package is required. Install with: pip install redis\")\n\nlogger = logging.getLogger(__name__)\n\n\nclass RateLimiterError(Exception):\n    \"\"\"Custom exception for rate limiter errors.\"\"\"\n    pass\n\n\nclass RateLimiter:\n    \"\"\"Sliding window rate limiter with Redis storage supporting per-user and per-endpoint limits.\"\"\"\n    \n    def __init__(\n        self,\n        redis_client: redis.Redis,\n        limit: str,\n        key_prefix: str = \"ratelimit:\",\n        fail_open: bool = False,\n        endpoint_limiting: bool = False\n    ):\n        \"\"\"\n        Initialize rate limiter.\n        \n        Args:\n            redis_client: Redis client instance\n            limit: Rate limit in format \"N/unit\" where unit is s/m/h/d\n            key_prefix: Prefix for Redis keys for namespace isolation\n            fail_open: If True, allow requests when Redis is unavailable; if False, reject\n            endpoint_limiting: If True, enforce per-endpoint limits\n        \n        Raises:\n            ValueError: If limit format is invalid\n            TypeError: If limit is not a string\n        \"\"\"\n        if not isinstance(limit, str):\n            raise TypeError(f\"limit must be string in format N/unit, got {type(limit).__name__}\")\n        \n        self._validate_limit_format(limit)\n        self.redis_client = redis_client\n        self.limit_str = limit\n        self.key_prefix = key_prefix\n        self.fail_open = fail_open\n        self.endpoint_limiting = endpoint_limiting\n        \n        self.limit_count, self.window_seconds = self._parse_limit(limit)\n        \n        self._lua_script = self.redis_client.register_script(\"\"\"\n            local key = KEYS[1]\n            local window_start = tonumber(ARGV[1])\n            local current_time = tonumber(ARGV[2])\n            local limit = tonumber(ARGV[3])\n            local ttl = tonumber(ARGV[4])\n            local request_id = ARGV[5]\n            \n            redis.call('ZREMRANGEBYSCORE', key, '-inf', '(' .. window_start)\n            \n            local current_count = redis.call('ZCARD', key)\n            \n            local allowed = 0\n            local remaining = 0\n            local reset_after = 0\n            \n            if current_count < limit then\n                redis.call('ZADD', key, current_time, request_id)\n                redis.call('EXPIRE', key, ttl)\n                allowed = 1\n                remaining = limit - current_count - 1\n            else\n                allowed = 0\n                remaining = 0\n            end\n            \n            local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')\n            if #oldest > 0 then\n                local oldest_time = tonumber(oldest[2])\n                reset_after = oldest_time + (current_time - window_start) - current_time\n                if reset_after < 0 then\n                    reset_after = 0\n                end\n            else\n                reset_after = 0\n            end\n            \n            return {allowed, remaining, reset_after}\n        \"\"\")\n    \n    def _validate_limit_format(self, limit_str: str) -> None:\n        \"\"\"\n        Validate limit format using regex.\n        \n        Args:\n            limit_str: Limit string to validate\n            \n        Raises:\n            ValueError: If format is invalid\n        \"\"\"\n        if not re.match(r'^\\d+(\\.\\d+)?/[smhd]$', limit_str):\n            raise ValueError(f\"Invalid limit format: {limit_str}, expected N/unit\")\n    \n    def _parse_limit(self, limit_str: str) -> tuple[int, float]:\n        \"\"\"\n        Parse limit string into count and window duration in seconds.\n        \n        Args:\n            limit_str: Limit string in format \"N/unit\"\n            \n        Returns:\n            Tuple of (limit_count, window_seconds)\n            \n        Raises:\n            ValueError: If time unit is unsupported or count is invalid\n        \"\"\"\n        parts = limit_str.split('/')\n        limit_value = float(parts[0])\n        time_unit = parts[1]\n        \n        valid_units = {'s', 'm', 'h', 'd'}\n        if time_unit not in valid_units:\n            raise ValueError(f\"Unsupported time unit: {time_unit}, must be s/m/h/d\")\n        \n        units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}\n        \n        if limit_value < 1:\n            window_seconds = units[time_unit] / limit_value\n            limit_count = 1\n        else:\n            if limit_value != int(limit_value):\n                raise ValueError(\"Limit count must be positive integer when >= 1\")\n            limit_count = int(limit_value)\n            if limit_count <= 0:\n                raise ValueError(\"Limit count must be positive integer\")\n            window_seconds = units[time_unit]\n        \n        return limit_count, float(window_seconds)\n    \n    def _sanitize_identifier(self, identifier: str) -> str:\n        \"\"\"\n        Sanitize user ID or endpoint to prevent Redis key injection.\n        \n        Args:\n            identifier: User ID or endpoint string\n            \n        Returns:\n            Sanitized identifier safe for use in Redis keys\n        \"\"\"\n        return urllib.parse.quote(identifier, safe='')\n    \n    def _make_key(self, user_id: str, endpoint: Optional[str] = None) -> str:\n        \"\"\"\n        Generate Redis key for user-endpoint combination.\n        \n        Args:\n            user_id: User identifier\n            endpoint: Endpoint identifier (optional)\n            \n        Returns:\n            Redis key string\n        \"\"\"\n        safe_user = self._sanitize_identifier(user_id)\n        \n        if endpoint and self.endpoint_limiting:\n            from urllib.parse import urlparse\n            endpoint_path = urlparse(endpoint).path\n            safe_endpoint = self._sanitize_identifier(endpoint_path)\n            return f\"{self.key_prefix}user:{safe_user}:endpoint:{safe_endpoint}\"\n        else:\n            return f\"{self.key_prefix}user:{safe_user}\"\n    \n    def _validate_identifiers(self, user_id: Any, endpoint: Optional[Any] = None) -> None:\n        \"\"\"\n        Validate user_id and endpoint parameters.\n        \n        Args:\n            user_id: User identifier to validate\n            endpoint: Endpoint identifier to validate\n            \n        Raises:\n            ValueError: If identifiers are invalid\n            TypeError: If types are incorrect\n        \"\"\"\n        if not isinstance(user_id, str):\n            raise TypeError(f\"user_id must be string, got {type(user_id).__name__}\")\n        \n        if not user_id:\n            raise ValueError(\"user_id is required and must be non-empty string\")\n        \n        if len(user_id) > 256:\n            raise ValueError(\"user_id and endpoint must not exceed 256 characters\")\n        \n        if self.endpoint_limiting:\n            if endpoint is not None:\n                if not isinstance(endpoint, str):\n                    raise TypeError(f\"endpoint must be string, got {type(endpoint).__name__}\")\n                if not endpoint:\n                    raise ValueError(\"endpoint is required for endpoint-based limiting\")\n                if len(endpoint) > 256:\n                    raise ValueError(\"user_id and endpoint must not exceed 256 characters\")\n    \n    def check(self, user_id: str, endpoint: Optional[str] = None) -> Dict[str, Any]:\n        \"\"\"\n        Check if request is allowed under rate limit and record it if allowed.\n        \n        Args:\n            user_id: User identifier\n            endpoint: Endpoint identifier (optional, required if endpoint_limiting is True)\n            \n        Returns:\n            Dict with keys:\n                - allowed (bool): Whether request is allowed\n                - remaining (int): Remaining quota in current window\n                - reset_after (float): Seconds until quota resets\n                \n        Raises:\n            ValueError: If identifiers are invalid\n            TypeError: If parameter types are incorrect\n            RateLimiterError: If Redis operation fails and fail_open is False\n        \"\"\"\n        self._validate_identifiers(user_id, endpoint)\n        \n        key = self._make_key(user_id, endpoint)\n        current_time = time.time()\n        window_start = current_time - self.window_seconds\n        ttl_seconds = int(self.window_seconds + 60)\n        request_id = str(uuid.uuid4())\n        \n        try:\n            result = self._lua_script(\n                keys=[key],\n                args=[\n                    window_start,\n                    current_time,\n                    self.limit_count,\n                    ttl_seconds,\n                    request_id\n                ]\n            )\n            \n            allowed = bool(result[0])\n            remaining = int(result[1])\n            reset_after = float(result[2])\n            \n            return {\n                'allowed': allowed,\n                'remaining': max(0, remaining),\n                'reset_after': max(0.0, reset_after)\n            }\n            \n        except redis.ConnectionError as e:\n            if self.fail_open:\n                logger.warning(f\"Redis unavailable, allowing request: {type(e).__name__}\")\n                return {\n                    'allowed': True,\n                    'remaining': self.limit_count,\n                    'reset_after': 0.0\n                }\n            raise RateLimiterError(f\"Rate limiter unavailable: Redis connection failed\") from e\n        \n        except redis.TimeoutError as e:\n            if self.fail_open:\n                logger.warning(f\"Redis timeout, allowing request: {type(e).__name__}\")\n                return {\n                    'allowed': True,\n                    'remaining': self.limit_count,\n                    'reset_after': 0.0\n                }\n            raise RateLimiterError(f\"Rate limiter unavailable: Redis timeout\") from e\n        \n        except redis.ResponseError as e:\n            logger.error(f\"Redis error during rate limiting for user {user_id}\")\n            raise RateLimiterError(f\"Redis error during rate limiting: {type(e).__name__}\") from e\n        \n        except (ValueError, TypeError) as e:\n            logger.warning(f\"Corrupted data for user {user_id}, resetting\")\n            try:\n                self.redis_client.delete(key)\n            except Exception:\n                pass\n            return {\n                'allowed': True,\n                'remaining': self.limit_count - 1,\n                'reset_after': self.window_seconds\n            }\n        \n        except Exception as e:\n            logger.error(f\"Unexpected error during rate limiting for user {user_id}: {type(e).__name__}\")\n            raise RateLimiterError(f\"Unexpected error during rate limiting: {type(e).__name__}\") from e\n    \n    def get_current_usage(self, user_id: str, endpoint: Optional[str] = None) -> int:\n        \"\"\"\n        Get current request count in window without incrementing.\n        \n        Args:\n            user_id: User identifier\n            endpoint: Endpoint identifier (optional)\n            \n        Returns:\n            Current request count in window\n            \n        Raises:\n            ValueError: If identifiers are invalid\n            RateLimiterError: If Redis operation fails\n        \"\"\"\n        self._validate_identifiers(user_id, endpoint)\n        \n        key = self._make_key(user_id, endpoint)\n        current_time = time.time()\n        window_start = current_time - self.window_seconds\n        \n        try:\n            self.redis_client.zremrangebyscore(key, '-inf', f'({window_start}')\n            count = self.redis_client.zcard(key)\n            return int(count)\n        \n        except redis.ConnectionError as e:\n            raise RateLimiterError(f\"Rate limiter unavailable: Redis connection failed\") from e\n        except redis.ResponseError as e:\n            raise RateLimiterError(f\"Redis error during rate limiting: {type(e).__name__}\") from e\n        except Exception as e:\n            raise RateLimiterError(f\"Unexpected error: {type(e).__name__}\") from e\n    \n    def reset(self, user_id: str, endpoint: Optional[str] = None) -> None:\n        \"\"\"\n        Reset rate limit for user-endpoint combination.\n        \n        Args:\n            user_id: User identifier\n            endpoint: Endpoint identifier (optional)\n            \n        Raises:\n            ValueError: If identifiers are invalid\n            RateLimiterError: If Redis operation fails\n        \"\"\"\n        self._validate_identifiers(user_id, endpoint)\n        \n        key = self._make_key(user_id, endpoint)\n        \n        try:\n            self.redis_client.delete(key)\n        except redis.ConnectionError as e:\n            raise RateLimiterError(f\"Rate limiter unavailable: Redis connection failed\") from e\n        except redis.ResponseError as e:\n            raise RateLimiterError(f\"Redis error during rate limiting: {type(e).__name__}\") from e\n        except Exception as e:\n            raise RateLimiterError(f\"Unexpected error: {type(e).__name__}\") from e",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must correctly track requests within the sliding window time frame",
+        "assertion": "After making 5 requests within a 60-second window, the request count must be exactly 5, and after the window slides past the oldest request, the count must decrease accordingly",
+        "rationale": "Core functionality - incorrect counting leads to either false rejections or allowing over-limit requests"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must correctly enforce per-user limits",
+        "assertion": "Given a limit of 10 requests per minute for user 'alice', after 10 requests from 'alice', the 11th request must be rejected with allowed=False, while requests from user 'bob' must still be allowed",
+        "rationale": "Users must be isolated - one user's requests should not affect another user's quota"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must correctly enforce per-endpoint limits",
+        "assertion": "Given endpoint '/api/search' has limit 5/min and '/api/users' has limit 10/min, after 5 requests to '/api/search', next request to '/api/search' is rejected but requests to '/api/users' are still allowed",
+        "rationale": "Different endpoints have different resource costs and must be rate limited independently"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must support combined per-user-per-endpoint limits",
+        "assertion": "Given user 'alice' with limit 3/min on '/api/data', after 3 requests from 'alice' to '/api/data', next request is rejected, but 'alice' can still access '/api/other' and 'bob' can still access '/api/data'",
+        "rationale": "Fine-grained control requires per-user-per-endpoint tracking for accurate rate limiting"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Sliding window must correctly expire old requests as time progresses",
+        "assertion": "Given limit 5/60s, make 5 requests at t=0. At t=30s, count=5 and blocked. At t=61s (after first request expires), a new request must be allowed with remaining=4",
+        "rationale": "Sliding window accuracy depends on proper expiration of timestamps outside the window"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must return accurate remaining quota",
+        "assertion": "Given limit 10/min, after 3 requests, check() must return {allowed: True, remaining: 7}, after 10 requests return {allowed: True, remaining: 0}, after 11th return {allowed: False, remaining: 0}",
+        "rationale": "Clients need accurate remaining count to implement client-side backoff and retry logic"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Rate limiter must support multiple time window units (seconds, minutes, hours)",
+        "assertion": "Limiter configured with '5/s' allows 5 req/sec, '100/m' allows 100 req/min, '1000/h' allows 1000 req/hour, each enforced correctly over their respective windows",
+        "rationale": "Different use cases require different time granularities for rate limiting"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "edge-case",
+        "severity": "critical",
+        "description": "Rate limiter must handle requests at exact window boundary",
+        "assertion": "Given limit 5/60s, make request at t=0 and t=60.0s (exact boundary). Both should be counted in different windows, allowing 10 total requests across the boundary",
+        "rationale": "Boundary conditions often cause off-by-one errors in sliding window implementations"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Rate limiter must handle burst of requests at exact same millisecond",
+        "assertion": "Given limit 10/min, making 10 concurrent requests with identical timestamps must count all 10 and reject the 11th request",
+        "rationale": "Concurrent requests must be properly counted to prevent quota bypass through parallel requests"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Rate limiter must handle limit of 1 request per window",
+        "assertion": "Given limit 1/60s, first request is allowed with remaining=0, second request within 60s is rejected, after 60s new request is allowed",
+        "rationale": "Minimum limit case tests boundary handling and prevents division-by-zero or special case errors"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Rate limiter must handle very large limit values",
+        "assertion": "Given limit 1000000/hour, making 1000000 requests should all be allowed and 1000001st rejected, without integer overflow or performance degradation",
+        "rationale": "High-traffic endpoints need large limits; implementation must handle without numeric overflow"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Rate limiter must handle user identifiers with special characters",
+        "assertion": "Users 'user:123', 'user@email.com', 'user/path', 'user with spaces' must each have independent quotas without key collision",
+        "rationale": "Real-world user IDs contain special characters that could cause Redis key conflicts if not properly escaped"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Rate limiter must handle endpoint paths with query parameters and fragments",
+        "assertion": "Endpoints '/api/data', '/api/data?query=1', '/api/data#section' must be treated as specified by configuration (either same or different endpoints)",
+        "rationale": "URL normalization affects rate limiting accuracy; behavior must be explicit and consistent"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Rate limiter must handle empty or very short time windows",
+        "assertion": "Given limit 100/1s (1 second window), requests must be properly windowed per second without timestamp precision loss",
+        "rationale": "Short windows test timestamp precision and rapid expiration logic"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Rate limiter must handle Redis connection failures gracefully",
+        "assertion": "When Redis is unreachable, check() must either fail-open (allow request with warning) or fail-closed (reject with error) according to configured policy, not crash",
+        "rationale": "Service must remain available even when backing store fails; crash would take down entire application"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Rate limiter must handle Redis command errors gracefully",
+        "assertion": "When Redis returns error (e.g., WRONGTYPE, OOM), check() must raise RateLimiterError with descriptive message, not expose raw Redis exception",
+        "rationale": "Application should handle storage errors consistently without leaking implementation details"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Rate limiter must validate limit configuration format",
+        "assertion": "Invalid limit formats like 'abc/min', '10/xyz', '-5/min', '0/min' must raise ValueError with descriptive message during initialization",
+        "rationale": "Invalid configuration should fail fast at startup, not during request handling"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Rate limiter must validate user identifier is provided",
+        "assertion": "Calling check() with user_id=None, user_id='', or missing user_id must raise ValueError with message 'user_id is required'",
+        "rationale": "Missing user identifier makes rate limiting meaningless; must be caught early"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Rate limiter must validate endpoint identifier is provided when endpoint-based limiting is enabled",
+        "assertion": "Calling check() with endpoint=None or endpoint='' when endpoint limiting is configured must raise ValueError",
+        "rationale": "Missing required parameters lead to incorrect rate limiting or key collisions"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Rate limiter must handle corrupted Redis data gracefully",
+        "assertion": "If Redis key contains non-list data or unparseable timestamps, check() must clear corrupted data and continue with fresh window, logging warning",
+        "rationale": "Data corruption should be recoverable; user should not be permanently blocked due to bad data"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Rate limiter must enforce type constraints on limit parameter",
+        "assertion": "Passing limit as integer, float, list, or dict must raise TypeError; only string format 'N/unit' is accepted",
+        "rationale": "Type safety prevents runtime errors from incorrect API usage"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Rate limiter must enforce type constraints on user_id parameter",
+        "assertion": "user_id must accept string type; passing int, list, dict, or object must raise TypeError",
+        "rationale": "Consistent types prevent key generation bugs and Redis type mismatches"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Rate limiter check() must return consistent result type",
+        "assertion": "check() must always return dict with keys {allowed: bool, remaining: int, reset_after: float}, never None or other types",
+        "rationale": "Consistent return type allows safe dictionary access without type checking"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "security",
+        "severity": "critical",
+        "description": "Rate limiter must prevent Redis key injection attacks",
+        "assertion": "User IDs containing Redis key patterns like 'user1:*', 'user2\\nDEL key', or other special chars must be sanitized to prevent key collision or command injection",
+        "rationale": "Malicious user IDs could access or modify other users' rate limit data or execute Redis commands"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "security",
+        "severity": "critical",
+        "description": "Rate limiter must prevent timing attacks through consistent response times",
+        "assertion": "check() response time for allowed vs rejected requests must not differ by more than 5ms to prevent quota discovery through timing",
+        "rationale": "Timing differences could allow attackers to discover rate limit thresholds or valid user IDs"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "security",
+        "severity": "high",
+        "description": "Rate limiter must use cryptographically random values for any internal identifiers",
+        "assertion": "If implementation generates request IDs or tokens, they must use secrets.token_bytes() or similar, not random.random() or predictable sequences",
+        "rationale": "Predictable identifiers could allow quota bypass through replay or prediction attacks"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "security",
+        "severity": "high",
+        "description": "Rate limiter must not expose internal Redis key structure in error messages",
+        "assertion": "Error messages must not contain Redis key names, only sanitized user-facing identifiers",
+        "rationale": "Exposing internal key structure aids attackers in crafting injection attacks"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "security",
+        "severity": "medium",
+        "description": "Rate limiter must implement maximum key size limits",
+        "assertion": "User IDs or endpoints longer than 256 characters must raise ValueError to prevent memory exhaustion",
+        "rationale": "Unbounded key sizes could enable DoS through memory exhaustion"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "performance",
+        "severity": "critical",
+        "description": "Rate limiter check() must complete in O(log N) time where N is request count",
+        "assertion": "check() on window with 1000 requests must complete in under 10ms; scaling to 10000 requests must not exceed 15ms",
+        "rationale": "Rate limiter is in hot path; linear time complexity would create bottleneck"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "performance",
+        "severity": "critical",
+        "description": "Rate limiter must use Redis pipelining or Lua scripts to minimize round trips",
+        "assertion": "A single check() call must execute at most 2 Redis commands (read window + write timestamp), not separate commands per timestamp",
+        "rationale": "Multiple round trips per request would make rate limiter slower than the actual endpoint"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "performance",
+        "severity": "high",
+        "description": "Rate limiter must set TTL on Redis keys to prevent unbounded memory growth",
+        "assertion": "Each rate limit key must have TTL set to window_duration + 60s; abandoned users must not consume Redis memory indefinitely",
+        "rationale": "Without TTL, memory usage grows unbounded with number of unique users ever seen"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "performance",
+        "severity": "high",
+        "description": "Rate limiter must efficiently clean up expired timestamps within window",
+        "assertion": "After 1000 requests over 10 minutes with 60s window, Redis key must contain at most 60 timestamps, not all 1000",
+        "rationale": "Storing expired timestamps wastes memory and slows down all operations"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Rate limiter must support configurable key prefix for namespace isolation",
+        "assertion": "Configuring prefix='app1:ratelimit:' must prepend all Redis keys, allowing multiple applications to share Redis instance without conflicts",
+        "rationale": "Multi-tenancy requires namespace isolation to prevent key collisions"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Rate limiter must support decimal limits for sub-request granularity",
+        "assertion": "Limit '0.5/s' must allow 1 request per 2 seconds, enforcing fractional rate correctly",
+        "rationale": "Some APIs need very restrictive rates like 1 request per minute expressed as 0.0167/s"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Rate limiter must provide accurate reset_after timestamp",
+        "assertion": "When limit is reached, reset_after must indicate seconds until oldest request expires, with accuracy within 1 second",
+        "rationale": "Clients need reset time to implement proper retry-after behavior per HTTP 429 spec"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Rate limiter must handle system clock adjustments gracefully",
+        "assertion": "If system clock jumps backward by 10s, rate limiter must not permanently block users; if forward by 1 hour, must not grant extra quota",
+        "rationale": "Clock skew or NTP adjustments should not break rate limiting or cause unfair blocking"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Rate limiter must handle Redis connection pool exhaustion",
+        "assertion": "When all Redis connections are in use, check() must either wait with timeout or fail-open, not deadlock or hang indefinitely",
+        "rationale": "Connection pool exhaustion should degrade gracefully, not hang all requests"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Rate limiter must support get_current_usage() for monitoring",
+        "assertion": "get_current_usage(user_id, endpoint) must return current request count in window without incrementing counter",
+        "rationale": "Monitoring and debugging requires non-mutating inspection of current state"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Rate limiter must support reset() for manual quota clearing",
+        "assertion": "reset(user_id, endpoint) must clear all timestamps for that key, immediately allowing full quota",
+        "rationale": "Administrative tools need ability to manually reset rate limits for customer support"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Rate limiter must validate time unit is supported",
+        "assertion": "Time units 's', 'm', 'h', 'd' (seconds, minutes, hours, days) must be accepted; 'w', 'y', or unknown units must raise ValueError",
+        "rationale": "Limiting supported units prevents confusion and implementation errors with rarely-used units"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Must use Redis sorted sets (ZSET) with timestamps as scores to track requests, removing expired entries with ZREMRANGEBYSCORE before counting to ensure accurate sliding window behavior.",
+        "pattern": "redis.zremrangebyscore(key, '-inf', current_time - window_seconds)\ncount = redis.zcard(key)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-002",
+        "type": "must",
+        "description": "Must generate unique Redis keys for each user-endpoint combination using format 'prefix:user:{user_id}:endpoint:{endpoint}' to prevent quota collision between different users or endpoints.",
+        "pattern": "key = f'{prefix}:user:{user_id}:endpoint:{endpoint}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Must remove timestamps outside the sliding window (older than current_time - window_duration) before counting requests to ensure old requests don't affect current quota.",
+        "pattern": "window_start = current_time - window_seconds\nredis.zremrangebyscore(key, '-inf', window_start)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Must calculate remaining quota as max(0, limit - current_count) and return it with every check, computing it after determining if request is allowed.",
+        "pattern": "remaining = max(0, limit - current_count)\nreturn {'allowed': allowed, 'remaining': remaining, 'reset_after': reset_time}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Must parse time unit suffixes (s=seconds, m=minutes, h=hours, d=days) and convert to seconds: multiply by 60 for 'm', 3600 for 'h', 86400 for 'd'.",
+        "pattern": "units = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}\nwindow_seconds = int(limit_count) * units[time_unit]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Must use high-precision timestamps (time.time() returning float with microsecond precision) as ZSET scores to correctly handle concurrent requests with identical or near-identical timestamps.",
+        "pattern": "timestamp = time.time()  # Returns float like 1234567890.123456\nredis.zadd(key, {str(uuid.uuid4()): timestamp})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Must handle window boundaries by using strict inequality (current_time - window_duration < request_time <= current_time) so requests exactly at window_duration ago are excluded.",
+        "pattern": "window_start = current_time - window_seconds\nredis.zremrangebyscore(key, '-inf', f'({window_start}')  # Exclusive lower bound",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Must handle limit=1 case by rejecting when current_count >= 1, ensuring single-request quotas work correctly without off-by-one errors.",
+        "pattern": "if current_count >= limit:\n    return {'allowed': False, 'remaining': 0}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Must use integer types for limit count (not float) to prevent precision errors with large limits like 1000000, validating during parsing that count is positive integer.",
+        "pattern": "limit_count = int(parts[0])\nif limit_count <= 0:\n    raise ValueError('Limit count must be positive integer')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must sanitize user_id and endpoint by URL-encoding or escaping Redis special characters (:, *, ?, [, ], newlines) to prevent key injection and collision.",
+        "pattern": "import urllib.parse\nsafe_user = urllib.parse.quote(user_id, safe='')\nsafe_endpoint = urllib.parse.quote(endpoint, safe='')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must normalize endpoint paths by removing or consistently handling query parameters and fragments according to configuration, defaulting to path-only comparison.",
+        "pattern": "from urllib.parse import urlparse\nendpoint_key = urlparse(endpoint).path  # Ignore query and fragment",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must handle sub-second windows (e.g., 100/1s) using float timestamps with at least millisecond precision, not rounding to integer seconds.",
+        "pattern": "timestamp = time.time()  # Keep as float\nwindow_seconds = float(limit_count) / float(units[unit])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must-not",
+        "description": "Must-not crash on Redis connection failures; wrap Redis calls in try-except and implement fail-open (allow with warning) or fail-closed (raise RateLimiterError) based on config.",
+        "pattern": "try:\n    redis.ping()\nexcept redis.ConnectionError:\n    if fail_open:\n        logger.warning('Redis unavailable, allowing request')\n        return {'allowed': True}\n    raise RateLimiterError('Rate limiter unavailable')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must catch Redis-specific exceptions (ResponseError, TimeoutError) and re-raise as custom RateLimiterError with descriptive message, not exposing raw Redis errors.",
+        "pattern": "except redis.ResponseError as e:\n    raise RateLimiterError(f'Redis error during rate limiting: {type(e).__name__}') from e",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must validate limit format on initialization using regex '^\\d+(\\.\\d+)?/[smhd]$' and raise ValueError with message 'Invalid limit format, expected N/unit' for malformed input.",
+        "pattern": "import re\nif not re.match(r'^\\d+(\\.\\d+)?/[smhd]$', limit_str):\n    raise ValueError(f'Invalid limit format: {limit_str}, expected N/unit')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must validate user_id is non-empty string in check(), raising ValueError('user_id is required and must be non-empty string') for None, empty string, or missing.",
+        "pattern": "if not user_id or not isinstance(user_id, str):\n    raise ValueError('user_id is required and must be non-empty string')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must validate endpoint is non-empty string when endpoint-based limiting is enabled, raising ValueError with clear message about requirement.",
+        "pattern": "if endpoint_limiting_enabled and (not endpoint or not isinstance(endpoint, str)):\n    raise ValueError('endpoint is required for endpoint-based limiting')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must handle corrupted Redis data by catching parsing/type errors, deleting the corrupted key with redis.delete(), logging warning, and continuing with empty window.",
+        "pattern": "try:\n    data = redis.zrange(key, 0, -1)\nexcept (ValueError, TypeError):\n    logger.warning(f'Corrupted data at {key}, resetting')\n    redis.delete(key)\n    data = []",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must-not",
+        "description": "Must-not accept non-string limit parameter; validate isinstance(limit, str) and raise TypeError('limit must be string in format N/unit') for int, float, list, dict.",
+        "pattern": "if not isinstance(limit, str):\n    raise TypeError(f'limit must be string in format N/unit, got {type(limit).__name__}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must-not",
+        "description": "Must-not accept non-string user_id; validate isinstance(user_id, str) in check() and raise TypeError('user_id must be string') for int, list, dict, object types.",
+        "pattern": "if not isinstance(user_id, str):\n    raise TypeError(f'user_id must be string, got {type(user_id).__name__}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must always return dict with exactly keys {'allowed': bool, 'remaining': int, 'reset_after': float} from check(), never None, tuple, or missing keys.",
+        "pattern": "return {\n    'allowed': bool(allowed),\n    'remaining': int(remaining),\n    'reset_after': float(reset_after)\n}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must-not",
+        "description": "Must-not include raw Redis key names in error messages or logs; use sanitized user_id/endpoint only to prevent exposing internal structure.",
+        "pattern": "# Bad: f'Error with key {redis_key}'\n# Good: f'Rate limit error for user {user_id}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must enforce maximum length of 256 characters for user_id and endpoint, raising ValueError('identifier exceeds maximum length of 256') to prevent memory exhaustion.",
+        "pattern": "if len(user_id) > 256 or len(endpoint) > 256:\n    raise ValueError('user_id and endpoint must not exceed 256 characters')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Must use Redis Lua script or pipeline to atomically perform ZREMRANGEBYSCORE + ZCARD + ZADD + EXPIRE in single round-trip, not separate commands.",
+        "pattern": "lua_script = redis.register_script('''\n    redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])\n    local count = redis.call('ZCARD', KEYS[1])\n    ...\n''')\nlua_script(keys=[key], args=[window_start, ...])",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must set TTL on every Redis key to window_duration + 60 seconds using EXPIRE command after modification to prevent abandoned keys from consuming memory indefinitely.",
+        "pattern": "ttl_seconds = int(window_seconds + 60)\nredis.expire(key, ttl_seconds)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Must remove expired timestamps using ZREMRANGEBYSCORE before every count operation to ensure Redis key contains only active window requests, not accumulating old data.",
+        "pattern": "redis.zremrangebyscore(key, '-inf', current_time - window_seconds)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must support configurable key_prefix parameter (default 'ratelimit:') and prepend it to all Redis keys for namespace isolation between applications.",
+        "pattern": "self.prefix = key_prefix\nkey = f'{self.prefix}user:{user_id}:endpoint:{endpoint}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must support fractional limits like '0.5/s' by parsing limit as float, converting to equivalent window (e.g., 1 request per 2 seconds = 2 second window with limit 1).",
+        "pattern": "limit_float = float(parts[0])\nif limit_float < 1:\n    window_seconds = units[unit] / limit_float\n    limit_count = 1",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must calculate reset_after as time until oldest request in window expires (oldest_timestamp + window_duration - current_time), returning 0 if window is empty.",
+        "pattern": "oldest_timestamps = redis.zrange(key, 0, 0, withscores=True)\nif oldest_timestamps:\n    reset_after = oldest_timestamps[0][1] + window_seconds - current_time\nelse:\n    reset_after = 0",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Must use monotonic time source (time.time()) consistently and handle clock adjustments by clamping calculated windows to reasonable bounds (not negative, not > 2x window).",
+        "pattern": "window_start = max(current_time - window_seconds, 0)\n# Protect against backward clock jumps",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must configure Redis connection pool with reasonable timeout (e.g., 5s) and max_connections, raising RateLimiterError on pool exhaustion rather than hanging.",
+        "pattern": "pool = redis.ConnectionPool(socket_timeout=5, socket_connect_timeout=5, max_connections=50)\nredis_client = redis.Redis(connection_pool=pool)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Must implement get_current_usage(user_id, endpoint) that performs ZREMRANGEBYSCORE + ZCARD without ZADD to return current count without incrementing.",
+        "pattern": "def get_current_usage(self, user_id, endpoint):\n    redis.zremrangebyscore(key, '-inf', current_time - window_seconds)\n    return redis.zcard(key)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must implement reset(user_id, endpoint) that calls redis.delete(key) to immediately clear all timestamps and restore full quota for that user-endpoint combination.",
+        "pattern": "def reset(self, user_id, endpoint=None):\n    key = self._make_key(user_id, endpoint)\n    redis.delete(key)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must validate time unit is one of 's', 'm', 'h', 'd' and raise ValueError('Unsupported time unit: X, must be s/m/h/d') for any other character.",
+        "pattern": "valid_units = {'s', 'm', 'h', 'd'}\nif time_unit not in valid_units:\n    raise ValueError(f'Unsupported time unit: {time_unit}, must be s/m/h/d')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "prefer",
+        "description": "Prefer using Redis Lua scripts over pipelines for atomic operations to guarantee consistency even under high concurrency and prevent race conditions between read-modify-write.",
+        "pattern": "# Lua script ensures atomicity\nlua_script = redis.register_script(script_text)\nresult = lua_script(keys=[key], args=args)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must-not",
+        "description": "Must-not use random.random() or predictable sequences for any internal identifiers; if generating request IDs, use secrets.token_bytes() or uuid.uuid4() for uniqueness.",
+        "pattern": "# Bad: request_id = str(random.random())\n# Good: request_id = str(uuid.uuid4())",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "The Lua script implements sliding window correctly: ZREMRANGEBYSCORE removes entries outside the window (before window_start), ZCARD counts current entries, and ZADD adds new requests with timestamps. The window slides as time progresses."
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "The _make_key() method creates unique keys per user ('ratelimit:user:{safe_user}'), ensuring independent quotas. The Lua script enforces limit_count, rejecting requests when current_count >= limit."
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "When endpoint_limiting=True, _make_key() includes endpoint in the key ('user:{safe_user}:endpoint:{safe_endpoint}'), creating separate quotas per endpoint. Different endpoints have independent counters."
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "satisfied",
+        "reasoning": "The _make_key() method combines both user_id and endpoint when endpoint_limiting=True, creating keys like 'user:alice:endpoint:/api/data', ensuring per-user-per-endpoint isolation."
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "The Lua script uses window_start = current_time - window_seconds and ZREMRANGEBYSCORE to remove entries before window_start. As time progresses, old requests outside the window are automatically removed, allowing new requests."
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "The Lua script calculates remaining = limit - current_count - 1 when allowed, returning accurate remaining quota. When rejected (current_count >= limit), remaining=0. The check() method returns these values correctly."
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "_parse_limit() supports units 's', 'm', 'h', 'd' with correct conversion: {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}. Each unit creates appropriate window_seconds for enforcement."
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "The sliding window uses timestamp-based comparison (window_start = current_time - window_seconds). Requests at t=0 and t=60.0 will be in different windows since at t=60.0, window_start=0.0, so t=0 request is at the boundary and will be removed."
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "Each request gets a unique request_id (uuid.uuid4()) as the sorted set member, allowing multiple requests at the same timestamp to be counted separately. ZADD with unique IDs handles concurrent requests correctly."
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "_parse_limit() correctly handles '1/60s' as limit_count=1, window_seconds=60. The Lua script enforces this by rejecting when current_count >= 1, and old request expires after window_seconds."
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "partial",
+        "reasoning": "The code uses int for limit_count which can handle large values. However, performance may degrade with 1M entries in a sorted set (ZCARD, ZREMRANGEBYSCORE operations). No explicit overflow protection but Python ints handle large values."
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "_sanitize_identifier() uses urllib.parse.quote(identifier, safe='') which URL-encodes all special characters, preventing key collisions for users with ':', '@', '/', spaces, etc."
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "_make_key() uses urlparse(endpoint).path to extract only the path component, so query parameters and fragments are stripped. '/api/data?query=1' and '/api/data#section' both become '/api/data'."
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "The code uses time.time() which returns float with microsecond precision. For '100/1s', window_seconds=1.0, and timestamps use full float precision in Redis sorted sets, maintaining accuracy."
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "check() catches redis.ConnectionError and redis.TimeoutError. If fail_open=True, returns allowed=True with warning. If fail_open=False, raises RateLimiterError. No crash occurs."
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "satisfied",
+        "reasoning": "check() catches redis.ResponseError and raises RateLimiterError with descriptive message 'Redis error during rate limiting: {type}', wrapping the original exception with 'from e'."
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "satisfied",
+        "reasoning": "_validate_limit_format() uses regex r'^\\d+(\\.\\d+)?/[smhd]$' to validate format. Invalid formats raise ValueError. _parse_limit() validates limit_value < 1 or >= 1 as integer, raising ValueError for invalid values."
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "satisfied",
+        "reasoning": "_validate_identifiers() checks 'if not user_id: raise ValueError(\"user_id is required and must be non-empty string\")' which catches None and empty string. Also checks isinstance(user_id, str)."
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "_validate_identifiers() includes: 'if self.endpoint_limiting: if endpoint is not None: ... if not endpoint: raise ValueError(\"endpoint is required for endpoint-based limiting\")'. This catches None and empty string when endpoint_limiting=True."
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "check() catches ValueError and TypeError exceptions, logs 'Corrupted data for user {user_id}, resetting', attempts to delete the key, and returns allowed=True. This handles corrupted data gracefully."
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "satisfied",
+        "reasoning": "__init__() checks 'if not isinstance(limit, str): raise TypeError(f\"limit must be string in format N/unit, got {type(limit).__name__}\")' which enforces string type only."
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "_validate_identifiers() checks 'if not isinstance(user_id, str): raise TypeError(f\"user_id must be string, got {type(user_id).__name__}\")' which enforces string type."
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "check() always returns a dict with keys 'allowed' (bool), 'remaining' (int via int(result[1])), and 'reset_after' (float via float(result[2])). All code paths return this structure, including error paths."
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "satisfied",
+        "reasoning": "_sanitize_identifier() uses urllib.parse.quote(identifier, safe='') which percent-encodes all special characters including ':*\\n' and Redis command characters, preventing injection attacks."
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "unknown",
+        "reasoning": "The code uses a single Lua script execution for both allowed and rejected cases, which should have similar timing. However, actual timing variance depends on Redis server load and network latency, which cannot be verified from static analysis."
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "partial",
+        "reasoning": "The code uses uuid.uuid4() for request_id, which is cryptographically strong by default in Python 3. However, the spec requires 'secrets.token_bytes()' explicitly, and uuid4 implementation may vary by platform."
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "satisfied",
+        "reasoning": "Error messages in check() do not include the Redis key. Messages like 'Redis error during rate limiting for user {user_id}' use the original user_id, not the sanitized key. The key variable is not exposed."
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "satisfied",
+        "reasoning": "_validate_identifiers() checks 'if len(user_id) > 256: raise ValueError(\"user_id and endpoint must not exceed 256 characters\")' and similar check for endpoint, enforcing maximum length."
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "partial",
+        "reasoning": "Redis ZREMRANGEBYSCORE, ZCARD, ZADD, and ZRANGE operations are O(log N + M) where M is elements removed/added. For typical windows, this should be efficient, but actual timing under 10ms/15ms depends on Redis server performance and cannot be verified statically."
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "satisfied",
+        "reasoning": "The code uses register_script() to create a Lua script that executes all operations (ZREMRANGEBYSCORE, ZCARD, ZADD, EXPIRE, ZRANGE) in a single atomic script call, minimizing round trips to 1."
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "The Lua script includes 'redis.call('EXPIRE', key, ttl)' where ttl = window_seconds + 60 (ttl_seconds = int(self.window_seconds + 60)), ensuring keys expire and don't accumulate."
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "satisfied",
+        "reasoning": "The Lua script calls 'redis.call('ZREMRANGEBYSCORE', key, '-inf', '(' .. window_start)' at the start of each check(), removing all timestamps outside the current window, maintaining only relevant entries."
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "satisfied",
+        "reasoning": "__init__() accepts key_prefix parameter (default 'ratelimit:') and _make_key() uses it: 'f\"{self.key_prefix}user:{safe_user}\"', allowing namespace isolation."
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "satisfied",
+        "reasoning": "_parse_limit() handles 'if limit_value < 1: window_seconds = units[time_unit] / limit_value; limit_count = 1' which converts '0.5/s' to limit_count=1, window_seconds=2.0, correctly implementing fractional rates."
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "satisfied",
+        "reasoning": "The Lua script calculates reset_after as 'oldest_time + (current_time - window_start) - current_time' which simplifies to 'oldest_time + window_seconds - current_time', giving seconds until oldest request expires. Clamped to >= 0."
+      },
+      {
+        "specId": "SPEC-036",
+        "status": "partial",
+        "reasoning": "The code relies on time.time() which can be affected by system clock changes. Backward jumps could cause window_start to be in the future, potentially blocking users. Forward jumps could extend windows. No explicit clock adjustment handling is present."
+      },
+      {
+        "specId": "SPEC-037",
+        "status": "partial",
+        "reasoning": "The code catches redis.TimeoutError which would occur if connection pool is exhausted and timeout expires. With fail_open=True, it allows the request. However, no explicit timeout configuration is shown, relying on redis_client configuration."
+      },
+      {
+        "specId": "SPEC-038",
+        "status": "satisfied",
+        "reasoning": "get_current_usage() method exists, calls ZREMRANGEBYSCORE to clean window, then ZCARD to count entries without adding new ones, returning the count without incrementing."
+      },
+      {
+        "specId": "SPEC-039",
+        "status": "satisfied",
+        "reasoning": "reset() method exists, validates identifiers, generates the key using _make_key(), and calls redis_client.delete(key) to clear all timestamps, allowing immediate full quota."
+      },
+      {
+        "specId": "SPEC-040",
+        "status": "satisfied",
+        "reasoning": "_parse_limit() defines valid_units = {'s', 'm', 'h', 'd'} and checks 'if time_unit not in valid_units: raise ValueError(f\"Unsupported time unit: {time_unit}, must be s/m/h/d\")', rejecting unknown units."
+      }
+    ],
+    "satisfiedCount": 34,
+    "totalSpecs": 40,
+    "generatedAt": "2026-02-12T06:36:46.503Z",
+    "inputTokens": 11865,
+    "outputTokens": 6707
+  },
+  "totalInputTokens": 15441,
+  "totalOutputTokens": 15096,
+  "totalDurationMs": 237787
+}

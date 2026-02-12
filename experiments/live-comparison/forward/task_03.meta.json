@@ -1,0 +1,216 @@
+{
+  "task_id": "task_03",
+  "task": "Write a webhook receiver that validates HMAC signatures, handles retries/deduplication, and processes events asynchronously",
+  "model": "claude-sonnet-4-5-20250929",
+  "verification": {
+    "claims": [
+      {
+        "id": "C1",
+        "claim": "Validates HMAC signatures using configurable algorithm",
+        "verdict": "PASS",
+        "reasoning": "SignatureValidator correctly implements HMAC validation with hmac.compare_digest for timing-attack resistance"
+      },
+      {
+        "id": "C2",
+        "claim": "Handles retries with configurable max retries and delay",
+        "verdict": "PARTIAL",
+        "reasoning": "Retry logic exists but has critical issues: retries don't re-validate signatures, exponential backoff not implemented despite being best practice, and retry tasks are fire-and-forget with no tracking"
+      },
+      {
+        "id": "C3",
+        "claim": "Deduplicates events within configurable time window",
+        "verdict": "PARTIAL",
+        "reasoning": "Basic deduplication works but has race condition: cleanup can happen between duplicate check and insertion, allowing duplicates. Also uses threading.Lock in async context which is incorrect"
+      },
+      {
+        "id": "C4",
+        "claim": "Processes events asynchronously with worker pool",
+        "verdict": "PASS",
+        "reasoning": "Worker pool correctly processes events from async queue with configurable worker count"
+      },
+      {
+        "id": "C5",
+        "claim": "Thread-safe deduplication cache",
+        "verdict": "FAIL",
+        "reasoning": "Uses threading.Lock in async code - this is fundamentally broken. Should use asyncio.Lock. Can cause deadlocks or race conditions"
+      },
+      {
+        "id": "C6",
+        "claim": "Gracefully stops workers",
+        "verdict": "PARTIAL",
+        "reasoning": "Cancels workers but doesn't handle in-flight events properly. Events being processed during shutdown may be lost"
+      },
+      {
+        "id": "C7",
+        "claim": "Prevents queue overflow with max_queue_size",
+        "verdict": "PASS",
+        "reasoning": "Uses bounded queue and returns error when full with timeout"
+      },
+      {
+        "id": "C8",
+        "claim": "Timing-attack resistant signature comparison",
+        "verdict": "PASS",
+        "reasoning": "Correctly uses hmac.compare_digest for constant-time comparison"
+      }
+    ],
+    "issues": [
+      {
+        "id": "I1",
+        "severity": "critical",
+        "category": "CONCURRENCY",
+        "description": "DeduplicationCache uses threading.Lock in async code - this is fundamentally incompatible. threading.Lock blocks the entire event loop, breaking async behavior and potentially causing deadlocks",
+        "fix": "Replace threading.Lock with asyncio.Lock and make is_duplicate() and _cleanup_expired() async methods. Update all callers to await these methods."
+      },
+      {
+        "id": "I2",
+        "severity": "critical",
+        "category": "CORRECTNESS",
+        "description": "Race condition in deduplication: between checking if event_id exists and inserting it, cleanup can remove entries, or two coroutines can both see the ID as not present. With threading.Lock this is even worse in async context",
+        "fix": "Use a single atomic operation: check and insert in one step under the same lock acquisition. With asyncio.Lock: async with self._lock: self._cleanup_expired(); if event_id in self._cache: return True; self._cache[event_id] = datetime.utcnow(); return False"
+      },
+      {
+        "id": "I3",
+        "severity": "critical",
+        "category": "SECURITY",
+        "description": "Retry mechanism doesn't re-validate signatures. If an attacker compromises the system during a retry window, they could modify queued events. Retried events should be treated as new requests",
+        "fix": "Store original payload bytes with event and re-validate signature on each retry attempt, or clearly document that retries assume internal security"
+      },
+      {
+        "id": "I4",
+        "severity": "high",
+        "category": "ROBUSTNESS",
+        "description": "Fire-and-forget retry tasks via asyncio.create_task() are not tracked. If the event loop exits or an exception occurs, retries silently fail with no logging or notification",
+        "fix": "Store retry tasks in a set/dict and await them during shutdown, or use a scheduled task queue with proper tracking"
+      },
+      {
+        "id": "I5",
+        "severity": "high",
+        "category": "CORRECTNESS",
+        "description": "Events being processed during shutdown are lost. stop_workers() cancels all workers immediately without draining in-flight events",
+        "fix": "Add graceful shutdown: set _running=False, wait for queue to drain with timeout, then cancel workers. Or re-queue in-flight events before cancellation"
+      },
+      {
+        "id": "I6",
+        "severity": "high",
+        "category": "ROBUSTNESS",
+        "description": "No exponential backoff for retries. Fixed retry_delay can cause thundering herd if many events fail simultaneously, overwhelming downstream services",
+        "fix": "Implement exponential backoff: delay = retry_delay * (2 ** (retry_count - 1)) with optional jitter"
+      },
+      {
+        "id": "I7",
+        "severity": "high",
+        "category": "SECURITY",
+        "description": "No payload size validation before processing. Attacker can send extremely large payloads causing memory exhaustion or JSON parsing DoS",
+        "fix": "Add max_payload_size to config and check len(payload) before json.loads(). Return 413 Payload Too Large if exceeded"
+      },
+      {
+        "id": "I8",
+        "severity": "high",
+        "category": "CORRECTNESS",
+        "description": "datetime.utcnow() is deprecated in Python 3.12+ and naive (no timezone). Can cause issues when comparing times across systems or DST changes",
+        "fix": "Use datetime.now(timezone.utc) which returns timezone-aware datetime objects"
+      },
+      {
+        "id": "I9",
+        "severity": "medium",
+        "category": "ROBUSTNESS",
+        "description": "_processing_events dict grows unbounded for failed events that exceed max_retries. Memory leak over time",
+        "fix": "Remove events from _processing_events when they reach final FAILED state or add periodic cleanup of old completed/failed events"
+      },
+      {
+        "id": "I10",
+        "severity": "medium",
+        "category": "ROBUSTNESS",
+        "description": "No timeout on handler execution. A misbehaving handler can block a worker indefinitely",
+        "fix": "Wrap handler call in asyncio.wait_for() with configurable timeout: await asyncio.wait_for(handler(event), timeout=handler_timeout)"
+      },
+      {
+        "id": "I11",
+        "severity": "medium",
+        "category": "SECURITY",
+        "description": "Secret key stored as string then encoded to bytes. If user passes bytes, encoding fails. No validation of secret strength",
+        "fix": "Accept bytes or str, validate minimum length (e.g., 32 chars), and warn if key appears weak"
+      },
+      {
+        "id": "I12",
+        "severity": "medium",
+        "category": "CORRECTNESS",
+        "description": "getattr(hashlib, algorithm) in _compute_signature will succeed for any hashlib attribute, not just hash algorithms. Could raise AttributeError for non-existent algorithms",
+        "fix": "Validate algorithm against hashlib.algorithms_guaranteed or use a whitelist: {'sha256', 'sha512', 'sha1'}"
+      },
+      {
+        "id": "I13",
+        "severity": "medium",
+        "category": "ROBUSTNESS",
+        "description": "No circuit breaker pattern. If handler consistently fails, system continues retrying forever on new events, wasting resources",
+        "fix": "Implement circuit breaker: after N consecutive handler failures, temporarily stop processing that event_type and alert operators"
+      },
+      {
+        "id": "I14",
+        "severity": "medium",
+        "category": "TYPE_SAFETY",
+        "description": "Missing type hints in several places: _cache dict, _processing_events dict, handlers dict values. Makes code harder to verify",
+        "fix": "Add complete type hints: _cache: Dict[str, datetime], handlers: Dict[str, Callable[[WebhookEvent], Awaitable[None]]]"
+      },
+      {
+        "id": "I15",
+        "severity": "medium",
+        "category": "CORRECTNESS",
+        "description": "payload_dict.get('id', str(uuid.uuid4())) generates new UUID if 'id' is present but None/empty string. Should check for truthy value",
+        "fix": "Use: event_id = payload_dict.get('id') or str(uuid.uuid4())"
+      },
+      {
+        "id": "I16",
+        "severity": "low",
+        "category": "ROBUSTNESS",
+        "description": "Exception handling in validator.validate() catches all exceptions and returns False. Silently hides programming errors vs. validation failures",
+        "fix": "Catch specific exceptions (UnicodeDecodeError, AttributeError for invalid algorithm). Let unexpected exceptions propagate"
+      },
+      {
+        "id": "I17",
+        "severity": "low",
+        "category": "ROBUSTNESS",
+        "description": "No metrics/monitoring hooks. Production systems need visibility into queue depth, processing rates, error rates, retry counts",
+        "fix": "Add optional metrics callback or integrate with standard metrics libraries (Prometheus, StatsD)"
+      },
+      {
+        "id": "I18",
+        "severity": "low",
+        "category": "COMPLETENESS",
+        "description": "No webhook replay functionality. If system crashes, no way to reprocess events from persistent storage",
+        "fix": "Add optional persistence layer (database, Redis) to store events before processing and mark them complete after"
+      },
+      {
+        "id": "I19",
+        "severity": "low",
+        "category": "SECURITY",
+        "description": "Signature comparison uses hexdigest(). Many webhook providers use base64 encoding. No support for different signature formats",
+        "fix": "Add signature_format config option ('hex'|'base64') and decode accordingly before comparison"
+      },
+      {
+        "id": "I20",
+        "severity": "low",
+        "category": "ROBUSTNESS",
+        "description": "wait_for_completion() waits forever if workers die or queue.task_done() isn't called due to exception. No timeout",
+        "fix": "Add optional timeout parameter to wait_for_completion() using asyncio.wait_for()"
+      }
+    ],
+    "summary": {
+      "total_claims": 8,
+      "pass": 3,
+      "partial": 4,
+      "fail": 1,
+      "critical_issues": 4,
+      "high_severity_issues": 6,
+      "medium_severity_issues": 9,
+      "low_severity_issues": 5
+    }
+  },
+  "verify_input_tokens": 4143,
+  "verify_output_tokens": 3057,
+  "remediate_input_tokens": 6703,
+  "remediate_output_tokens": 6353,
+  "total_input_tokens": 10846,
+  "total_output_tokens": 9410,
+  "duration_s": 124.0
+}

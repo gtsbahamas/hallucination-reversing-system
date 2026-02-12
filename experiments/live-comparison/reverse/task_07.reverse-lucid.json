@@ -1,0 +1,1512 @@
+{
+  "task": "Write a configuration loader that validates YAML/JSON config against a schema, supports environment variable interpolation, and provides helpful error messages",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write a configuration loader that validates YAML/JSON config against a schema, supports environment variable interpolation, and provides helpful error messages",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must successfully load and parse valid JSON configuration files",
+        "assertion": "load_config('config.json') where config.json contains {'key': 'value'} returns dict {'key': 'value'}",
+        "rationale": "Core functionality - the loader must be able to read and parse standard JSON files"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must successfully load and parse valid YAML configuration files",
+        "assertion": "load_config('config.yaml') where config.yaml contains 'key: value' returns dict {'key': 'value'}",
+        "rationale": "Core functionality - the loader must support YAML format as specified"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must validate configuration against provided schema and accept valid configs",
+        "assertion": "load_config('config.json', schema={'type': 'object', 'properties': {'port': {'type': 'number'}}}) where config contains {'port': 8080} succeeds and returns the config",
+        "rationale": "Schema validation is a core requirement - valid configs must pass validation"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must reject configuration that violates schema with clear error message",
+        "assertion": "load_config('config.json', schema={'type': 'object', 'properties': {'port': {'type': 'number'}}}) where config contains {'port': 'invalid'} raises ValidationError with message indicating 'port' field type mismatch",
+        "rationale": "Schema validation must catch type violations and provide actionable feedback"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must interpolate environment variables using ${VAR_NAME} syntax",
+        "assertion": "Given os.environ['DB_HOST']='localhost', load_config where config contains {'database': '${DB_HOST}'} returns {'database': 'localhost'}",
+        "rationale": "Environment variable interpolation is a core feature for configuration flexibility"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must preserve non-interpolated strings that don't match variable syntax",
+        "assertion": "load_config where config contains {'message': 'Hello $world'} returns {'message': 'Hello $world'} unchanged",
+        "rationale": "Only proper ${VAR} syntax should trigger interpolation, literal dollar signs must be preserved"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must raise FileNotFoundError with helpful message when config file doesn't exist",
+        "assertion": "load_config('nonexistent.json') raises FileNotFoundError with message containing the filename 'nonexistent.json'",
+        "rationale": "Missing config files are common errors that need clear, actionable error messages"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must raise appropriate exception with helpful message for malformed JSON",
+        "assertion": "load_config('invalid.json') where file contains '{invalid json}' raises JSONDecodeError or ConfigError with message indicating syntax error and line/column number",
+        "rationale": "Parse errors must be caught and reported with location information for debugging"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must raise appropriate exception with helpful message for malformed YAML",
+        "assertion": "load_config('invalid.yaml') where file contains 'key: [unclosed' raises YAMLError or ConfigError with message indicating syntax error location",
+        "rationale": "YAML parse errors must provide actionable feedback for developers"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must raise clear error when required environment variable is missing during interpolation",
+        "assertion": "load_config where config contains {'api_key': '${MISSING_VAR}'} and MISSING_VAR not in os.environ raises ConfigError with message indicating 'MISSING_VAR' is not set",
+        "rationale": "Missing environment variables should fail fast with clear indication of what's missing"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle empty configuration files gracefully",
+        "assertion": "load_config('empty.json') where file is empty or contains '{}' returns empty dict {}",
+        "rationale": "Empty configs are valid and should not cause errors"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle deeply nested configuration structures",
+        "assertion": "load_config where config contains {'a': {'b': {'c': {'d': 'value'}}}} correctly returns the nested structure with all levels accessible",
+        "rationale": "Complex configurations often have deep nesting that must be preserved"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must interpolate environment variables in nested structures",
+        "assertion": "Given os.environ['SECRET']='xyz', load_config where config contains {'db': {'password': '${SECRET}'}} returns {'db': {'password': 'xyz'}}",
+        "rationale": "Environment variable interpolation must work at any nesting level"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle multiple environment variable references in a single string value",
+        "assertion": "Given os.environ['HOST']='localhost' and os.environ['PORT']='5432', config with 'url: ${HOST}:${PORT}' returns {'url': 'localhost:5432'}",
+        "rationale": "Complex configuration strings often need multiple interpolations"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle environment variables containing special characters",
+        "assertion": "Given os.environ['PASS']='p@ss$word!', config with 'password: ${PASS}' returns {'password': 'p@ss$word!'}",
+        "rationale": "Environment variable values can contain any characters including special ones"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle configuration files with Unicode characters",
+        "assertion": "load_config where config contains {'message': '你好世界🌍'} correctly returns the Unicode string without corruption",
+        "rationale": "Modern applications need full Unicode support in configuration"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle arrays/lists in configuration",
+        "assertion": "load_config where config contains {'servers': ['server1', 'server2', 'server3']} returns list structure intact",
+        "rationale": "Lists are common in configuration for multiple values"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must interpolate environment variables within array elements",
+        "assertion": "Given os.environ['HOST1']='server1', config with {'hosts': ['${HOST1}', 'server2']} returns {'hosts': ['server1', 'server2']}",
+        "rationale": "Arrays may contain interpolation references that need resolution"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must preserve boolean values from configuration",
+        "assertion": "load_config where config contains {'enabled': true, 'debug': false} returns {'enabled': True, 'debug': False} with Python boolean types",
+        "rationale": "Boolean configuration values must maintain their type, not convert to strings"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must preserve null/None values in configuration",
+        "assertion": "load_config where config contains {'optional_field': null} returns {'optional_field': None}",
+        "rationale": "Null values are semantically meaningful and must be preserved"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must preserve numeric types (integers vs floats)",
+        "assertion": "load_config where config contains {'port': 8080, 'rate': 1.5} returns {'port': 8080, 'rate': 1.5} maintaining int and float distinction",
+        "rationale": "Type preservation prevents subtle bugs from numeric type coercion"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must validate required fields are present according to schema",
+        "assertion": "load_config with schema={'type': 'object', 'required': ['api_key']} where config is {} raises ValidationError indicating 'api_key' is required",
+        "rationale": "Schema validation must enforce required fields to prevent runtime errors"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must validate string type constraints from schema",
+        "assertion": "load_config with schema={'properties': {'name': {'type': 'string', 'minLength': 3}}} where config has {'name': 'ab'} raises ValidationError indicating minimum length violation",
+        "rationale": "String constraints prevent invalid configuration values"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must validate number range constraints from schema",
+        "assertion": "load_config with schema={'properties': {'port': {'type': 'number', 'minimum': 1, 'maximum': 65535}}} where config has {'port': 70000} raises ValidationError",
+        "rationale": "Numeric constraints catch configuration errors early"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must validate enum constraints from schema",
+        "assertion": "load_config with schema={'properties': {'env': {'enum': ['dev', 'prod']}}} where config has {'env': 'test'} raises ValidationError listing valid options",
+        "rationale": "Enum validation prevents typos and invalid configuration values"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Must provide error message with field path for nested validation failures",
+        "assertion": "load_config with schema validating {'db': {'port': {'type': 'number'}}} where config has {'db': {'port': 'invalid'}} raises error with message containing path like 'db.port'",
+        "rationale": "Nested validation errors need clear path information for debugging"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Must handle file permission errors with clear message",
+        "assertion": "load_config('unreadable.json') where file exists but is not readable raises PermissionError with message indicating permission issue",
+        "rationale": "Permission errors should be distinguished from missing files"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Must provide helpful error when file extension doesn't match content format",
+        "assertion": "load_config('config.json') where file contains YAML content raises error suggesting format mismatch",
+        "rationale": "Mismatched extensions are common errors that need clear guidance"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must not expose sensitive environment variable values in error messages",
+        "assertion": "Given os.environ['SECRET_KEY']='sensitive123', when validation fails on config using ${SECRET_KEY}, error message does not contain 'sensitive123'",
+        "rationale": "Error messages must not leak secrets that could be logged or displayed"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must sanitize file paths to prevent directory traversal",
+        "assertion": "load_config('../../../etc/passwd') raises SecurityError or ValueError preventing path traversal",
+        "rationale": "Prevent attackers from reading arbitrary files via path traversal"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "high",
+        "description": "Must limit configuration file size to prevent denial of service",
+        "assertion": "load_config where file is larger than reasonable limit (e.g., 10MB) raises error indicating file too large",
+        "rationale": "Prevent memory exhaustion attacks from extremely large config files"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "security",
+        "severity": "high",
+        "description": "Must not execute arbitrary code from YAML tags",
+        "assertion": "load_config('config.yaml') where YAML contains !!python/object/apply:os.system ['malicious'] does not execute code and raises error",
+        "rationale": "YAML arbitrary code execution is a major security vulnerability"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "security",
+        "severity": "high",
+        "description": "Must validate schema itself to prevent malicious schema definitions",
+        "assertion": "load_config with malformed or excessively complex schema raises SchemaError before processing config",
+        "rationale": "Malicious schemas could cause denial of service through complexity attacks"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Must support default values for optional fields from schema",
+        "assertion": "load_config with schema={'properties': {'timeout': {'type': 'number', 'default': 30}}} where config is {} returns {'timeout': 30}",
+        "rationale": "Default values reduce configuration boilerplate and prevent missing value errors"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must support environment variable with default value syntax ${VAR:-default}",
+        "assertion": "Given UNDEFINED_VAR not in os.environ, config with 'value: ${UNDEFINED_VAR:-fallback}' returns {'value': 'fallback'}",
+        "rationale": "Default values make configurations more robust to missing environment variables"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Must handle empty string environment variables",
+        "assertion": "Given os.environ['EMPTY']='', config with 'value: ${EMPTY}' returns {'value': ''}",
+        "rationale": "Empty strings are valid environment variable values distinct from unset"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle configuration keys with special characters",
+        "assertion": "load_config where config contains {'some-key': 'value', 'dot.key': 'value2'} returns both keys accessible",
+        "rationale": "Configuration keys may use various naming conventions including hyphens and dots"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Must load and parse configuration files in under 100ms for files < 100KB",
+        "assertion": "load_config('config.json') with 50KB config file completes in < 100ms on typical hardware",
+        "rationale": "Configuration loading is often on the critical path of application startup"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "performance",
+        "severity": "low",
+        "description": "Must cache compiled schema validators to avoid repeated compilation",
+        "assertion": "Calling load_config multiple times with the same schema reuses validator instance rather than recompiling",
+        "rationale": "Schema compilation can be expensive; caching improves performance"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Must aggregate multiple validation errors in a single exception",
+        "assertion": "load_config where config violates multiple schema rules returns ValidationError containing all violations, not just the first one",
+        "rationale": "Showing all errors at once saves debugging time versus fixing one at a time"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must support both JSON Schema Draft 7 and Draft 4 formats",
+        "assertion": "load_config accepts schema with '$schema': 'http://json-schema.org/draft-07/schema#' and validates correctly",
+        "rationale": "JSON Schema has multiple versions in use; supporting common versions improves compatibility"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Must validate array item types according to schema",
+        "assertion": "load_config with schema={'properties': {'ports': {'type': 'array', 'items': {'type': 'number'}}}} where config has {'ports': [80, 'invalid']} raises ValidationError",
+        "rationale": "Array item validation prevents heterogeneous arrays when homogeneous is expected"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle circular references in schema definitions",
+        "assertion": "load_config with schema containing $ref circular references either resolves them correctly or raises clear error about circular dependency",
+        "rationale": "Recursive schemas are valid but need proper handling to avoid infinite loops"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must support schema $ref references to external files",
+        "assertion": "load_config with schema containing {'$ref': 'common-schema.json#/definitions/Server'} resolves the reference and validates correctly",
+        "rationale": "Schema composition via references enables reuse and modularity"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Must provide line and column numbers for JSON parse errors",
+        "assertion": "load_config('invalid.json') with malformed JSON raises error with message containing line number and column position",
+        "rationale": "Precise error location dramatically speeds up fixing syntax errors"
+      },
+      {
+        "id": "SPEC-046",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Must perform interpolation before schema validation",
+        "assertion": "Given os.environ['PORT']='8080', schema requiring number type, config {'port': '${PORT}'} converts to number 8080 and validates successfully",
+        "rationale": "Interpolation must happen before validation so type conversion can occur"
+      },
+      {
+        "id": "SPEC-047",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Must handle very long environment variable names",
+        "assertion": "Config with '${VERY_LONG_VARIABLE_NAME_THAT_EXCEEDS_TYPICAL_LENGTH}' processes correctly if variable exists",
+        "rationale": "Environment variable names can be arbitrarily long within system limits"
+      },
+      {
+        "id": "SPEC-048",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Must coerce numeric strings from environment variables when schema expects number",
+        "assertion": "Given os.environ['PORT']='8080' (string), schema with port type number, config {'port': '${PORT}'} converts to int/float 8080",
+        "rationale": "Environment variables are always strings; smart coercion reduces configuration friction"
+      },
+      {
+        "id": "SPEC-049",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Must coerce boolean strings from environment variables when schema expects boolean",
+        "assertion": "Given os.environ['DEBUG']='true', schema with debug type boolean, config {'debug': '${DEBUG}'} converts to boolean True",
+        "rationale": "Environment variables need smart boolean conversion (true/false/1/0/yes/no)"
+      },
+      {
+        "id": "SPEC-050",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Must provide clear error when environment variable value cannot be coerced to schema type",
+        "assertion": "Given os.environ['PORT']='invalid', schema expecting number, config {'port': '${PORT}'} raises error indicating type conversion failure from 'invalid' to number",
+        "rationale": "Type coercion failures need clear explanation to guide fixing"
+      }
+    ],
+    "totalSpecs": 50,
+    "synthesizedAt": "2026-02-12T06:35:18.547Z",
+    "inputTokens": 591,
+    "outputTokens": 5549
+  },
+  "constraintSet": {
+    "task": "Write a configuration loader that validates YAML/JSON config against a schema, supports environment variable interpolation, and provides helpful error messages",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Validate and sanitize all external input before processing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must",
+        "description": "Wrap JSON.parse in try-catch",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Check for division by zero before dividing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Validate that required environment variables are set before using them",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must-not",
+        "description": "Never log or expose secrets/tokens in error messages or console output",
+        "source": "domain"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Must use safe YAML loader (yaml.safe_load) to prevent arbitrary code execution from YAML tags like !!python/object. Never use yaml.load without SafeLoader.",
+        "pattern": "# CORRECT:\nimport yaml\nwith open(file) as f:\n    data = yaml.safe_load(f)\n\n# WRONG:\ndata = yaml.load(f)  # unsafe",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Must validate and sanitize file paths before opening to prevent directory traversal attacks. Reject paths containing '..' or absolute paths outside allowed directory.",
+        "pattern": "if '..' in filepath or os.path.isabs(filepath):\n    raise SecurityError('Path traversal detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must perform environment variable interpolation recursively through all nested dictionaries and lists before schema validation, replacing ${VAR} and ${VAR:-default} patterns.",
+        "pattern": "def interpolate(obj):\n    if isinstance(obj, dict):\n        return {k: interpolate(v) for k, v in obj.items()}\n    elif isinstance(obj, list):\n        return [interpolate(item) for item in obj]\n    elif isinstance(obj, str):\n        return replace_env_vars(obj)\n    return obj",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must use regex pattern r'\\$\\{([A-Z_][A-Z0-9_]*?)(?::-(.*?))?\\}' to match environment variables, supporting both ${VAR} and ${VAR:-default} syntax with proper capture groups.",
+        "pattern": "import re\npattern = re.compile(r'\\$\\{([A-Z_][A-Z0-9_]*?)(?::-(.*?))?\\}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must raise ConfigError (custom exception) with message 'Environment variable \"VAR_NAME\" is not set' when ${VAR} reference has no default and VAR not in os.environ. Never expose variable values in error messages.",
+        "pattern": "if var_name not in os.environ and default is None:\n    raise ConfigError(f'Environment variable \"{var_name}\" is not set')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Must use jsonschema library's validate() function and catch ValidationError to report all validation failures with field paths in dot notation (e.g., 'db.port').",
+        "pattern": "from jsonschema import validate, ValidationError\ntry:\n    validate(instance=config, schema=schema)\nexcept ValidationError as e:\n    raise ConfigError(f'Validation failed at {e.json_path}: {e.message}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must wrap JSON parsing in try-except to catch json.JSONDecodeError and re-raise as ConfigError with the original error message including line and column numbers.",
+        "pattern": "try:\n    data = json.load(f)\nexcept json.JSONDecodeError as e:\n    raise ConfigError(f'JSON syntax error in {filename} at line {e.lineno}, column {e.colno}: {e.msg}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must wrap YAML parsing in try-except to catch yaml.YAMLError and re-raise as ConfigError with location information from the exception's problem_mark attribute.",
+        "pattern": "try:\n    data = yaml.safe_load(f)\nexcept yaml.YAMLError as e:\n    mark = getattr(e, 'problem_mark', None)\n    location = f' at line {mark.line+1}' if mark else ''\n    raise ConfigError(f'YAML syntax error in {filename}{location}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must check file size before reading and raise ConfigError if size exceeds 10MB to prevent denial of service attacks from large files.",
+        "pattern": "file_size = os.path.getsize(filepath)\nif file_size > 10 * 1024 * 1024:\n    raise ConfigError(f'Config file too large: {file_size} bytes exceeds 10MB limit')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must handle FileNotFoundError and PermissionError separately with descriptive messages including the filename, not generic error messages.",
+        "pattern": "try:\n    with open(filepath) as f:\n        ...\nexcept FileNotFoundError:\n    raise FileNotFoundError(f'Config file not found: {filepath}')\nexcept PermissionError:\n    raise PermissionError(f'Permission denied reading config file: {filepath}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must detect format by file extension (.json/.yaml/.yml), but also handle format mismatch gracefully by catching parse errors and suggesting the issue may be wrong file extension.",
+        "pattern": "if filepath.endswith('.json'):\n    try:\n        return json.load(f)\n    except json.JSONDecodeError:\n        # Try YAML, raise error suggesting mismatch\n        raise ConfigError(f'{filepath} has .json extension but content may be YAML')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must handle empty files by returning empty dict {} for JSON format and None/empty dict for YAML format (convert None to {}).",
+        "pattern": "data = yaml.safe_load(f)\nif data is None:\n    data = {}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Must type-coerce environment variable string values when schema specifies numeric or boolean types: parse 'true'/'false' to bool, numeric strings to int/float, and raise ConfigError if coercion fails.",
+        "pattern": "if schema_type == 'number':\n    try:\n        return float(value) if '.' in value else int(value)\n    except ValueError:\n        raise ConfigError(f'Cannot convert \"{value}\" to number')\nelif schema_type == 'boolean':\n    if value.lower() in ('true', '1', 'yes'):\n        return True\n    elif value.lower() in ('false', '0', 'no'):\n        return False",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must apply schema default values to missing fields after interpolation but before validation by using Draft7Validator with default-filling behavior or manual traversal.",
+        "pattern": "from jsonschema import Draft7Validator\nvalidator = Draft7Validator(schema)\n# Use validator to fill defaults before final validation",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must collect and report all validation errors in a single exception, not just the first error. Use jsonschema's iter_errors() to gather all violations.",
+        "pattern": "from jsonschema import Draft7Validator\nerrors = list(validator.iter_errors(config))\nif errors:\n    messages = [f'{\".\".join(str(p) for p in e.path)}: {e.message}' for e in errors]\n    raise ValidationError(f'Config validation failed:\\n' + '\\n'.join(messages))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must-not",
+        "description": "Must not use eval(), exec(), or compile() on any configuration data or schema. Must not use yaml.load() without SafeLoader or yaml.unsafe_load().",
+        "pattern": "# NEVER do this:\ndata = eval(config_string)\nyaml.load(f)  # unsafe\nyaml.unsafe_load(f)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must-not",
+        "description": "Must not include actual environment variable values in any error messages or logs. Only include variable names, never their contents.",
+        "pattern": "# WRONG:\nraise ConfigError(f'Invalid value: {os.environ[var_name]}')\n\n# CORRECT:\nraise ConfigError(f'Environment variable \"{var_name}\" has invalid value for expected type')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must-not",
+        "description": "Must not modify the original config dictionary during interpolation or validation. Create deep copies or return new dictionaries to avoid side effects.",
+        "pattern": "import copy\nconfig_copy = copy.deepcopy(config)\n# Operate on config_copy",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must-not",
+        "description": "Must not silently ignore interpolation failures or validation errors. Every error condition must raise an appropriate exception with context.",
+        "pattern": "# WRONG:\ntry:\n    value = os.environ[var]\nexcept KeyError:\n    value = ''  # Silent failure\n\n# CORRECT:\nif var not in os.environ:\n    raise ConfigError(f'Environment variable \"{var}\" not set')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must preserve Python types from JSON/YAML parsing: keep booleans as bool (not int), None as None (not string), and distinguish int from float based on presence of decimal point.",
+        "pattern": "# JSON/YAML parsers handle this, but verify:\nassert type(config['enabled']) is bool\nassert config['optional'] is None\nassert type(config['port']) is int and type(config['rate']) is float",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must handle Unicode properly by opening files with explicit UTF-8 encoding and ensuring all string operations preserve Unicode characters.",
+        "pattern": "with open(filepath, 'r', encoding='utf-8') as f:\n    data = json.load(f)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must validate schema itself before using it for config validation. Use jsonschema.Draft7Validator.check_schema() to catch malformed schemas early.",
+        "pattern": "from jsonschema import Draft7Validator, SchemaError\ntry:\n    Draft7Validator.check_schema(schema)\nexcept SchemaError as e:\n    raise SchemaError(f'Invalid schema: {e.message}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "prefer",
+        "description": "Prefer using pathlib.Path for file operations instead of os.path, and use .resolve() to get canonical paths for security checks.",
+        "pattern": "from pathlib import Path\npath = Path(filepath).resolve()\nif not path.is_relative_to(allowed_dir):\n    raise SecurityError('Path outside allowed directory')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "prefer",
+        "description": "Prefer caching compiled jsonschema validators by schema content hash to avoid recompilation overhead when same schema is used multiple times.",
+        "pattern": "import hashlib\nimport json\nschema_cache = {}\nschema_hash = hashlib.sha256(json.dumps(schema, sort_keys=True).encode()).hexdigest()\nif schema_hash not in schema_cache:\n    schema_cache[schema_hash] = Draft7Validator(schema)",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 31,
+    "generatedAt": "2026-02-12T06:36:03.368Z",
+    "inputTokens": 3516,
+    "outputTokens": 2785
+  },
+  "generatedCode": {
+    "task": "Write a configuration loader that validates YAML/JSON config against a schema, supports environment variable interpolation, and provides helpful error messages",
+    "code": "import json\nimport os\nimport re\nimport hashlib\nfrom pathlib import Path\nfrom typing import Any, Dict, Optional, Union\nimport yaml\nfrom jsonschema import Draft7Validator, ValidationError as JsonSchemaValidationError, SchemaError\n\n\nclass ConfigError(Exception):\n    \"\"\"Base exception for configuration errors.\"\"\"\n    pass\n\n\nclass ValidationError(ConfigError):\n    \"\"\"Exception raised when configuration validation fails.\"\"\"\n    pass\n\n\nclass SecurityError(ConfigError):\n    \"\"\"Exception raised for security-related issues.\"\"\"\n    pass\n\n\nclass ConfigLoader:\n    \"\"\"Configuration loader with validation, interpolation, and error handling.\"\"\"\n    \n    _schema_cache: Dict[str, Draft7Validator] = {}\n    _env_var_pattern = re.compile(r'\\$\\{([A-Z_][A-Z0-9_]*?)(?::-(.*?))?\\}')\n    _max_file_size = 10 * 1024 * 1024  # 10MB\n    \n    def __init__(self, allowed_directory: Optional[Path] = None):\n        \"\"\"Initialize the config loader.\n        \n        Args:\n            allowed_directory: Optional directory to restrict file access to.\n        \"\"\"\n        self.allowed_directory = allowed_directory\n    \n    def load_config(\n        self,\n        filepath: str,\n        schema: Optional[Dict[str, Any]] = None\n    ) -> Dict[str, Any]:\n        \"\"\"Load and validate a configuration file.\n        \n        Args:\n            filepath: Path to the configuration file (.json, .yaml, or .yml)\n            schema: Optional JSON Schema to validate against\n            \n        Returns:\n            Validated configuration dictionary\n            \n        Raises:\n            FileNotFoundError: If config file doesn't exist\n            PermissionError: If config file cannot be read\n            ConfigError: If config is invalid or cannot be parsed\n            ValidationError: If config doesn't match schema\n            SecurityError: If path validation fails\n        \"\"\"\n        # Validate and sanitize file path\n        resolved_path = self._validate_path(filepath)\n        \n        # Check file size\n        self._check_file_size(resolved_path)\n        \n        # Load configuration file\n        config = self._load_file(resolved_path)\n        \n        # Handle empty files\n        if config is None:\n            config = {}\n        \n        # Perform environment variable interpolation\n        config = self._interpolate_env_vars(config)\n        \n        # Validate against schema if provided\n        if schema is not None:\n            self._validate_schema(schema)\n            config = self._apply_defaults(config, schema)\n            self._validate_config(config, schema)\n        \n        return config\n    \n    def _validate_path(self, filepath: str) -> Path:\n        \"\"\"Validate and sanitize file path to prevent directory traversal.\n        \n        Args:\n            filepath: Path to validate\n            \n        Returns:\n            Resolved Path object\n            \n        Raises:\n            SecurityError: If path is invalid or outside allowed directory\n        \"\"\"\n        if '..' in filepath:\n            raise SecurityError('Path traversal detected')\n        \n        path = Path(filepath).resolve()\n        \n        if self.allowed_directory is not None:\n            allowed = Path(self.allowed_directory).resolve()\n            try:\n                path.relative_to(allowed)\n            except ValueError:\n                raise SecurityError('Path outside allowed directory')\n        \n        return path\n    \n    def _check_file_size(self, path: Path) -> None:\n        \"\"\"Check that file size is within limits.\n        \n        Args:\n            path: Path to check\n            \n        Raises:\n            ConfigError: If file is too large\n        \"\"\"\n        try:\n            file_size = path.stat().st_size\n            if file_size > self._max_file_size:\n                raise ConfigError(\n                    f'Config file too large: {file_size} bytes exceeds 10MB limit'\n                )\n        except OSError as e:\n            raise ConfigError(f'Cannot check file size: {e}')\n    \n    def _load_file(self, path: Path) -> Dict[str, Any]:\n        \"\"\"Load configuration file based on extension.\n        \n        Args:\n            path: Path to configuration file\n            \n        Returns:\n            Parsed configuration dictionary\n            \n        Raises:\n            FileNotFoundError: If file doesn't exist\n            PermissionError: If file cannot be read\n            ConfigError: If file cannot be parsed\n        \"\"\"\n        try:\n            with open(path, 'r', encoding='utf-8') as f:\n                content = f.read()\n                \n                if not content.strip():\n                    return {}\n                \n                if path.suffix == '.json':\n                    return self._load_json(content, str(path))\n                elif path.suffix in ('.yaml', '.yml'):\n                    return self._load_yaml(content, str(path))\n                else:\n                    raise ConfigError(\n                        f'Unsupported file extension: {path.suffix}. '\n                        'Use .json, .yaml, or .yml'\n                    )\n        except FileNotFoundError:\n            raise FileNotFoundError(f'Config file not found: {path}')\n        except PermissionError:\n            raise PermissionError(f'Permission denied reading config file: {path}')\n    \n    def _load_json(self, content: str, filename: str) -> Dict[str, Any]:\n        \"\"\"Load JSON content.\n        \n        Args:\n            content: JSON string content\n            filename: Filename for error messages\n            \n        Returns:\n            Parsed JSON dictionary\n            \n        Raises:\n            ConfigError: If JSON is malformed\n        \"\"\"\n        try:\n            return json.loads(content)\n        except json.JSONDecodeError as e:\n            # Try YAML to detect format mismatch\n            try:\n                yaml.safe_load(content)\n                raise ConfigError(\n                    f'{filename} has .json extension but content may be YAML'\n                )\n            except yaml.YAMLError:\n                pass\n            \n            raise ConfigError(\n                f'JSON syntax error in {filename} at line {e.lineno}, '\n                f'column {e.colno}: {e.msg}'\n            )\n    \n    def _load_yaml(self, content: str, filename: str) -> Dict[str, Any]:\n        \"\"\"Load YAML content.\n        \n        Args:\n            content: YAML string content\n            filename: Filename for error messages\n            \n        Returns:\n            Parsed YAML dictionary\n            \n        Raises:\n            ConfigError: If YAML is malformed\n        \"\"\"\n        try:\n            data = yaml.safe_load(content)\n            if data is None:\n                data = {}\n            return data\n        except yaml.YAMLError as e:\n            # Try JSON to detect format mismatch\n            try:\n                json.loads(content)\n                raise ConfigError(\n                    f'{filename} has .yaml extension but content may be JSON'\n                )\n            except json.JSONDecodeError:\n                pass\n            \n            mark = getattr(e, 'problem_mark', None)\n            location = f' at line {mark.line + 1}' if mark else ''\n            raise ConfigError(f'YAML syntax error in {filename}{location}')\n    \n    def _interpolate_env_vars(self, obj: Any) -> Any:\n        \"\"\"Recursively interpolate environment variables.\n        \n        Args:\n            obj: Object to interpolate (dict, list, string, or other)\n            \n        Returns:\n            Object with environment variables interpolated\n            \n        Raises:\n            ConfigError: If required environment variable is not set\n        \"\"\"\n        if isinstance(obj, dict):\n            return {k: self._interpolate_env_vars(v) for k, v in obj.items()}\n        elif isinstance(obj, list):\n            return [self._interpolate_env_vars(item) for item in obj]\n        elif isinstance(obj, str):\n            return self._replace_env_vars(obj)\n        else:\n            return obj\n    \n    def _replace_env_vars(self, value: str) -> str:\n        \"\"\"Replace environment variable references in a string.\n        \n        Args:\n            value: String potentially containing ${VAR} or ${VAR:-default}\n            \n        Returns:\n            String with environment variables replaced\n            \n        Raises:\n            ConfigError: If required environment variable is not set\n        \"\"\"\n        def replacer(match: re.Match) -> str:\n            var_name = match.group(1)\n            default_value = match.group(2)\n            \n            if var_name in os.environ:\n                return os.environ[var_name]\n            elif default_value is not None:\n                return default_value\n            else:\n                raise ConfigError(\n                    f'Environment variable \"{var_name}\" is not set'\n                )\n        \n        return self._env_var_pattern.sub(replacer, value)\n    \n    def _validate_schema(self, schema: Dict[str, Any]) -> None:\n        \"\"\"Validate that schema itself is valid.\n        \n        Args:\n            schema: JSON Schema to validate\n            \n        Raises:\n            SchemaError: If schema is invalid\n        \"\"\"\n        try:\n            Draft7Validator.check_schema(schema)\n        except JsonSchemaValidationError as e:\n            raise SchemaError(f'Invalid schema: {e.message}')\n    \n    def _get_cached_validator(self, schema: Dict[str, Any]) -> Draft7Validator:\n        \"\"\"Get or create a cached validator for the schema.\n        \n        Args:\n            schema: JSON Schema\n            \n        Returns:\n            Cached or new Draft7Validator instance\n        \"\"\"\n        schema_str = json.dumps(schema, sort_keys=True)\n        schema_hash = hashlib.sha256(schema_str.encode()).hexdigest()\n        \n        if schema_hash not in self._schema_cache:\n            self._schema_cache[schema_hash] = Draft7Validator(schema)\n        \n        return self._schema_cache[schema_hash]\n    \n    def _apply_defaults(\n        self,\n        config: Dict[str, Any],\n        schema: Dict[str, Any]\n    ) -> Dict[str, Any]:\n        \"\"\"Apply default values from schema to config.\n        \n        Args:\n            config: Configuration dictionary\n            schema: JSON Schema with default values\n            \n        Returns:\n            Configuration with defaults applied\n        \"\"\"\n        import copy\n        result = copy.deepcopy(config)\n        \n        if 'properties' in schema:\n            for prop_name, prop_schema in schema['properties'].items():\n                if prop_name not in result and 'default' in prop_schema:\n                    result[prop_name] = prop_schema['default']\n                elif prop_name in result and isinstance(result[prop_name], dict):\n                    if prop_schema.get('type') == 'object':\n                        result[prop_name] = self._apply_defaults(\n                            result[prop_name],\n                            prop_schema\n                        )\n        \n        return result\n    \n    def _validate_config(\n        self,\n        config: Dict[str, Any],\n        schema: Dict[str, Any]\n    ) -> None:\n        \"\"\"Validate configuration against schema.\n        \n        Args:\n            config: Configuration to validate\n            schema: JSON Schema to validate against\n            \n        Raises:\n            ValidationError: If validation fails\n        \"\"\"\n        # Type coercion before validation\n        config = self._coerce_types(config, schema)\n        \n        validator = self._get_cached_validator(schema)\n        errors = list(validator.iter_errors(config))\n        \n        if errors:\n            messages = []\n            for error in errors:\n                path = '.'.join(str(p) for p in error.path) if error.path else 'root'\n                messages.append(f'{path}: {error.message}')\n            \n            raise ValidationError(\n                f'Config validation failed:\\n' + '\\n'.join(messages)\n            )\n    \n    def _coerce_types(\n        self,\n        config: Any,\n        schema: Dict[str, Any]\n    ) -> Any:\n        \"\"\"Coerce string values from environment variables to schema types.\n        \n        Args:\n            config: Configuration to coerce\n            schema: Schema defining expected types\n            \n        Returns:\n            Configuration with types coerced\n            \n        Raises:\n            ConfigError: If type coercion fails\n        \"\"\"\n        import copy\n        \n        if not isinstance(config, dict):\n            return config\n        \n        result = copy.deepcopy(config)\n        \n        if 'properties' in schema:\n            for prop_name, prop_schema in schema['properties'].items():\n                if prop_name in result:\n                    result[prop_name] = self._coerce_value(\n                        result[prop_name],\n                        prop_schema,\n                        f'{prop_name}'\n                    )\n        \n        return result\n    \n    def _coerce_value(\n        self,\n        value: Any,\n        schema: Dict[str, Any],\n        path: str\n    ) -> Any:\n        \"\"\"Coerce a single value to the schema type.\n        \n        Args:\n            value: Value to coerce\n            schema: Schema for this value\n            path: JSON path for error messages\n            \n        Returns:\n            Coerced value\n            \n        Raises:\n            ConfigError: If coercion fails\n        \"\"\"\n        schema_type = schema.get('type')\n        \n        if schema_type == 'number' and isinstance(value, str):\n            try:\n                return float(value) if '.' in value else int(value)\n            except ValueError:\n                raise ConfigError(\n                    f'Environment variable at \"{path}\" has invalid value '\n                    f'for expected type: number'\n                )\n        \n        elif schema_type == 'integer' and isinstance(value, str):\n            try:\n                return int(value)\n            except ValueError:\n                raise ConfigError(\n                    f'Environment variable at \"{path}\" has invalid value '\n                    f'for expected type: integer'\n                )\n        \n        elif schema_type == 'boolean' and isinstance(value, str):\n            lower_value = value.lower()\n            if lower_value in ('true', '1', 'yes'):\n                return True\n            elif lower_value in ('false', '0', 'no'):\n                return False\n            else:\n                raise ConfigError(\n                    f'Environment variable at \"{path}\" has invalid value '\n                    f'for expected type: boolean'\n                )\n        \n        elif schema_type == 'object' and isinstance(value, dict):\n            return self._coerce_types(value, schema)\n        \n        elif schema_type == 'array' and isinstance(value, list):\n            items_schema = schema.get('items', {})\n            return [\n                self._coerce_value(item, items_schema, f'{path}[{i}]')\n                for i, item in enumerate(value)\n            ]\n        \n        return value\n\n\ndef load_config(\n    filepath: str,\n    schema: Optional[Dict[str, Any]] = None\n) -> Dict[str, Any]:\n    \"\"\"Load and validate a configuration file.\n    \n    Convenience function that creates a ConfigLoader and loads a config file.\n    \n    Args:\n        filepath: Path to the configuration file (.json, .yaml, or .yml)\n        schema: Optional JSON Schema to validate against\n        \n    Returns:\n        Validated configuration dictionary\n        \n    Raises:\n        FileNotFoundError: If config file doesn't exist\n        PermissionError: If config file cannot be read\n        ConfigError: If config is invalid or cannot be parsed\n        ValidationError: If config doesn't match schema\n        SecurityError: If path validation fails\n    \"\"\"\n    loader = ConfigLoader()\n    return loader.load_config(filepath, schema)",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must successfully load and parse valid JSON configuration files",
+        "assertion": "load_config('config.json') where config.json contains {'key': 'value'} returns dict {'key': 'value'}",
+        "rationale": "Core functionality - the loader must be able to read and parse standard JSON files"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must successfully load and parse valid YAML configuration files",
+        "assertion": "load_config('config.yaml') where config.yaml contains 'key: value' returns dict {'key': 'value'}",
+        "rationale": "Core functionality - the loader must support YAML format as specified"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must validate configuration against provided schema and accept valid configs",
+        "assertion": "load_config('config.json', schema={'type': 'object', 'properties': {'port': {'type': 'number'}}}) where config contains {'port': 8080} succeeds and returns the config",
+        "rationale": "Schema validation is a core requirement - valid configs must pass validation"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must reject configuration that violates schema with clear error message",
+        "assertion": "load_config('config.json', schema={'type': 'object', 'properties': {'port': {'type': 'number'}}}) where config contains {'port': 'invalid'} raises ValidationError with message indicating 'port' field type mismatch",
+        "rationale": "Schema validation must catch type violations and provide actionable feedback"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must interpolate environment variables using ${VAR_NAME} syntax",
+        "assertion": "Given os.environ['DB_HOST']='localhost', load_config where config contains {'database': '${DB_HOST}'} returns {'database': 'localhost'}",
+        "rationale": "Environment variable interpolation is a core feature for configuration flexibility"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Must preserve non-interpolated strings that don't match variable syntax",
+        "assertion": "load_config where config contains {'message': 'Hello $world'} returns {'message': 'Hello $world'} unchanged",
+        "rationale": "Only proper ${VAR} syntax should trigger interpolation, literal dollar signs must be preserved"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must raise FileNotFoundError with helpful message when config file doesn't exist",
+        "assertion": "load_config('nonexistent.json') raises FileNotFoundError with message containing the filename 'nonexistent.json'",
+        "rationale": "Missing config files are common errors that need clear, actionable error messages"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must raise appropriate exception with helpful message for malformed JSON",
+        "assertion": "load_config('invalid.json') where file contains '{invalid json}' raises JSONDecodeError or ConfigError with message indicating syntax error and line/column number",
+        "rationale": "Parse errors must be caught and reported with location information for debugging"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must raise appropriate exception with helpful message for malformed YAML",
+        "assertion": "load_config('invalid.yaml') where file contains 'key: [unclosed' raises YAMLError or ConfigError with message indicating syntax error location",
+        "rationale": "YAML parse errors must provide actionable feedback for developers"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must raise clear error when required environment variable is missing during interpolation",
+        "assertion": "load_config where config contains {'api_key': '${MISSING_VAR}'} and MISSING_VAR not in os.environ raises ConfigError with message indicating 'MISSING_VAR' is not set",
+        "rationale": "Missing environment variables should fail fast with clear indication of what's missing"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle empty configuration files gracefully",
+        "assertion": "load_config('empty.json') where file is empty or contains '{}' returns empty dict {}",
+        "rationale": "Empty configs are valid and should not cause errors"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle deeply nested configuration structures",
+        "assertion": "load_config where config contains {'a': {'b': {'c': {'d': 'value'}}}} correctly returns the nested structure with all levels accessible",
+        "rationale": "Complex configurations often have deep nesting that must be preserved"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must interpolate environment variables in nested structures",
+        "assertion": "Given os.environ['SECRET']='xyz', load_config where config contains {'db': {'password': '${SECRET}'}} returns {'db': {'password': 'xyz'}}",
+        "rationale": "Environment variable interpolation must work at any nesting level"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle multiple environment variable references in a single string value",
+        "assertion": "Given os.environ['HOST']='localhost' and os.environ['PORT']='5432', config with 'url: ${HOST}:${PORT}' returns {'url': 'localhost:5432'}",
+        "rationale": "Complex configuration strings often need multiple interpolations"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Must handle environment variables containing special characters",
+        "assertion": "Given os.environ['PASS']='p@ss$word!', config with 'password: ${PASS}' returns {'password': 'p@ss$word!'}",
+        "rationale": "Environment variable values can contain any characters including special ones"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle configuration files with Unicode characters",
+        "assertion": "load_config where config contains {'message': '你好世界🌍'} correctly returns the Unicode string without corruption",
+        "rationale": "Modern applications need full Unicode support in configuration"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle arrays/lists in configuration",
+        "assertion": "load_config where config contains {'servers': ['server1', 'server2', 'server3']} returns list structure intact",
+        "rationale": "Lists are common in configuration for multiple values"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must interpolate environment variables within array elements",
+        "assertion": "Given os.environ['HOST1']='server1', config with {'hosts': ['${HOST1}', 'server2']} returns {'hosts': ['server1', 'server2']}",
+        "rationale": "Arrays may contain interpolation references that need resolution"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must preserve boolean values from configuration",
+        "assertion": "load_config where config contains {'enabled': true, 'debug': false} returns {'enabled': True, 'debug': False} with Python boolean types",
+        "rationale": "Boolean configuration values must maintain their type, not convert to strings"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must preserve null/None values in configuration",
+        "assertion": "load_config where config contains {'optional_field': null} returns {'optional_field': None}",
+        "rationale": "Null values are semantically meaningful and must be preserved"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must preserve numeric types (integers vs floats)",
+        "assertion": "load_config where config contains {'port': 8080, 'rate': 1.5} returns {'port': 8080, 'rate': 1.5} maintaining int and float distinction",
+        "rationale": "Type preservation prevents subtle bugs from numeric type coercion"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must validate required fields are present according to schema",
+        "assertion": "load_config with schema={'type': 'object', 'required': ['api_key']} where config is {} raises ValidationError indicating 'api_key' is required",
+        "rationale": "Schema validation must enforce required fields to prevent runtime errors"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must validate string type constraints from schema",
+        "assertion": "load_config with schema={'properties': {'name': {'type': 'string', 'minLength': 3}}} where config has {'name': 'ab'} raises ValidationError indicating minimum length violation",
+        "rationale": "String constraints prevent invalid configuration values"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must validate number range constraints from schema",
+        "assertion": "load_config with schema={'properties': {'port': {'type': 'number', 'minimum': 1, 'maximum': 65535}}} where config has {'port': 70000} raises ValidationError",
+        "rationale": "Numeric constraints catch configuration errors early"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Must validate enum constraints from schema",
+        "assertion": "load_config with schema={'properties': {'env': {'enum': ['dev', 'prod']}}} where config has {'env': 'test'} raises ValidationError listing valid options",
+        "rationale": "Enum validation prevents typos and invalid configuration values"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Must provide error message with field path for nested validation failures",
+        "assertion": "load_config with schema validating {'db': {'port': {'type': 'number'}}} where config has {'db': {'port': 'invalid'}} raises error with message containing path like 'db.port'",
+        "rationale": "Nested validation errors need clear path information for debugging"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Must handle file permission errors with clear message",
+        "assertion": "load_config('unreadable.json') where file exists but is not readable raises PermissionError with message indicating permission issue",
+        "rationale": "Permission errors should be distinguished from missing files"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Must provide helpful error when file extension doesn't match content format",
+        "assertion": "load_config('config.json') where file contains YAML content raises error suggesting format mismatch",
+        "rationale": "Mismatched extensions are common errors that need clear guidance"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must not expose sensitive environment variable values in error messages",
+        "assertion": "Given os.environ['SECRET_KEY']='sensitive123', when validation fails on config using ${SECRET_KEY}, error message does not contain 'sensitive123'",
+        "rationale": "Error messages must not leak secrets that could be logged or displayed"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must sanitize file paths to prevent directory traversal",
+        "assertion": "load_config('../../../etc/passwd') raises SecurityError or ValueError preventing path traversal",
+        "rationale": "Prevent attackers from reading arbitrary files via path traversal"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "security",
+        "severity": "high",
+        "description": "Must limit configuration file size to prevent denial of service",
+        "assertion": "load_config where file is larger than reasonable limit (e.g., 10MB) raises error indicating file too large",
+        "rationale": "Prevent memory exhaustion attacks from extremely large config files"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "security",
+        "severity": "high",
+        "description": "Must not execute arbitrary code from YAML tags",
+        "assertion": "load_config('config.yaml') where YAML contains !!python/object/apply:os.system ['malicious'] does not execute code and raises error",
+        "rationale": "YAML arbitrary code execution is a major security vulnerability"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "security",
+        "severity": "high",
+        "description": "Must validate schema itself to prevent malicious schema definitions",
+        "assertion": "load_config with malformed or excessively complex schema raises SchemaError before processing config",
+        "rationale": "Malicious schemas could cause denial of service through complexity attacks"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Must support default values for optional fields from schema",
+        "assertion": "load_config with schema={'properties': {'timeout': {'type': 'number', 'default': 30}}} where config is {} returns {'timeout': 30}",
+        "rationale": "Default values reduce configuration boilerplate and prevent missing value errors"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must support environment variable with default value syntax ${VAR:-default}",
+        "assertion": "Given UNDEFINED_VAR not in os.environ, config with 'value: ${UNDEFINED_VAR:-fallback}' returns {'value': 'fallback'}",
+        "rationale": "Default values make configurations more robust to missing environment variables"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Must handle empty string environment variables",
+        "assertion": "Given os.environ['EMPTY']='', config with 'value: ${EMPTY}' returns {'value': ''}",
+        "rationale": "Empty strings are valid environment variable values distinct from unset"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle configuration keys with special characters",
+        "assertion": "load_config where config contains {'some-key': 'value', 'dot.key': 'value2'} returns both keys accessible",
+        "rationale": "Configuration keys may use various naming conventions including hyphens and dots"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Must load and parse configuration files in under 100ms for files < 100KB",
+        "assertion": "load_config('config.json') with 50KB config file completes in < 100ms on typical hardware",
+        "rationale": "Configuration loading is often on the critical path of application startup"
+      },
+      {
+        "id": "SPEC-039",
+        "category": "performance",
+        "severity": "low",
+        "description": "Must cache compiled schema validators to avoid repeated compilation",
+        "assertion": "Calling load_config multiple times with the same schema reuses validator instance rather than recompiling",
+        "rationale": "Schema compilation can be expensive; caching improves performance"
+      },
+      {
+        "id": "SPEC-040",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Must aggregate multiple validation errors in a single exception",
+        "assertion": "load_config where config violates multiple schema rules returns ValidationError containing all violations, not just the first one",
+        "rationale": "Showing all errors at once saves debugging time versus fixing one at a time"
+      },
+      {
+        "id": "SPEC-041",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must support both JSON Schema Draft 7 and Draft 4 formats",
+        "assertion": "load_config accepts schema with '$schema': 'http://json-schema.org/draft-07/schema#' and validates correctly",
+        "rationale": "JSON Schema has multiple versions in use; supporting common versions improves compatibility"
+      },
+      {
+        "id": "SPEC-042",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Must validate array item types according to schema",
+        "assertion": "load_config with schema={'properties': {'ports': {'type': 'array', 'items': {'type': 'number'}}}} where config has {'ports': [80, 'invalid']} raises ValidationError",
+        "rationale": "Array item validation prevents heterogeneous arrays when homogeneous is expected"
+      },
+      {
+        "id": "SPEC-043",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Must handle circular references in schema definitions",
+        "assertion": "load_config with schema containing $ref circular references either resolves them correctly or raises clear error about circular dependency",
+        "rationale": "Recursive schemas are valid but need proper handling to avoid infinite loops"
+      },
+      {
+        "id": "SPEC-044",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Must support schema $ref references to external files",
+        "assertion": "load_config with schema containing {'$ref': 'common-schema.json#/definitions/Server'} resolves the reference and validates correctly",
+        "rationale": "Schema composition via references enables reuse and modularity"
+      },
+      {
+        "id": "SPEC-045",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Must provide line and column numbers for JSON parse errors",
+        "assertion": "load_config('invalid.json') with malformed JSON raises error with message containing line number and column position",
+        "rationale": "Precise error location dramatically speeds up fixing syntax errors"
+      },
+      {
+        "id": "SPEC-046",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Must perform interpolation before schema validation",
+        "assertion": "Given os.environ['PORT']='8080', schema requiring number type, config {'port': '${PORT}'} converts to number 8080 and validates successfully",
+        "rationale": "Interpolation must happen before validation so type conversion can occur"
+      },
+      {
+        "id": "SPEC-047",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Must handle very long environment variable names",
+        "assertion": "Config with '${VERY_LONG_VARIABLE_NAME_THAT_EXCEEDS_TYPICAL_LENGTH}' processes correctly if variable exists",
+        "rationale": "Environment variable names can be arbitrarily long within system limits"
+      },
+      {
+        "id": "SPEC-048",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Must coerce numeric strings from environment variables when schema expects number",
+        "assertion": "Given os.environ['PORT']='8080' (string), schema with port type number, config {'port': '${PORT}'} converts to int/float 8080",
+        "rationale": "Environment variables are always strings; smart coercion reduces configuration friction"
+      },
+      {
+        "id": "SPEC-049",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Must coerce boolean strings from environment variables when schema expects boolean",
+        "assertion": "Given os.environ['DEBUG']='true', schema with debug type boolean, config {'debug': '${DEBUG}'} converts to boolean True",
+        "rationale": "Environment variables need smart boolean conversion (true/false/1/0/yes/no)"
+      },
+      {
+        "id": "SPEC-050",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Must provide clear error when environment variable value cannot be coerced to schema type",
+        "assertion": "Given os.environ['PORT']='invalid', schema expecting number, config {'port': '${PORT}'} raises error indicating type conversion failure from 'invalid' to number",
+        "rationale": "Type coercion failures need clear explanation to guide fixing"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Validate and sanitize all external input before processing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must",
+        "description": "Wrap JSON.parse in try-catch",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Check for division by zero before dividing",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "Validate that required environment variables are set before using them",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must-not",
+        "description": "Never log or expose secrets/tokens in error messages or console output",
+        "source": "domain"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Must use safe YAML loader (yaml.safe_load) to prevent arbitrary code execution from YAML tags like !!python/object. Never use yaml.load without SafeLoader.",
+        "pattern": "# CORRECT:\nimport yaml\nwith open(file) as f:\n    data = yaml.safe_load(f)\n\n# WRONG:\ndata = yaml.load(f)  # unsafe",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Must validate and sanitize file paths before opening to prevent directory traversal attacks. Reject paths containing '..' or absolute paths outside allowed directory.",
+        "pattern": "if '..' in filepath or os.path.isabs(filepath):\n    raise SecurityError('Path traversal detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must perform environment variable interpolation recursively through all nested dictionaries and lists before schema validation, replacing ${VAR} and ${VAR:-default} patterns.",
+        "pattern": "def interpolate(obj):\n    if isinstance(obj, dict):\n        return {k: interpolate(v) for k, v in obj.items()}\n    elif isinstance(obj, list):\n        return [interpolate(item) for item in obj]\n    elif isinstance(obj, str):\n        return replace_env_vars(obj)\n    return obj",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must use regex pattern r'\\$\\{([A-Z_][A-Z0-9_]*?)(?::-(.*?))?\\}' to match environment variables, supporting both ${VAR} and ${VAR:-default} syntax with proper capture groups.",
+        "pattern": "import re\npattern = re.compile(r'\\$\\{([A-Z_][A-Z0-9_]*?)(?::-(.*?))?\\}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "Must raise ConfigError (custom exception) with message 'Environment variable \"VAR_NAME\" is not set' when ${VAR} reference has no default and VAR not in os.environ. Never expose variable values in error messages.",
+        "pattern": "if var_name not in os.environ and default is None:\n    raise ConfigError(f'Environment variable \"{var_name}\" is not set')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Must use jsonschema library's validate() function and catch ValidationError to report all validation failures with field paths in dot notation (e.g., 'db.port').",
+        "pattern": "from jsonschema import validate, ValidationError\ntry:\n    validate(instance=config, schema=schema)\nexcept ValidationError as e:\n    raise ConfigError(f'Validation failed at {e.json_path}: {e.message}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must wrap JSON parsing in try-except to catch json.JSONDecodeError and re-raise as ConfigError with the original error message including line and column numbers.",
+        "pattern": "try:\n    data = json.load(f)\nexcept json.JSONDecodeError as e:\n    raise ConfigError(f'JSON syntax error in {filename} at line {e.lineno}, column {e.colno}: {e.msg}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must wrap YAML parsing in try-except to catch yaml.YAMLError and re-raise as ConfigError with location information from the exception's problem_mark attribute.",
+        "pattern": "try:\n    data = yaml.safe_load(f)\nexcept yaml.YAMLError as e:\n    mark = getattr(e, 'problem_mark', None)\n    location = f' at line {mark.line+1}' if mark else ''\n    raise ConfigError(f'YAML syntax error in {filename}{location}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must check file size before reading and raise ConfigError if size exceeds 10MB to prevent denial of service attacks from large files.",
+        "pattern": "file_size = os.path.getsize(filepath)\nif file_size > 10 * 1024 * 1024:\n    raise ConfigError(f'Config file too large: {file_size} bytes exceeds 10MB limit')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must handle FileNotFoundError and PermissionError separately with descriptive messages including the filename, not generic error messages.",
+        "pattern": "try:\n    with open(filepath) as f:\n        ...\nexcept FileNotFoundError:\n    raise FileNotFoundError(f'Config file not found: {filepath}')\nexcept PermissionError:\n    raise PermissionError(f'Permission denied reading config file: {filepath}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must detect format by file extension (.json/.yaml/.yml), but also handle format mismatch gracefully by catching parse errors and suggesting the issue may be wrong file extension.",
+        "pattern": "if filepath.endswith('.json'):\n    try:\n        return json.load(f)\n    except json.JSONDecodeError:\n        # Try YAML, raise error suggesting mismatch\n        raise ConfigError(f'{filepath} has .json extension but content may be YAML')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must handle empty files by returning empty dict {} for JSON format and None/empty dict for YAML format (convert None to {}).",
+        "pattern": "data = yaml.safe_load(f)\nif data is None:\n    data = {}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Must type-coerce environment variable string values when schema specifies numeric or boolean types: parse 'true'/'false' to bool, numeric strings to int/float, and raise ConfigError if coercion fails.",
+        "pattern": "if schema_type == 'number':\n    try:\n        return float(value) if '.' in value else int(value)\n    except ValueError:\n        raise ConfigError(f'Cannot convert \"{value}\" to number')\nelif schema_type == 'boolean':\n    if value.lower() in ('true', '1', 'yes'):\n        return True\n    elif value.lower() in ('false', '0', 'no'):\n        return False",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must apply schema default values to missing fields after interpolation but before validation by using Draft7Validator with default-filling behavior or manual traversal.",
+        "pattern": "from jsonschema import Draft7Validator\nvalidator = Draft7Validator(schema)\n# Use validator to fill defaults before final validation",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must collect and report all validation errors in a single exception, not just the first error. Use jsonschema's iter_errors() to gather all violations.",
+        "pattern": "from jsonschema import Draft7Validator\nerrors = list(validator.iter_errors(config))\nif errors:\n    messages = [f'{\".\".join(str(p) for p in e.path)}: {e.message}' for e in errors]\n    raise ValidationError(f'Config validation failed:\\n' + '\\n'.join(messages))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must-not",
+        "description": "Must not use eval(), exec(), or compile() on any configuration data or schema. Must not use yaml.load() without SafeLoader or yaml.unsafe_load().",
+        "pattern": "# NEVER do this:\ndata = eval(config_string)\nyaml.load(f)  # unsafe\nyaml.unsafe_load(f)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must-not",
+        "description": "Must not include actual environment variable values in any error messages or logs. Only include variable names, never their contents.",
+        "pattern": "# WRONG:\nraise ConfigError(f'Invalid value: {os.environ[var_name]}')\n\n# CORRECT:\nraise ConfigError(f'Environment variable \"{var_name}\" has invalid value for expected type')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must-not",
+        "description": "Must not modify the original config dictionary during interpolation or validation. Create deep copies or return new dictionaries to avoid side effects.",
+        "pattern": "import copy\nconfig_copy = copy.deepcopy(config)\n# Operate on config_copy",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must-not",
+        "description": "Must not silently ignore interpolation failures or validation errors. Every error condition must raise an appropriate exception with context.",
+        "pattern": "# WRONG:\ntry:\n    value = os.environ[var]\nexcept KeyError:\n    value = ''  # Silent failure\n\n# CORRECT:\nif var not in os.environ:\n    raise ConfigError(f'Environment variable \"{var}\" not set')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must preserve Python types from JSON/YAML parsing: keep booleans as bool (not int), None as None (not string), and distinguish int from float based on presence of decimal point.",
+        "pattern": "# JSON/YAML parsers handle this, but verify:\nassert type(config['enabled']) is bool\nassert config['optional'] is None\nassert type(config['port']) is int and type(config['rate']) is float",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must handle Unicode properly by opening files with explicit UTF-8 encoding and ensuring all string operations preserve Unicode characters.",
+        "pattern": "with open(filepath, 'r', encoding='utf-8') as f:\n    data = json.load(f)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must validate schema itself before using it for config validation. Use jsonschema.Draft7Validator.check_schema() to catch malformed schemas early.",
+        "pattern": "from jsonschema import Draft7Validator, SchemaError\ntry:\n    Draft7Validator.check_schema(schema)\nexcept SchemaError as e:\n    raise SchemaError(f'Invalid schema: {e.message}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "prefer",
+        "description": "Prefer using pathlib.Path for file operations instead of os.path, and use .resolve() to get canonical paths for security checks.",
+        "pattern": "from pathlib import Path\npath = Path(filepath).resolve()\nif not path.is_relative_to(allowed_dir):\n    raise SecurityError('Path outside allowed directory')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "prefer",
+        "description": "Prefer caching compiled jsonschema validators by schema content hash to avoid recompilation overhead when same schema is used multiple times.",
+        "pattern": "import hashlib\nimport json\nschema_cache = {}\nschema_hash = hashlib.sha256(json.dumps(schema, sort_keys=True).encode()).hexdigest()\nif schema_hash not in schema_cache:\n    schema_cache[schema_hash] = Draft7Validator(schema)",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "The _load_json method correctly parses JSON files and returns dict objects. The code uses json.loads() which will parse {'key': 'value'} correctly."
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "The _load_yaml method correctly parses YAML files using yaml.safe_load() and returns dict objects. YAML 'key: value' format is correctly parsed."
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "The _validate_config method uses Draft7Validator to validate configs against schemas. Valid configs matching the schema will pass validation and be returned."
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "partial",
+        "reasoning": "The code validates and raises ValidationError with field paths and messages, but type coercion in _coerce_types may convert string '8080' to int 8080 before validation, potentially passing invalid string inputs. The spec example {'port': 'invalid'} would fail coercion though."
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "The _interpolate_env_vars and _replace_env_vars methods correctly identify ${VAR_NAME} pattern using regex and replace with os.environ values."
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "The regex pattern r'\\$\\{([A-Z_][A-Z0-9_]*?)(?::-(.*?))?\\}' only matches the specific ${VAR} format. Strings like 'Hello $world' won't match and will be preserved unchanged."
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "The _load_file method catches FileNotFoundError and re-raises it with a message containing the filename: f'Config file not found: {path}'"
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "The _load_json method catches json.JSONDecodeError and raises ConfigError with line/column info: f'JSON syntax error in {filename} at line {e.lineno}, column {e.colno}: {e.msg}'"
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "The _load_yaml method catches yaml.YAMLError and raises ConfigError with location info when available: f'YAML syntax error in {filename}{location}' where location includes line number from problem_mark."
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "The _replace_env_vars method raises ConfigError when environment variable is not found and no default is provided: f'Environment variable \"{var_name}\" is not set'"
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "satisfied",
+        "reasoning": "The _load_file method checks if content.strip() is empty and returns {}, and load_config explicitly handles None by converting to {}."
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "Both JSON and YAML parsers naturally handle deeply nested structures. The _interpolate_env_vars method recursively processes nested dicts, preserving structure."
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "The _interpolate_env_vars method recursively processes dictionaries, so environment variables in nested structures like {'db': {'password': '${SECRET}'}} are correctly interpolated."
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "The _replace_env_vars method uses re.sub() which replaces all matches in a string, so multiple ${HOST}:${PORT} references in a single string are all interpolated."
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "Environment variable values are returned directly from os.environ without any sanitization or escaping, so special characters like p@ss$word! are preserved exactly."
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "satisfied",
+        "reasoning": "Files are opened with encoding='utf-8' which correctly handles Unicode characters. Both JSON and YAML parsers handle Unicode strings properly."
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "satisfied",
+        "reasoning": "JSON and YAML parsers naturally parse arrays/lists. The code doesn't modify list structures, so {'servers': ['server1', 'server2']} is preserved."
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "satisfied",
+        "reasoning": "The _interpolate_env_vars method handles lists by iterating through items and recursively calling interpolation on each, so array elements with ${HOST1} are interpolated."
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "JSON parser maps JSON true/false to Python True/False. YAML parser does the same for YAML boolean values. No conversion occurs."
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "JSON null and YAML null are both parsed to Python None by their respective parsers. The code preserves None values."
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "satisfied",
+        "reasoning": "JSON parser distinguishes between integers and floats (8080 vs 1.5). The code doesn't modify numeric types, preserving the distinction."
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "The Draft7Validator used in _validate_config enforces 'required' constraints from the schema and will raise validation errors for missing required fields."
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "The Draft7Validator enforces string constraints like minLength. Config {'name': 'ab'} with minLength: 3 schema will fail validation with appropriate error message."
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "satisfied",
+        "reasoning": "The Draft7Validator enforces numeric constraints like minimum/maximum. A port value of 70000 exceeding maximum 65535 will fail validation."
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "satisfied",
+        "reasoning": "The Draft7Validator enforces enum constraints. A value not in the enum list will fail validation with an error message from jsonschema."
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "satisfied",
+        "reasoning": "The _validate_config method constructs field paths from error.path: path = '.'.join(str(p) for p in error.path). This creates paths like 'db.port' for nested fields."
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "satisfied",
+        "reasoning": "The _load_file method catches PermissionError and re-raises it with a message: f'Permission denied reading config file: {path}'"
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "satisfied",
+        "reasoning": "The _load_json and _load_yaml methods attempt to parse with the other format on error and raise ConfigError indicating format mismatch: '{filename} has .json extension but content may be YAML'"
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "satisfied",
+        "reasoning": "Environment variable interpolation occurs before validation, so interpolated values become part of the config. Error messages reference config structure, not raw env var values. The validation error messages from jsonschema show the field and type, not the actual sensitive value."
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "satisfied",
+        "reasoning": "The _validate_path method explicitly checks for '..' in filepath and raises SecurityError('Path traversal detected'). Additionally, it checks against allowed_directory if set."
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "The _check_file_size method enforces a 10MB limit (_max_file_size = 10 * 1024 * 1024) and raises ConfigError if file_size > _max_file_size with message 'Config file too large'."
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "satisfied",
+        "reasoning": "The code uses yaml.safe_load() which does not execute Python objects or arbitrary code from YAML tags. It will raise an error on unsafe YAML constructs."
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "satisfied",
+        "reasoning": "The _validate_schema method calls Draft7Validator.check_schema(schema) before validation, which validates the schema itself and raises SchemaError on invalid schemas."
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "satisfied",
+        "reasoning": "The _apply_defaults method iterates through schema properties and adds default values to config when a property is missing and has a 'default' field in the schema."
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "satisfied",
+        "reasoning": "The regex pattern captures optional default value: r'\\$\\{([A-Z_][A-Z0-9_]*?)(?::-(.*?))?\\}'. The _replace_env_vars method returns default_value when variable not in os.environ and default_value is not None."
+      },
+      {
+        "specId": "SPEC-036",
+        "status": "satisfied",
+        "reasoning": "The _replace_env_vars method returns os.environ[var_name] directly without checking if it's empty. Empty string is a valid value and is returned as-is."
+      },
+      {
+        "specId": "SPEC-037",
+        "status": "satisfied",
+        "reasoning": "JSON and YAML parsers accept keys with hyphens and dots as valid string keys. The code doesn't validate or restrict key names, so both 'some-key' and 'dot.key' are preserved."
+      },
+      {
+        "specId": "SPEC-038",
+        "status": "unknown",
+        "reasoning": "Performance depends on hardware, file I/O, and parsing library performance. Cannot verify 100ms benchmark from static analysis alone."
+      },
+      {
+        "specId": "SPEC-039",
+        "status": "satisfied",
+        "reasoning": "The _get_cached_validator method uses a class-level _schema_cache dict to store validators by schema hash. Validators are reused across calls with the same schema."
+      },
+      {
+        "specId": "SPEC-040",
+        "status": "satisfied",
+        "reasoning": "The _validate_config method uses validator.iter_errors(config) to collect all validation errors, then aggregates them into a single ValidationError with all messages joined."
+      },
+      {
+        "specId": "SPEC-041",
+        "status": "partial",
+        "reasoning": "The code uses Draft7Validator explicitly, which supports Draft 7. The spec mentions Draft 4 support, but the code only instantiates Draft7Validator. Draft 4 schemas may work if compatible, but explicit Draft 4 support is not implemented."
+      },
+      {
+        "specId": "SPEC-042",
+        "status": "satisfied",
+        "reasoning": "The Draft7Validator enforces array item type constraints from the 'items' schema. An array with mixed types where numbers are expected will fail validation."
+      },
+      {
+        "specId": "SPEC-043",
+        "status": "partial",
+        "reasoning": "The Draft7Validator from jsonschema library should handle $ref including circular references, but the code doesn't explicitly test or handle circular reference errors. Behavior depends on jsonschema library."
+      },
+      {
+        "specId": "SPEC-044",
+        "status": "partial",
+        "reasoning": "The Draft7Validator supports $ref including external file references, but the code doesn't explicitly configure a reference resolver for external files. Basic $ref support exists but external file resolution may not work without additional configuration."
+      },
+      {
+        "specId": "SPEC-045",
+        "status": "satisfied",
+        "reasoning": "The _load_json method catches json.JSONDecodeError and includes e.lineno and e.colno in the error message: f'JSON syntax error in {filename} at line {e.lineno}, column {e.colno}'"
+      },
+      {
+        "specId": "SPEC-046",
+        "status": "satisfied",
+        "reasoning": "The load_config method performs interpolation via _interpolate_env_vars before validation via _validate_config. Type coercion in _coerce_types runs before validation, converting string '8080' to int 8080."
+      },
+      {
+        "specId": "SPEC-047",
+        "status": "satisfied",
+        "reasoning": "The regex pattern [A-Z_][A-Z0-9_]* has no length limit. Very long variable names matching the pattern will be processed correctly."
+      },
+      {
+        "specId": "SPEC-048",
+        "status": "satisfied",
+        "reasoning": "The _coerce_value method checks if schema_type is 'number' and value is string, then converts using float/int. Given PORT='8080', schema expecting number, the string will be coerced to int 8080."
+      },
+      {
+        "specId": "SPEC-049",
+        "status": "satisfied",
+        "reasoning": "The _coerce_value method checks if schema_type is 'boolean' and value is string, then converts 'true'/'1'/'yes' to True and 'false'/'0'/'no' to False. DEBUG='true' will be coerced to True."
+      },
+      {
+        "specId": "SPEC-050",
+        "status": "satisfied",
+        "reasoning": "The _coerce_value method wraps type conversions in try-except blocks. If conversion fails (e.g., int('invalid')), it raises ConfigError with message indicating the path and expected type: f'Environment variable at \"{path}\" has invalid value for expected type: {schema_type}'"
+      }
+    ],
+    "satisfiedCount": 45,
+    "totalSpecs": 50,
+    "generatedAt": "2026-02-12T06:37:43.569Z",
+    "inputTokens": 12796,
+    "outputTokens": 7528
+  },
+  "totalInputTokens": 16903,
+  "totalOutputTokens": 15862,
+  "totalDurationMs": 224694
+}

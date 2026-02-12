@@ -1,0 +1,1360 @@
+{
+  "task": "Write a file upload handler that validates file types, enforces size limits, scans for malware signatures, and stores to S3-compatible storage",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write a file upload handler that validates file types, enforces size limits, scans for malware signatures, and stores to S3-compatible storage",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "security",
+        "severity": "critical",
+        "description": "File upload must reject files with executable extensions (.exe, .bat, .sh, .cmd, .com, .ps1, .scr, .msi, .dll)",
+        "assertion": "upload_file(file_with_extension('.exe')) raises SecurityError with message containing 'executable file type not allowed'",
+        "rationale": "Prevents uploading malicious executables that could compromise the system or be distributed to users"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "security",
+        "severity": "critical",
+        "description": "File validation must check actual file content (magic bytes), not just the extension",
+        "assertion": "upload_file(executable_renamed_as_jpg) raises SecurityError even though filename ends with '.jpg'",
+        "rationale": "Attackers can trivially rename malicious files to bypass extension-only checks"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must enforce maximum file size limit and reject oversized files before loading into memory",
+        "assertion": "upload_file(file_of_size='101MB', size_limit='100MB') raises FileSizeError without consuming more than 100MB memory",
+        "rationale": "Prevents denial-of-service attacks via memory exhaustion and ensures storage quotas"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must detect and reject files containing common malware signatures (e.g., EICAR test string)",
+        "assertion": "upload_file(file_containing_eicar_signature) raises MalwareDetectedError with signature details",
+        "rationale": "Prevents distribution of known malware through the upload system"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Successfully uploads valid file to S3-compatible storage and returns storage URL/key",
+        "assertion": "result = upload_file(valid_image_file); result.success == True and result.url.startswith('s3://') or result.url.startswith('https://')",
+        "rationale": "Core functionality - must successfully store valid files"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "security",
+        "severity": "critical",
+        "description": "Sanitizes filename to prevent path traversal attacks (e.g., '../../../etc/passwd')",
+        "assertion": "upload_file(file_with_name='../../../etc/passwd.txt').stored_filename does not contain '..' or '/'",
+        "rationale": "Prevents attackers from writing files to arbitrary filesystem locations"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "Rejects None/null file input with appropriate error",
+        "assertion": "upload_file(None) raises ValueError with message containing 'file cannot be None'",
+        "rationale": "Prevents null pointer errors and unexpected crashes"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Handles S3 connection failures gracefully without losing file data",
+        "assertion": "With S3 unavailable, upload_file(valid_file) raises StorageError and does not corrupt or lose the original file",
+        "rationale": "Ensures reliability and prevents data loss during storage failures"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "security",
+        "severity": "high",
+        "description": "Generates unique storage keys to prevent overwriting existing files",
+        "assertion": "upload_file(file1) and upload_file(file2_same_name) result in different storage keys",
+        "rationale": "Prevents accidental or malicious overwriting of existing user files"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "security",
+        "severity": "high",
+        "description": "Validates that allowed file types whitelist is explicitly configured",
+        "assertion": "upload_file(file) without configured allowed_types raises ConfigurationError",
+        "rationale": "Fail-secure principle - should not default to allowing all file types"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Handles zero-byte (empty) files appropriately",
+        "assertion": "upload_file(empty_file_0_bytes) raises ValidationError with message about empty file",
+        "rationale": "Empty files are usually unintentional and may indicate upload errors"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "security",
+        "severity": "high",
+        "description": "Rejects files with double extensions commonly used to deceive users (e.g., .jpg.exe)",
+        "assertion": "upload_file(file_named='image.jpg.exe') raises SecurityError",
+        "rationale": "Double extensions are a common social engineering technique to disguise malicious files"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Preserves file content integrity during upload (no corruption)",
+        "assertion": "uploaded_file_hash = upload_and_download(file); uploaded_file_hash == original_file_hash",
+        "rationale": "Ensures data integrity - uploaded file must exactly match original"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "security",
+        "severity": "high",
+        "description": "Limits filename length to prevent buffer overflow or filesystem issues",
+        "assertion": "upload_file(file_with_255_char_name) succeeds but upload_file(file_with_300_char_name) raises ValidationError",
+        "rationale": "Extremely long filenames can cause filesystem errors or buffer overflows"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Validates S3 credentials are configured before attempting upload",
+        "assertion": "upload_file(valid_file) with missing S3_ACCESS_KEY raises ConfigurationError before attempting S3 connection",
+        "rationale": "Fail fast with clear error rather than cryptic connection failures"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "security",
+        "severity": "high",
+        "description": "Detects and rejects ZIP bombs (highly compressed malicious archives)",
+        "assertion": "upload_file(zip_bomb_42KB_expands_to_4.5PB) raises MalwareDetectedError with 'suspicious compression ratio' message",
+        "rationale": "ZIP bombs can exhaust disk space and memory when decompressed"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Accepts file-like objects (BytesIO, file handles) not just filesystem paths",
+        "assertion": "upload_file(io.BytesIO(b'content')).success == True",
+        "rationale": "Flexibility for in-memory files, stream uploads, and testing"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Handles files exactly at the size limit boundary",
+        "assertion": "upload_file(file_exactly_100MB, size_limit='100MB').success == True",
+        "rationale": "Off-by-one errors are common in size validation"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Returns structured result with success status, storage location, file metadata",
+        "assertion": "result = upload_file(valid_file); hasattr(result, 'success') and hasattr(result, 'url') and hasattr(result, 'size') and hasattr(result, 'content_type')",
+        "rationale": "Caller needs comprehensive information about upload outcome"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "security",
+        "severity": "high",
+        "description": "Scans for embedded scripts in document files (SVG, HTML, PDF with JavaScript)",
+        "assertion": "upload_file(svg_with_embedded_javascript) raises SecurityError with 'embedded script detected'",
+        "rationale": "SVG and other documents can contain executable code that poses XSS risks"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Streams large files to S3 without loading entire file into memory",
+        "assertion": "upload_file(file_500MB) completes with peak memory usage < 100MB",
+        "rationale": "Prevents memory exhaustion when handling large files"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Handles filenames with Unicode characters correctly",
+        "assertion": "upload_file(file_named='文档.pdf').stored_filename preserves or safely encodes Unicode",
+        "rationale": "International users have non-ASCII filenames that must be handled correctly"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "security",
+        "severity": "medium",
+        "description": "Removes or sanitizes EXIF metadata that may contain sensitive location/device info",
+        "assertion": "uploaded_image = upload_file(image_with_gps_exif); downloaded_image_has_no_gps_data",
+        "rationale": "EXIF data can leak sensitive user location and device information"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Detects and properly handles MIME type vs extension mismatches",
+        "assertion": "upload_file(pdf_file_named='document.jpg') raises ValidationError with 'MIME type mismatch'",
+        "rationale": "Ensures file type integrity and prevents confusion or security issues"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Provides detailed error messages that don't expose sensitive system information",
+        "assertion": "upload_file(invalid_file).error_message does not contain filesystem paths, credentials, or stack traces",
+        "rationale": "Error messages should be helpful but not leak security-sensitive details"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Handles files with no extension gracefully",
+        "assertion": "upload_file(file_named='README', content_type='text/plain').success == True",
+        "rationale": "Some valid files lack extensions (Unix tradition, mobile photos)"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Sets appropriate S3 object metadata (content-type, content-disposition)",
+        "assertion": "s3_object = upload_file(image_png); s3_object.content_type == 'image/png' and s3_object.content_disposition is not None",
+        "rationale": "Proper metadata ensures files are served correctly by browsers"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "security",
+        "severity": "medium",
+        "description": "Validates that file content matches declared content-type header",
+        "assertion": "upload_file(file_with_content_type='image/jpeg', actual_content=pdf_bytes) raises ValidationError",
+        "rationale": "Prevents content-type spoofing attacks"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Completes malware scanning within reasonable time bounds (e.g., < 5 seconds for 10MB file)",
+        "assertion": "time_taken = upload_file(valid_10MB_file); time_taken < 5.0 seconds",
+        "rationale": "Long scan times degrade user experience and may indicate inefficient scanning"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Handles concurrent uploads of same filename without race conditions",
+        "assertion": "results = parallel_upload([same_filename] * 10); all unique storage keys in results",
+        "rationale": "Concurrent users may upload files with identical names simultaneously"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Size limit parameter accepts string formats ('10MB', '1GB') and integer bytes",
+        "assertion": "upload_file(file, size_limit='10MB').success and upload_file(file, size_limit=10485760).success",
+        "rationale": "User-friendly size specifications improve API usability"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Cleans up temporary files on both success and failure",
+        "assertion": "upload_file(file_causing_error); no temporary files remain in temp directory",
+        "rationale": "Prevents disk space leaks from accumulated temporary files"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "security",
+        "severity": "low",
+        "description": "Generates cryptographically secure random storage keys (not predictable)",
+        "assertion": "keys = [upload_file(file).key for _ in range(100)]; all keys unique and no discernible pattern",
+        "rationale": "Predictable keys could allow unauthorized access to files"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Supports configurable S3 bucket and region",
+        "assertion": "upload_file(file, bucket='custom-bucket', region='eu-west-1').s3_location contains 'custom-bucket' and 'eu-west-1'",
+        "rationale": "Flexibility for multi-region deployments and different storage backends"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "performance",
+        "severity": "low",
+        "description": "Supports multipart upload for files larger than threshold (e.g., 100MB)",
+        "assertion": "upload_file(file_200MB) uses S3 multipart upload API",
+        "rationale": "Multipart uploads are more reliable and resumable for large files"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Handles whitespace-only filenames",
+        "assertion": "upload_file(file_named='   .txt') raises ValidationError with 'invalid filename'",
+        "rationale": "Whitespace-only names cause filesystem and UI issues"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Supports dry-run mode that validates without actually uploading",
+        "assertion": "result = upload_file(file, dry_run=True); result.would_succeed == True and file not in S3",
+        "rationale": "Useful for testing and pre-flight validation"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "security",
+        "severity": "low",
+        "description": "Logs security-relevant events (malware detection, rejected files) for audit trail",
+        "assertion": "upload_file(malware_file); audit_log contains entry with timestamp, filename, rejection_reason, user_id",
+        "rationale": "Security auditing and incident response require comprehensive logs"
+      }
+    ],
+    "totalSpecs": 38,
+    "synthesizedAt": "2026-02-12T06:46:16.691Z",
+    "inputTokens": 595,
+    "outputTokens": 4116
+  },
+  "constraintSet": {
+    "task": "Write a file upload handler that validates file types, enforces size limits, scans for malware signatures, and stores to S3-compatible storage",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Check file/directory existence before operations",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must",
+        "description": "Handle file operation errors (ENOENT, EACCES, etc.)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Include cache invalidation or TTL mechanism",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never allow unbounded cache growth without eviction policy",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must-not",
+        "description": "Must not validate file types by extension alone. Always verify actual file content using magic bytes/MIME detection before trusting the filename extension.",
+        "pattern": "# BAD: if filename.endswith('.jpg'): allow()\n# GOOD: import magic; mime = magic.from_buffer(file_content, mime=True)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Must check file size limit by reading the content-length header or streaming in chunks, rejecting oversized files before loading the entire content into memory.",
+        "pattern": "# Read in chunks, track cumulative size, raise FileSizeError when limit exceeded",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must-not",
+        "description": "Must not trust user-supplied filenames for storage paths. Sanitize by removing path traversal sequences (.., /, \\) and generate separate storage keys.",
+        "pattern": "# BAD: s3_key = user_filename\n# GOOD: s3_key = uuid4().hex + secure_extension",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must scan file content for malware signatures (including EICAR test string) before upload, raising MalwareDetectedError with signature details if detected.",
+        "pattern": "if b'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR' in file_content: raise MalwareDetectedError('EICAR signature detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must reject executable file types by checking both extension blacklist (.exe, .bat, .sh, .cmd, .com, .ps1, .scr, .msi, .dll) and MIME type against executable patterns.",
+        "pattern": "BLOCKED_EXTENSIONS = {'.exe', '.bat', '.sh', '.cmd', '.com', '.ps1', '.scr', '.msi', '.dll'}\nBLOCKED_MIMES = {'application/x-executable', 'application/x-msdownload'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must-not",
+        "description": "Must not allow double extensions that hide executable types. Parse filename to detect patterns like .jpg.exe and reject with SecurityError.",
+        "pattern": "# Check: if any(filename.lower().endswith(ext + blocked) for ext in ALLOWED for blocked in BLOCKED_EXTENSIONS)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Must validate None/null input explicitly at function entry, raising ValueError before any processing occurs.",
+        "pattern": "if file is None: raise ValueError('file cannot be None')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must detect ZIP bombs by checking compression ratio before full extraction. Reject if compressed size vs uncompressed size ratio exceeds threshold (e.g., 100:1).",
+        "pattern": "if uncompressed_size / compressed_size > 100: raise MalwareDetectedError('suspicious compression ratio detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must generate unique storage keys using cryptographically secure random values (uuid4 or secrets module) combined with sanitized extension to prevent collisions and overwrites.",
+        "pattern": "import uuid; storage_key = f'{uuid.uuid4().hex}{safe_extension}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must require explicit configuration of allowed_types whitelist and S3 credentials, raising ConfigurationError if missing before attempting any file operations.",
+        "pattern": "if not config.allowed_types: raise ConfigurationError('allowed_types must be configured')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must reject zero-byte empty files with ValidationError indicating the file is empty.",
+        "pattern": "if file_size == 0: raise ValidationError('file is empty (0 bytes)')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must handle files exactly at size limit boundary as valid (use <= comparison, not < for size validation).",
+        "pattern": "if file_size <= size_limit: allow() # Include exact boundary",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must return structured result object with attributes: success (bool), url (str), size (int), content_type (str), and key (str).",
+        "pattern": "@dataclass\nclass UploadResult:\n    success: bool\n    url: str\n    size: int\n    content_type: str\n    key: str",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Must scan SVG, HTML, and PDF files for embedded scripts (JavaScript, event handlers) using regex or parser, rejecting with SecurityError if found.",
+        "pattern": "if mime == 'image/svg+xml' and re.search(r'<script|on\\w+\\s*=', content): raise SecurityError('embedded script detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must stream large files to S3 in chunks without loading entire content into memory. Use streaming upload with chunk size (e.g., 8KB-64KB).",
+        "pattern": "# Use boto3's upload_fileobj with file-like object or stream in chunks",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must accept file-like objects (BytesIO, file handles) not just paths. Check for read() method rather than isinstance(str).",
+        "pattern": "if hasattr(file, 'read'): content = file.read() # Support file-like objects",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must validate MIME type matches file extension and actual content. Reject mismatches (e.g., PDF bytes with .jpg extension) with ValidationError.",
+        "pattern": "detected_mime = magic.from_buffer(content, mime=True)\nif detected_mime != expected_mime: raise ValidationError(f'MIME type mismatch: {detected_mime} vs {expected_mime}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must-not",
+        "description": "Must not expose sensitive information in error messages. Strip filesystem paths, credentials, and full stack traces from user-facing errors.",
+        "pattern": "# BAD: raise StorageError(f'Failed to connect to {s3_endpoint} with key {access_key}')\n# GOOD: raise StorageError('Storage service unavailable')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must enforce maximum filename length (e.g., 255 characters) to prevent filesystem issues, raising ValidationError for excessive lengths.",
+        "pattern": "if len(filename) > 255: raise ValidationError('filename exceeds maximum length of 255 characters')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Must handle S3 connection failures by catching client exceptions and raising StorageError without corrupting original file data.",
+        "pattern": "try:\n    s3_client.upload_fileobj(file)\nexcept ClientError as e:\n    raise StorageError('Failed to upload to storage') from e",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must preserve file content integrity by computing hash before upload and verifying after download, or using S3's ETag validation.",
+        "pattern": "import hashlib\noriginal_hash = hashlib.sha256(content).hexdigest()\n# After upload: verify s3_object.e_tag matches",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must handle Unicode filenames by either preserving them with proper UTF-8 encoding or sanitizing to ASCII-safe equivalents.",
+        "pattern": "safe_filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must strip or sanitize EXIF metadata containing sensitive information (GPS, device info) from image files before upload.",
+        "pattern": "from PIL import Image\nimg = Image.open(file)\ndata = list(img.getdata())\nimg_clean = Image.new(img.mode, img.size)\nimg_clean.putdata(data)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Must validate content-type header matches actual file content, rejecting mismatches where declared type differs from magic byte detection.",
+        "pattern": "if declared_content_type != magic.from_buffer(content, mime=True): raise ValidationError('Content-Type header does not match file content')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must set appropriate S3 object metadata including content-type and content-disposition headers during upload.",
+        "pattern": "s3_client.upload_fileobj(file, bucket, key, ExtraArgs={'ContentType': mime_type, 'ContentDisposition': 'attachment'})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Must clean up any temporary files in both success and failure paths using try/finally or context managers.",
+        "pattern": "temp_file = None\ntry:\n    temp_file = tempfile.NamedTemporaryFile(delete=False)\n    # process\nfinally:\n    if temp_file: os.unlink(temp_file.name)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must handle files with no extension by relying on MIME detection rather than requiring extension presence.",
+        "pattern": "if not extension: mime_type = magic.from_buffer(content, mime=True) # Detect from content",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must reject whitespace-only filenames by stripping and checking for empty result, raising ValidationError.",
+        "pattern": "if not filename.strip(): raise ValidationError('invalid filename: cannot be empty or whitespace-only')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Must parse size limit parameter supporting both string formats ('10MB', '1GB') and integer bytes, converting to consistent internal representation.",
+        "pattern": "def parse_size(limit):\n    if isinstance(limit, int): return limit\n    match = re.match(r'(\\d+)(MB|GB|KB)', limit)\n    return int(match[1]) * {'KB': 1024, 'MB': 1024**2, 'GB': 1024**3}[match[2]]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must",
+        "description": "Must use S3 multipart upload for files exceeding threshold (e.g., 100MB) to handle large files efficiently.",
+        "pattern": "if file_size > 100 * 1024 * 1024:\n    s3_client.upload_fileobj(file, bucket, key, Config=TransferConfig(multipart_threshold=100*1024*1024))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-037",
+        "type": "must",
+        "description": "Must log security-relevant events (malware detection, rejected files, validation failures) with timestamp, filename, reason, and user context for audit trails.",
+        "pattern": "logger.warning('Security: Malware detected', extra={'timestamp': now(), 'filename': filename, 'reason': 'EICAR signature', 'user_id': user_id})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-038",
+        "type": "must",
+        "description": "Must support dry-run mode that performs all validations without actual S3 upload, returning would_succeed status.",
+        "pattern": "if dry_run:\n    # Perform all validations\n    return UploadResult(would_succeed=True, url=None)\n# else: proceed with upload",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 38,
+    "generatedAt": "2026-02-12T06:47:04.977Z",
+    "inputTokens": 2677,
+    "outputTokens": 2914
+  },
+  "generatedCode": {
+    "task": "Write a file upload handler that validates file types, enforces size limits, scans for malware signatures, and stores to S3-compatible storage",
+    "code": "import hashlib\nimport io\nimport logging\nimport mimetypes\nimport os\nimport re\nimport secrets\nimport tempfile\nimport unicodedata\nfrom dataclasses import dataclass\nfrom pathlib import Path\nfrom typing import Optional, Union, List, Set, Dict, Any, BinaryIO\nimport uuid\n\ntry:\n    import magic\nexcept ImportError:\n    magic = None\n\ntry:\n    import boto3\n    from botocore.exceptions import ClientError\n    from boto3.s3.transfer import TransferConfig\nexcept ImportError:\n    boto3 = None\n    ClientError = Exception\n    TransferConfig = None\n\ntry:\n    from PIL import Image\nexcept ImportError:\n    Image = None\n\n\nlogger = logging.getLogger(__name__)\n\n\nclass SecurityError(Exception):\n    \"\"\"Raised when security validation fails.\"\"\"\n    pass\n\n\nclass FileSizeError(Exception):\n    \"\"\"Raised when file exceeds size limit.\"\"\"\n    pass\n\n\nclass MalwareDetectedError(Exception):\n    \"\"\"Raised when malware signature is detected.\"\"\"\n    pass\n\n\nclass ValidationError(Exception):\n    \"\"\"Raised when file validation fails.\"\"\"\n    pass\n\n\nclass ConfigurationError(Exception):\n    \"\"\"Raised when required configuration is missing.\"\"\"\n    pass\n\n\nclass StorageError(Exception):\n    \"\"\"Raised when storage operation fails.\"\"\"\n    pass\n\n\n@dataclass\nclass UploadResult:\n    \"\"\"Result of file upload operation.\"\"\"\n    success: bool\n    url: Optional[str] = None\n    size: Optional[int] = None\n    content_type: Optional[str] = None\n    key: Optional[str] = None\n    would_succeed: Optional[bool] = None\n\n\nclass FileUploadHandler:\n    \"\"\"Handles secure file uploads with validation and malware scanning.\"\"\"\n    \n    BLOCKED_EXTENSIONS: Set[str] = {\n        '.exe', '.bat', '.sh', '.cmd', '.com', \n        '.ps1', '.scr', '.msi', '.dll'\n    }\n    \n    BLOCKED_MIMES: Set[str] = {\n        'application/x-executable',\n        'application/x-msdownload',\n        'application/x-msdos-program',\n        'application/x-sh',\n        'application/x-shellscript'\n    }\n    \n    EICAR_SIGNATURE: bytes = b'X5O!P%@AP[4\\\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'\n    \n    MALWARE_SIGNATURES: List[bytes] = [\n        EICAR_SIGNATURE,\n        b'X5O!P%@AP[4\\\\PZX54(P^)7CC)7}$EICAR',\n    ]\n    \n    SCRIPT_PATTERNS: List[re.Pattern] = [\n        re.compile(rb'<script[\\s>]', re.IGNORECASE),\n        re.compile(rb'on\\w+\\s*=', re.IGNORECASE),\n        re.compile(rb'javascript:', re.IGNORECASE),\n        re.compile(rb'/JavaScript', re.IGNORECASE),\n        re.compile(rb'/JS', re.IGNORECASE),\n    ]\n    \n    MAX_FILENAME_LENGTH: int = 255\n    CHUNK_SIZE: int = 65536\n    MULTIPART_THRESHOLD: int = 100 * 1024 * 1024\n    MALWARE_SCAN_TIMEOUT: float = 5.0\n    MAX_COMPRESSION_RATIO: float = 100.0\n    \n    def __init__(\n        self,\n        allowed_types: Optional[List[str]] = None,\n        size_limit: Union[int, str] = '100MB',\n        s3_access_key: Optional[str] = None,\n        s3_secret_key: Optional[str] = None,\n        s3_endpoint: Optional[str] = None,\n        s3_bucket: Optional[str] = None,\n        s3_region: Optional[str] = 'us-east-1',\n        user_id: Optional[str] = None\n    ):\n        \"\"\"Initialize file upload handler with configuration.\n        \n        Args:\n            allowed_types: List of allowed MIME types (whitelist)\n            size_limit: Maximum file size (e.g., '100MB' or bytes as int)\n            s3_access_key: S3 access key\n            s3_secret_key: S3 secret key\n            s3_endpoint: S3 endpoint URL\n            s3_bucket: S3 bucket name\n            s3_region: S3 region\n            user_id: User identifier for audit logging\n        \"\"\"\n        if not allowed_types:\n            raise ConfigurationError('allowed_types must be configured')\n        \n        if not s3_access_key or not s3_secret_key:\n            raise ConfigurationError('S3 credentials (s3_access_key and s3_secret_key) must be configured')\n        \n        if not s3_bucket:\n            raise ConfigurationError('s3_bucket must be configured')\n        \n        self.allowed_types: Set[str] = set(allowed_types)\n        self.size_limit: int = self._parse_size_limit(size_limit)\n        self.s3_access_key: str = s3_access_key\n        self.s3_secret_key: str = s3_secret_key\n        self.s3_endpoint: Optional[str] = s3_endpoint\n        self.s3_bucket: str = s3_bucket\n        self.s3_region: str = s3_region\n        self.user_id: Optional[str] = user_id\n        \n        if not boto3:\n            raise ConfigurationError('boto3 library is required for S3 operations')\n        \n        self.s3_client = boto3.client(\n            's3',\n            aws_access_key_id=s3_access_key,\n            aws_secret_access_key=s3_secret_key,\n            endpoint_url=s3_endpoint,\n            region_name=s3_region\n        )\n    \n    def _parse_size_limit(self, limit: Union[int, str]) -> int:\n        \"\"\"Parse size limit from string or int to bytes.\n        \n        Args:\n            limit: Size limit as string ('10MB', '1GB') or integer bytes\n            \n        Returns:\n            Size limit in bytes\n        \"\"\"\n        if isinstance(limit, int):\n            return limit\n        \n        match = re.match(r'^(\\d+)(KB|MB|GB)$', limit.upper())\n        if not match:\n            raise ValidationError(f'Invalid size limit format: {limit}')\n        \n        value = int(match.group(1))\n        unit = match.group(2)\n        \n        multipliers = {\n            'KB': 1024,\n            'MB': 1024 ** 2,\n            'GB': 1024 ** 3\n        }\n        \n        return value * multipliers[unit]\n    \n    def _sanitize_filename(self, filename: str) -> str:\n        \"\"\"Sanitize filename to prevent path traversal and other attacks.\n        \n        Args:\n            filename: Original filename\n            \n        Returns:\n            Sanitized filename\n        \"\"\"\n        if not filename or not filename.strip():\n            raise ValidationError('invalid filename: cannot be empty or whitespace-only')\n        \n        filename = filename.strip()\n        \n        if len(filename) > self.MAX_FILENAME_LENGTH:\n            raise ValidationError(f'filename exceeds maximum length of {self.MAX_FILENAME_LENGTH} characters')\n        \n        filename = os.path.basename(filename)\n        filename = filename.replace('..', '')\n        filename = filename.replace('/', '')\n        filename = filename.replace('\\\\', '')\n        \n        try:\n            filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')\n        except Exception:\n            pass\n        \n        if not filename or not filename.strip():\n            raise ValidationError('invalid filename after sanitization')\n        \n        return filename\n    \n    def _get_file_extension(self, filename: str) -> str:\n        \"\"\"Extract file extension from filename.\n        \n        Args:\n            filename: Filename\n            \n        Returns:\n            File extension (lowercase, including dot)\n        \"\"\"\n        if '.' in filename:\n            return '.' + filename.rsplit('.', 1)[-1].lower()\n        return ''\n    \n    def _check_double_extension(self, filename: str) -> None:\n        \"\"\"Check for dangerous double extensions.\n        \n        Args:\n            filename: Filename to check\n            \n        Raises:\n            SecurityError: If double extension detected\n        \"\"\"\n        filename_lower = filename.lower()\n        \n        for blocked_ext in self.BLOCKED_EXTENSIONS:\n            if blocked_ext in filename_lower and not filename_lower.endswith(blocked_ext):\n                parts = filename_lower.split('.')\n                if len(parts) > 2:\n                    for i in range(len(parts) - 1):\n                        potential_ext = '.' + parts[i + 1]\n                        if potential_ext in self.BLOCKED_EXTENSIONS:\n                            raise SecurityError(f'dangerous double extension detected: {filename}')\n    \n    def _validate_extension(self, filename: str) -> None:\n        \"\"\"Validate file extension against blacklist.\n        \n        Args:\n            filename: Filename to validate\n            \n        Raises:\n            SecurityError: If extension is blocked\n        \"\"\"\n        extension = self._get_file_extension(filename)\n        \n        if extension in self.BLOCKED_EXTENSIONS:\n            raise SecurityError(f'executable file type not allowed: {extension}')\n    \n    def _detect_mime_type(self, content: bytes, filename: str) -> str:\n        \"\"\"Detect MIME type from file content.\n        \n        Args:\n            content: File content\n            filename: Original filename\n            \n        Returns:\n            Detected MIME type\n        \"\"\"\n        if magic:\n            try:\n                mime_type = magic.from_buffer(content, mime=True)\n                return mime_type\n            except Exception as e:\n                logger.warning(f'Failed to detect MIME type with magic: {e}')\n        \n        mime_type, _ = mimetypes.guess_type(filename)\n        return mime_type or 'application/octet-stream'\n    \n    def _validate_mime_type(self, mime_type: str, content: bytes, filename: str) -> None:\n        \"\"\"Validate MIME type against whitelist and blacklist.\n        \n        Args:\n            mime_type: Detected MIME type\n            content: File content\n            filename: Original filename\n            \n        Raises:\n            SecurityError: If MIME type is blocked\n            ValidationError: If MIME type not in whitelist or mismatched\n        \"\"\"\n        if mime_type in self.BLOCKED_MIMES:\n            raise SecurityError(f'blocked MIME type: {mime_type}')\n        \n        if mime_type not in self.allowed_types:\n            raise ValidationError(f'MIME type not allowed: {mime_type}')\n        \n        guessed_mime, _ = mimetypes.guess_type(filename)\n        if guessed_mime and guessed_mime != mime_type:\n            logger.warning(f'MIME type mismatch: detected={mime_type}, expected={guessed_mime}')\n    \n    def _scan_for_malware(self, content: bytes, filename: str) -> None:\n        \"\"\"Scan file content for malware signatures.\n        \n        Args:\n            content: File content\n            filename: Original filename\n            \n        Raises:\n            MalwareDetectedError: If malware signature detected\n        \"\"\"\n        for signature in self.MALWARE_SIGNATURES:\n            if signature in content:\n                self._log_security_event(\n                    'malware_detected',\n                    filename=filename,\n                    reason='EICAR signature detected'\n                )\n                raise MalwareDetectedError('EICAR signature detected')\n    \n    def _check_embedded_scripts(self, content: bytes, mime_type: str, filename: str) -> None:\n        \"\"\"Check for embedded scripts in document files.\n        \n        Args:\n            content: File content\n            mime_type: MIME type\n            filename: Original filename\n            \n        Raises:\n            SecurityError: If embedded script detected\n        \"\"\"\n        if mime_type in ['image/svg+xml', 'text/html', 'application/pdf']:\n            for pattern in self.SCRIPT_PATTERNS:\n                if pattern.search(content):\n                    self._log_security_event(\n                        'embedded_script_detected',\n                        filename=filename,\n                        reason=f'embedded script detected in {mime_type}'\n                    )\n                    raise SecurityError('embedded script detected')\n    \n    def _check_zip_bomb(self, content: bytes, mime_type: str, filename: str) -> None:\n        \"\"\"Check for ZIP bomb attacks.\n        \n        Args:\n            content: File content\n            mime_type: MIME type\n            filename: Original filename\n            \n        Raises:\n            MalwareDetectedError: If suspicious compression ratio detected\n        \"\"\"\n        if mime_type in ['application/zip', 'application/x-zip-compressed', \n                         'application/gzip', 'application/x-gzip']:\n            compressed_size = len(content)\n            \n            try:\n                import zipfile\n                import gzip\n                \n                if mime_type.startswith('application/zip'):\n                    with io.BytesIO(content) as f:\n                        with zipfile.ZipFile(f) as zf:\n                            uncompressed_size = sum(info.file_size for info in zf.infolist())\n                            \n                            if compressed_size > 0:\n                                ratio = uncompressed_size / compressed_size\n                                if ratio > self.MAX_COMPRESSION_RATIO:\n                                    self._log_security_event(\n                                        'zip_bomb_detected',\n                                        filename=filename,\n                                        reason=f'suspicious compression ratio: {ratio:.1f}:1'\n                                    )\n                                    raise MalwareDetectedError('suspicious compression ratio detected')\n                \n            except (zipfile.BadZipFile, OSError, RuntimeError) as e:\n                logger.warning(f'Failed to analyze archive: {e}')\n    \n    def _strip_exif_metadata(self, content: bytes, mime_type: str) -> bytes:\n        \"\"\"Strip EXIF metadata from images.\n        \n        Args:\n            content: Image content\n            mime_type: MIME type\n            \n        Returns:\n            Image content without EXIF data\n        \"\"\"\n        if not Image:\n            return content\n        \n        if mime_type.startswith('image/'):\n            try:\n                with io.BytesIO(content) as f:\n                    img = Image.open(f)\n                    \n                    data = list(img.getdata())\n                    img_clean = Image.new(img.mode, img.size)\n                    img_clean.putdata(data)\n                    \n                    output = io.BytesIO()\n                    img_clean.save(output, format=img.format or 'PNG')\n                    return output.getvalue()\n                    \n            except Exception as e:\n                logger.warning(f'Failed to strip EXIF data: {e}')\n                return content\n        \n        return content\n    \n    def _generate_storage_key(self, filename: str) -> str:\n        \"\"\"Generate unique storage key.\n        \n        Args:\n            filename: Original filename\n            \n        Returns:\n            Unique storage key\n        \"\"\"\n        extension = self._get_file_extension(filename)\n        safe_extension = extension if extension else ''\n        \n        unique_id = uuid.uuid4().hex\n        storage_key = f'{unique_id}{safe_extension}'\n        \n        return storage_key\n    \n    def _compute_hash(self, content: bytes) -> str:\n        \"\"\"Compute SHA-256 hash of content.\n        \n        Args:\n            content: File content\n            \n        Returns:\n            Hex digest of hash\n        \"\"\"\n        return hashlib.sha256(content).hexdigest()\n    \n    def _read_file_content(\n        self,\n        file: Union[str, bytes, BinaryIO],\n        filename: Optional[str] = None\n    ) -> tuple[bytes, str]:\n        \"\"\"Read file content with size validation.\n        \n        Args:\n            file: File path, bytes, or file-like object\n            filename: Original filename (if file is bytes or file-like)\n            \n        Returns:\n            Tuple of (content, filename)\n            \n        Raises:\n            FileSizeError: If file exceeds size limit\n            ValidationError: If file is empty\n        \"\"\"\n        content = b''\n        cumulative_size = 0\n        \n        if isinstance(file, bytes):\n            content = file\n            cumulative_size = len(content)\n            if not filename:\n                filename = 'uploaded_file'\n        \n        elif hasattr(file, 'read'):\n            chunks = []\n            while True:\n                chunk = file.read(self.CHUNK_SIZE)\n                if not chunk:\n                    break\n                \n                cumulative_size += len(chunk)\n                if cumulative_size > self.size_limit:\n                    raise FileSizeError(f'file size exceeds limit of {self.size_limit} bytes')\n                \n                chunks.append(chunk)\n            \n            content = b''.join(chunks)\n            \n            if hasattr(file, 'name') and not filename:\n                filename = os.path.basename(file.name)\n            elif not filename:\n                filename = 'uploaded_file'\n        \n        elif isinstance(file, (str, Path)):\n            file_path = Path(file)\n            \n            if not file_path.exists():\n                raise ValidationError(f'file does not exist: {file_path}')\n            \n            if not file_path.is_file():\n                raise ValidationError(f'not a file: {file_path}')\n            \n            file_size = file_path.stat().st_size\n            \n            if file_size > self.size_limit:\n                raise FileSizeError(f'file size exceeds limit of {self.size_limit} bytes')\n            \n            try:\n                with open(file_path, 'rb') as f:\n                    content = f.read()\n            except (OSError, IOError) as e:\n                raise ValidationError(f'failed to read file: {e}')\n            \n            filename = file_path.name\n        \n        else:\n            raise ValidationError(f'unsupported file type: {type(file)}')\n        \n        if cumulative_size == 0 or len(content) == 0:\n            raise ValidationError('file is empty (0 bytes)')\n        \n        if cumulative_size <= self.size_limit:\n            pass\n        else:\n            raise FileSizeError(f'file size exceeds limit of {self.size_limit} bytes')\n        \n        return content, filename\n    \n    def _upload_to_s3(\n        self,\n        content: bytes,\n        storage_key: str,\n        mime_type: str,\n        filename: str\n    ) -> str:\n        \"\"\"Upload file to S3.\n        \n        Args:\n            content: File content\n            storage_key: Storage key\n            mime_type: MIME type\n            filename: Original filename\n            \n        Returns:\n            S3 URL\n            \n        Raises:\n            StorageError: If upload fails\n        \"\"\"\n        try:\n            file_obj = io.BytesIO(content)\n            \n            extra_args = {\n                'ContentType': mime_type,\n                'ContentDisposition': f'attachment; filename=\"{filename}\"'\n            }\n            \n            if len(content) > self.MULTIPART_THRESHOLD:\n                transfer_config = TransferConfig(\n                    multipart_threshold=self.MULTIPART_THRESHOLD,\n                    multipart_chunksize=8 * 1024 * 1024\n                )\n                \n                self.s3_client.upload_fileobj(\n                    file_obj,\n                    self.s3_bucket,\n                    storage_key,\n                    ExtraArgs=extra_args,\n                    Config=transfer_config\n                )\n            else:\n                self.s3_client.upload_fileobj(\n                    file_obj,\n                    self.s3_bucket,\n                    storage_key,\n                    ExtraArgs=extra_args\n                )\n            \n            if self.s3_endpoint:\n                url = f'{self.s3_endpoint}/{self.s3_bucket}/{storage_key}'\n            else:\n                url = f'https://{self.s3_bucket}.s3.{self.s3_region}.amazonaws.com/{storage_key}'\n            \n            return url\n            \n        except ClientError as e:\n            logger.error(f'S3 upload failed: {e}')\n            raise StorageError('Storage service unavailable') from e\n        except Exception as e:\n            logger.error(f'Unexpected error during upload: {e}')\n            raise StorageError('Storage operation failed') from e\n    \n    def _log_security_event(\n        self,\n        event_type: str,\n        filename: str,\n        reason: str\n    ) -> None:\n        \"\"\"Log security-relevant events for audit trail.\n        \n        Args:\n            event_type: Type of security event\n            filename: Original filename\n            reason: Reason for event\n        \"\"\"\n        from datetime import datetime, timezone\n        \n        logger.warning(\n            f'Security: {event_type}',\n            extra={\n                'timestamp': datetime.now(timezone.utc).isoformat(),\n                'filename': filename,\n                'reason': reason,\n                'user_id': self.user_id,\n                'event_type': event_type\n            }\n        )\n    \n    def upload_file(\n        self,\n        file: Union[str, bytes, BinaryIO, None],\n        filename: Optional[str] = None,\n        dry_run: bool = False\n    ) -> UploadResult:\n        \"\"\"Upload file with validation and malware scanning.\n        \n        Args:\n            file: File to upload (path, bytes, or file-like object)\n            filename: Original filename (optional if file is path or has .name)\n            dry_run: If True, validate but don't actually upload\n            \n        Returns:\n            UploadResult with upload details\n            \n        Raises:\n            ValueError: If file is None\n            SecurityError: If security validation fails\n            ValidationError: If file validation fails\n            FileSizeError: If file exceeds size limit\n            MalwareDetectedError: If malware detected\n            StorageError: If storage operation fails\n        \"\"\"\n        temp_file = None\n        \n        try:\n            if file is None:\n                raise ValueError('file cannot be None')\n            \n            content, detected_filename = self._read_file_content(file, filename)\n            \n            filename = filename or detected_filename\n            sanitized_filename = self._sanitize_filename(filename)\n            \n            self._validate_extension(sanitized_filename)\n            self._check_double_extension(sanitized_filename)\n            \n            mime_type = self._detect_mime_type(content, sanitized_filename)\n            \n            self._validate_mime_type(mime_type, content, sanitized_filename)\n            \n            self._scan_for_malware(content, sanitized_filename)\n            \n            self._check_embedded_scripts(content, mime_type, sanitized_filename)\n            \n            self._check_zip_bomb(content, mime_type, sanitized_filename)\n            \n            content = self._strip_exif_metadata(content, mime_type)\n            \n            original_hash = self._compute_hash(content)\n            \n            if dry_run:\n                return UploadResult(\n                    success=False,\n                    would_succeed=True,\n                    url=None,\n                    size=len(content),\n                    content_type=mime_type,\n                    key=None\n                )\n            \n            storage_key = self._generate_storage_key(sanitized_filename)\n            \n            url = self._upload_to_s3(content, storage_key, mime_type, sanitized_filename)\n            \n            return UploadResult(\n                success=True,\n                url=url,\n                size=len(content),\n                content_type=mime_type,\n                key=storage_key\n            )\n            \n        except (SecurityError, ValidationError, FileSizeError, MalwareDetectedError, \n                StorageError, ConfigurationError, ValueError) as e:\n            if filename:\n                self._log_security_event(\n                    'file_rejected',\n                    filename=filename or 'unknown',\n                    reason=str(e)\n                )\n            raise\n            \n        finally:\n            if temp_file and os.path.exists(temp_file):\n                try:\n                    os.unlink(temp_file)\n                except Exception as e:\n                    logger.warning(f'Failed to cleanup temp file: {e}')\n\n\ndef upload_file(\n    file: Union[str, bytes, BinaryIO, None],\n    allowed_types: Optional[List[str]] = None,\n    size_limit: Union[int, str] = '100MB',\n    s3_access_key: Optional[str] = None,\n    s3_secret_key: Optional[str] = None,\n    s3_endpoint: Optional[str] = None,\n    s3_bucket: Optional[str] = None,\n    s3_region: str = 'us-east-1',\n    filename: Optional[str] = None,\n    dry_run: bool = False,\n    user_id: Optional[str] = None\n) -> UploadResult:\n    \"\"\"Upload file with validation and malware scanning.\n    \n    Args:\n        file: File to upload (path, bytes, or file-like object)\n        allowed_types: List of allowed MIME types\n        size_limit: Maximum file size (e.g., '100MB' or bytes as int)\n        s3_access_key: S3 access key\n        s3_secret_key: S3 secret key\n        s3_endpoint: S3 endpoint URL\n        s3_bucket: S3 bucket name\n        s3_region: S3 region\n        filename: Original filename (optional)\n        dry_run: If True, validate but don't actually upload\n        user_id: User identifier for audit logging\n        \n    Returns:\n        UploadResult with upload details\n    \"\"\"\n    handler = FileUploadHandler(\n        allowed_types=allowed_types,\n        size_limit=size_limit,\n        s3_access_key=s3_access_key,\n        s3_secret_key=s3_secret_key,\n        s3_endpoint=s3_endpoint,\n        s3_bucket=s3_bucket,\n        s3_region=s3_region,\n        user_id=user_id\n    )\n    \n    return handler.upload_file(file, filename=filename, dry_run=dry_run)",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "security",
+        "severity": "critical",
+        "description": "File upload must reject files with executable extensions (.exe, .bat, .sh, .cmd, .com, .ps1, .scr, .msi, .dll)",
+        "assertion": "upload_file(file_with_extension('.exe')) raises SecurityError with message containing 'executable file type not allowed'",
+        "rationale": "Prevents uploading malicious executables that could compromise the system or be distributed to users"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "security",
+        "severity": "critical",
+        "description": "File validation must check actual file content (magic bytes), not just the extension",
+        "assertion": "upload_file(executable_renamed_as_jpg) raises SecurityError even though filename ends with '.jpg'",
+        "rationale": "Attackers can trivially rename malicious files to bypass extension-only checks"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Must enforce maximum file size limit and reject oversized files before loading into memory",
+        "assertion": "upload_file(file_of_size='101MB', size_limit='100MB') raises FileSizeError without consuming more than 100MB memory",
+        "rationale": "Prevents denial-of-service attacks via memory exhaustion and ensures storage quotas"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "security",
+        "severity": "critical",
+        "description": "Must detect and reject files containing common malware signatures (e.g., EICAR test string)",
+        "assertion": "upload_file(file_containing_eicar_signature) raises MalwareDetectedError with signature details",
+        "rationale": "Prevents distribution of known malware through the upload system"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Successfully uploads valid file to S3-compatible storage and returns storage URL/key",
+        "assertion": "result = upload_file(valid_image_file); result.success == True and result.url.startswith('s3://') or result.url.startswith('https://')",
+        "rationale": "Core functionality - must successfully store valid files"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "security",
+        "severity": "critical",
+        "description": "Sanitizes filename to prevent path traversal attacks (e.g., '../../../etc/passwd')",
+        "assertion": "upload_file(file_with_name='../../../etc/passwd.txt').stored_filename does not contain '..' or '/'",
+        "rationale": "Prevents attackers from writing files to arbitrary filesystem locations"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "type-safety",
+        "severity": "critical",
+        "description": "Rejects None/null file input with appropriate error",
+        "assertion": "upload_file(None) raises ValueError with message containing 'file cannot be None'",
+        "rationale": "Prevents null pointer errors and unexpected crashes"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Handles S3 connection failures gracefully without losing file data",
+        "assertion": "With S3 unavailable, upload_file(valid_file) raises StorageError and does not corrupt or lose the original file",
+        "rationale": "Ensures reliability and prevents data loss during storage failures"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "security",
+        "severity": "high",
+        "description": "Generates unique storage keys to prevent overwriting existing files",
+        "assertion": "upload_file(file1) and upload_file(file2_same_name) result in different storage keys",
+        "rationale": "Prevents accidental or malicious overwriting of existing user files"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "security",
+        "severity": "high",
+        "description": "Validates that allowed file types whitelist is explicitly configured",
+        "assertion": "upload_file(file) without configured allowed_types raises ConfigurationError",
+        "rationale": "Fail-secure principle - should not default to allowing all file types"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Handles zero-byte (empty) files appropriately",
+        "assertion": "upload_file(empty_file_0_bytes) raises ValidationError with message about empty file",
+        "rationale": "Empty files are usually unintentional and may indicate upload errors"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "security",
+        "severity": "high",
+        "description": "Rejects files with double extensions commonly used to deceive users (e.g., .jpg.exe)",
+        "assertion": "upload_file(file_named='image.jpg.exe') raises SecurityError",
+        "rationale": "Double extensions are a common social engineering technique to disguise malicious files"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Preserves file content integrity during upload (no corruption)",
+        "assertion": "uploaded_file_hash = upload_and_download(file); uploaded_file_hash == original_file_hash",
+        "rationale": "Ensures data integrity - uploaded file must exactly match original"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "security",
+        "severity": "high",
+        "description": "Limits filename length to prevent buffer overflow or filesystem issues",
+        "assertion": "upload_file(file_with_255_char_name) succeeds but upload_file(file_with_300_char_name) raises ValidationError",
+        "rationale": "Extremely long filenames can cause filesystem errors or buffer overflows"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Validates S3 credentials are configured before attempting upload",
+        "assertion": "upload_file(valid_file) with missing S3_ACCESS_KEY raises ConfigurationError before attempting S3 connection",
+        "rationale": "Fail fast with clear error rather than cryptic connection failures"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "security",
+        "severity": "high",
+        "description": "Detects and rejects ZIP bombs (highly compressed malicious archives)",
+        "assertion": "upload_file(zip_bomb_42KB_expands_to_4.5PB) raises MalwareDetectedError with 'suspicious compression ratio' message",
+        "rationale": "ZIP bombs can exhaust disk space and memory when decompressed"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Accepts file-like objects (BytesIO, file handles) not just filesystem paths",
+        "assertion": "upload_file(io.BytesIO(b'content')).success == True",
+        "rationale": "Flexibility for in-memory files, stream uploads, and testing"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Handles files exactly at the size limit boundary",
+        "assertion": "upload_file(file_exactly_100MB, size_limit='100MB').success == True",
+        "rationale": "Off-by-one errors are common in size validation"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Returns structured result with success status, storage location, file metadata",
+        "assertion": "result = upload_file(valid_file); hasattr(result, 'success') and hasattr(result, 'url') and hasattr(result, 'size') and hasattr(result, 'content_type')",
+        "rationale": "Caller needs comprehensive information about upload outcome"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "security",
+        "severity": "high",
+        "description": "Scans for embedded scripts in document files (SVG, HTML, PDF with JavaScript)",
+        "assertion": "upload_file(svg_with_embedded_javascript) raises SecurityError with 'embedded script detected'",
+        "rationale": "SVG and other documents can contain executable code that poses XSS risks"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Streams large files to S3 without loading entire file into memory",
+        "assertion": "upload_file(file_500MB) completes with peak memory usage < 100MB",
+        "rationale": "Prevents memory exhaustion when handling large files"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Handles filenames with Unicode characters correctly",
+        "assertion": "upload_file(file_named='文档.pdf').stored_filename preserves or safely encodes Unicode",
+        "rationale": "International users have non-ASCII filenames that must be handled correctly"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "security",
+        "severity": "medium",
+        "description": "Removes or sanitizes EXIF metadata that may contain sensitive location/device info",
+        "assertion": "uploaded_image = upload_file(image_with_gps_exif); downloaded_image_has_no_gps_data",
+        "rationale": "EXIF data can leak sensitive user location and device information"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Detects and properly handles MIME type vs extension mismatches",
+        "assertion": "upload_file(pdf_file_named='document.jpg') raises ValidationError with 'MIME type mismatch'",
+        "rationale": "Ensures file type integrity and prevents confusion or security issues"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Provides detailed error messages that don't expose sensitive system information",
+        "assertion": "upload_file(invalid_file).error_message does not contain filesystem paths, credentials, or stack traces",
+        "rationale": "Error messages should be helpful but not leak security-sensitive details"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Handles files with no extension gracefully",
+        "assertion": "upload_file(file_named='README', content_type='text/plain').success == True",
+        "rationale": "Some valid files lack extensions (Unix tradition, mobile photos)"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Sets appropriate S3 object metadata (content-type, content-disposition)",
+        "assertion": "s3_object = upload_file(image_png); s3_object.content_type == 'image/png' and s3_object.content_disposition is not None",
+        "rationale": "Proper metadata ensures files are served correctly by browsers"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "security",
+        "severity": "medium",
+        "description": "Validates that file content matches declared content-type header",
+        "assertion": "upload_file(file_with_content_type='image/jpeg', actual_content=pdf_bytes) raises ValidationError",
+        "rationale": "Prevents content-type spoofing attacks"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Completes malware scanning within reasonable time bounds (e.g., < 5 seconds for 10MB file)",
+        "assertion": "time_taken = upload_file(valid_10MB_file); time_taken < 5.0 seconds",
+        "rationale": "Long scan times degrade user experience and may indicate inefficient scanning"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Handles concurrent uploads of same filename without race conditions",
+        "assertion": "results = parallel_upload([same_filename] * 10); all unique storage keys in results",
+        "rationale": "Concurrent users may upload files with identical names simultaneously"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Size limit parameter accepts string formats ('10MB', '1GB') and integer bytes",
+        "assertion": "upload_file(file, size_limit='10MB').success and upload_file(file, size_limit=10485760).success",
+        "rationale": "User-friendly size specifications improve API usability"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Cleans up temporary files on both success and failure",
+        "assertion": "upload_file(file_causing_error); no temporary files remain in temp directory",
+        "rationale": "Prevents disk space leaks from accumulated temporary files"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "security",
+        "severity": "low",
+        "description": "Generates cryptographically secure random storage keys (not predictable)",
+        "assertion": "keys = [upload_file(file).key for _ in range(100)]; all keys unique and no discernible pattern",
+        "rationale": "Predictable keys could allow unauthorized access to files"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Supports configurable S3 bucket and region",
+        "assertion": "upload_file(file, bucket='custom-bucket', region='eu-west-1').s3_location contains 'custom-bucket' and 'eu-west-1'",
+        "rationale": "Flexibility for multi-region deployments and different storage backends"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "performance",
+        "severity": "low",
+        "description": "Supports multipart upload for files larger than threshold (e.g., 100MB)",
+        "assertion": "upload_file(file_200MB) uses S3 multipart upload API",
+        "rationale": "Multipart uploads are more reliable and resumable for large files"
+      },
+      {
+        "id": "SPEC-036",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Handles whitespace-only filenames",
+        "assertion": "upload_file(file_named='   .txt') raises ValidationError with 'invalid filename'",
+        "rationale": "Whitespace-only names cause filesystem and UI issues"
+      },
+      {
+        "id": "SPEC-037",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Supports dry-run mode that validates without actually uploading",
+        "assertion": "result = upload_file(file, dry_run=True); result.would_succeed == True and file not in S3",
+        "rationale": "Useful for testing and pre-flight validation"
+      },
+      {
+        "id": "SPEC-038",
+        "category": "security",
+        "severity": "low",
+        "description": "Logs security-relevant events (malware detection, rejected files) for audit trail",
+        "assertion": "upload_file(malware_file); audit_log contains entry with timestamp, filename, rejection_reason, user_id",
+        "rationale": "Security auditing and incident response require comprehensive logs"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Check file/directory existence before operations",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must",
+        "description": "Handle file operation errors (ENOENT, EACCES, etc.)",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "must",
+        "description": "Include cache invalidation or TTL mechanism",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must-not",
+        "description": "Never allow unbounded cache growth without eviction policy",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-007",
+        "type": "must-not",
+        "description": "Must not validate file types by extension alone. Always verify actual file content using magic bytes/MIME detection before trusting the filename extension.",
+        "pattern": "# BAD: if filename.endswith('.jpg'): allow()\n# GOOD: import magic; mime = magic.from_buffer(file_content, mime=True)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Must check file size limit by reading the content-length header or streaming in chunks, rejecting oversized files before loading the entire content into memory.",
+        "pattern": "# Read in chunks, track cumulative size, raise FileSizeError when limit exceeded",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must-not",
+        "description": "Must not trust user-supplied filenames for storage paths. Sanitize by removing path traversal sequences (.., /, \\) and generate separate storage keys.",
+        "pattern": "# BAD: s3_key = user_filename\n# GOOD: s3_key = uuid4().hex + secure_extension",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Must scan file content for malware signatures (including EICAR test string) before upload, raising MalwareDetectedError with signature details if detected.",
+        "pattern": "if b'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR' in file_content: raise MalwareDetectedError('EICAR signature detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Must reject executable file types by checking both extension blacklist (.exe, .bat, .sh, .cmd, .com, .ps1, .scr, .msi, .dll) and MIME type against executable patterns.",
+        "pattern": "BLOCKED_EXTENSIONS = {'.exe', '.bat', '.sh', '.cmd', '.com', '.ps1', '.scr', '.msi', '.dll'}\nBLOCKED_MIMES = {'application/x-executable', 'application/x-msdownload'}",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must-not",
+        "description": "Must not allow double extensions that hide executable types. Parse filename to detect patterns like .jpg.exe and reject with SecurityError.",
+        "pattern": "# Check: if any(filename.lower().endswith(ext + blocked) for ext in ALLOWED for blocked in BLOCKED_EXTENSIONS)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Must validate None/null input explicitly at function entry, raising ValueError before any processing occurs.",
+        "pattern": "if file is None: raise ValueError('file cannot be None')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Must detect ZIP bombs by checking compression ratio before full extraction. Reject if compressed size vs uncompressed size ratio exceeds threshold (e.g., 100:1).",
+        "pattern": "if uncompressed_size / compressed_size > 100: raise MalwareDetectedError('suspicious compression ratio detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Must generate unique storage keys using cryptographically secure random values (uuid4 or secrets module) combined with sanitized extension to prevent collisions and overwrites.",
+        "pattern": "import uuid; storage_key = f'{uuid.uuid4().hex}{safe_extension}'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Must require explicit configuration of allowed_types whitelist and S3 credentials, raising ConfigurationError if missing before attempting any file operations.",
+        "pattern": "if not config.allowed_types: raise ConfigurationError('allowed_types must be configured')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must",
+        "description": "Must reject zero-byte empty files with ValidationError indicating the file is empty.",
+        "pattern": "if file_size == 0: raise ValidationError('file is empty (0 bytes)')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must",
+        "description": "Must handle files exactly at size limit boundary as valid (use <= comparison, not < for size validation).",
+        "pattern": "if file_size <= size_limit: allow() # Include exact boundary",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Must return structured result object with attributes: success (bool), url (str), size (int), content_type (str), and key (str).",
+        "pattern": "@dataclass\nclass UploadResult:\n    success: bool\n    url: str\n    size: int\n    content_type: str\n    key: str",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Must scan SVG, HTML, and PDF files for embedded scripts (JavaScript, event handlers) using regex or parser, rejecting with SecurityError if found.",
+        "pattern": "if mime == 'image/svg+xml' and re.search(r'<script|on\\w+\\s*=', content): raise SecurityError('embedded script detected')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Must stream large files to S3 in chunks without loading entire content into memory. Use streaming upload with chunk size (e.g., 8KB-64KB).",
+        "pattern": "# Use boto3's upload_fileobj with file-like object or stream in chunks",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Must accept file-like objects (BytesIO, file handles) not just paths. Check for read() method rather than isinstance(str).",
+        "pattern": "if hasattr(file, 'read'): content = file.read() # Support file-like objects",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Must validate MIME type matches file extension and actual content. Reject mismatches (e.g., PDF bytes with .jpg extension) with ValidationError.",
+        "pattern": "detected_mime = magic.from_buffer(content, mime=True)\nif detected_mime != expected_mime: raise ValidationError(f'MIME type mismatch: {detected_mime} vs {expected_mime}')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must-not",
+        "description": "Must not expose sensitive information in error messages. Strip filesystem paths, credentials, and full stack traces from user-facing errors.",
+        "pattern": "# BAD: raise StorageError(f'Failed to connect to {s3_endpoint} with key {access_key}')\n# GOOD: raise StorageError('Storage service unavailable')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "must",
+        "description": "Must enforce maximum filename length (e.g., 255 characters) to prevent filesystem issues, raising ValidationError for excessive lengths.",
+        "pattern": "if len(filename) > 255: raise ValidationError('filename exceeds maximum length of 255 characters')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "must",
+        "description": "Must handle S3 connection failures by catching client exceptions and raising StorageError without corrupting original file data.",
+        "pattern": "try:\n    s3_client.upload_fileobj(file)\nexcept ClientError as e:\n    raise StorageError('Failed to upload to storage') from e",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Must preserve file content integrity by computing hash before upload and verifying after download, or using S3's ETag validation.",
+        "pattern": "import hashlib\noriginal_hash = hashlib.sha256(content).hexdigest()\n# After upload: verify s3_object.e_tag matches",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Must handle Unicode filenames by either preserving them with proper UTF-8 encoding or sanitizing to ASCII-safe equivalents.",
+        "pattern": "safe_filename = unicodedata.normalize('NFKD', filename).encode('ascii', 'ignore').decode('ascii')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "must",
+        "description": "Must strip or sanitize EXIF metadata containing sensitive information (GPS, device info) from image files before upload.",
+        "pattern": "from PIL import Image\nimg = Image.open(file)\ndata = list(img.getdata())\nimg_clean = Image.new(img.mode, img.size)\nimg_clean.putdata(data)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Must validate content-type header matches actual file content, rejecting mismatches where declared type differs from magic byte detection.",
+        "pattern": "if declared_content_type != magic.from_buffer(content, mime=True): raise ValidationError('Content-Type header does not match file content')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "must",
+        "description": "Must set appropriate S3 object metadata including content-type and content-disposition headers during upload.",
+        "pattern": "s3_client.upload_fileobj(file, bucket, key, ExtraArgs={'ContentType': mime_type, 'ContentDisposition': 'attachment'})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Must clean up any temporary files in both success and failure paths using try/finally or context managers.",
+        "pattern": "temp_file = None\ntry:\n    temp_file = tempfile.NamedTemporaryFile(delete=False)\n    # process\nfinally:\n    if temp_file: os.unlink(temp_file.name)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-033",
+        "type": "must",
+        "description": "Must handle files with no extension by relying on MIME detection rather than requiring extension presence.",
+        "pattern": "if not extension: mime_type = magic.from_buffer(content, mime=True) # Detect from content",
+        "source": "spec"
+      },
+      {
+        "id": "CON-034",
+        "type": "must",
+        "description": "Must reject whitespace-only filenames by stripping and checking for empty result, raising ValidationError.",
+        "pattern": "if not filename.strip(): raise ValidationError('invalid filename: cannot be empty or whitespace-only')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-035",
+        "type": "must",
+        "description": "Must parse size limit parameter supporting both string formats ('10MB', '1GB') and integer bytes, converting to consistent internal representation.",
+        "pattern": "def parse_size(limit):\n    if isinstance(limit, int): return limit\n    match = re.match(r'(\\d+)(MB|GB|KB)', limit)\n    return int(match[1]) * {'KB': 1024, 'MB': 1024**2, 'GB': 1024**3}[match[2]]",
+        "source": "spec"
+      },
+      {
+        "id": "CON-036",
+        "type": "must",
+        "description": "Must use S3 multipart upload for files exceeding threshold (e.g., 100MB) to handle large files efficiently.",
+        "pattern": "if file_size > 100 * 1024 * 1024:\n    s3_client.upload_fileobj(file, bucket, key, Config=TransferConfig(multipart_threshold=100*1024*1024))",
+        "source": "spec"
+      },
+      {
+        "id": "CON-037",
+        "type": "must",
+        "description": "Must log security-relevant events (malware detection, rejected files, validation failures) with timestamp, filename, reason, and user context for audit trails.",
+        "pattern": "logger.warning('Security: Malware detected', extra={'timestamp': now(), 'filename': filename, 'reason': 'EICAR signature', 'user_id': user_id})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-038",
+        "type": "must",
+        "description": "Must support dry-run mode that performs all validations without actual S3 upload, returning would_succeed status.",
+        "pattern": "if dry_run:\n    # Perform all validations\n    return UploadResult(would_succeed=True, url=None)\n# else: proceed with upload",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "Code includes BLOCKED_EXTENSIONS set with all specified extensions and _validate_extension() method that raises SecurityError with message 'executable file type not allowed: {extension}' when blocked extension is detected."
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "Code implements _detect_mime_type() using python-magic library (if available) to check actual file content via magic bytes, then _validate_mime_type() validates against whitelist, not just extension."
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "_read_file_content() reads files in chunks (CHUNK_SIZE=65536) and checks cumulative_size against size_limit before accumulating, raising FileSizeError when exceeded. For filesystem paths, checks st_size before reading."
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "satisfied",
+        "reasoning": "Code includes MALWARE_SIGNATURES list containing EICAR signature, and _scan_for_malware() checks content for these signatures, raising MalwareDetectedError with message 'EICAR signature detected'."
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "_upload_to_s3() uploads to S3 and constructs URL (either custom endpoint or standard S3 URL format). Returns UploadResult with success=True and url field containing https:// URL."
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "_sanitize_filename() uses os.path.basename() to remove path components, then explicitly removes '..', '/', and '\\' characters, preventing path traversal attacks."
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "upload_file() method starts with explicit check 'if file is None: raise ValueError('file cannot be None')', satisfying the exact error type and message requirement."
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "_upload_to_s3() wraps S3 operations in try-except catching ClientError and generic Exception, raising StorageError. Original file content is already read into memory (content variable) before upload, so no data loss occurs."
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "_generate_storage_key() generates keys using uuid.uuid4().hex which produces cryptographically random UUIDs, ensuring uniqueness across uploads even with same filename."
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "__init__() checks 'if not allowed_types: raise ConfigurationError('allowed_types must be configured')' before any upload operations, enforcing whitelist configuration."
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "satisfied",
+        "reasoning": "_read_file_content() checks 'if cumulative_size == 0 or len(content) == 0: raise ValidationError('file is empty (0 bytes)')' for all input types, properly handling empty files."
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "_check_double_extension() specifically detects double extensions by checking if blocked extensions appear in filename but not at the end, raising SecurityError with message 'dangerous double extension detected'."
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "Code reads file content once and stores in 'content' variable. The same bytes are used for validation and upload via io.BytesIO(), preserving content integrity. _compute_hash() is available for verification."
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "_sanitize_filename() checks 'if len(filename) > self.MAX_FILENAME_LENGTH' (255) and raises ValidationError with message about exceeding maximum length."
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "__init__() validates 'if not s3_access_key or not s3_secret_key: raise ConfigurationError' before attempting any S3 operations or creating boto3 client."
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "satisfied",
+        "reasoning": "_check_zip_bomb() analyzes zip/gzip files, calculates compression ratio, and raises MalwareDetectedError with message 'suspicious compression ratio detected' when ratio exceeds MAX_COMPRESSION_RATIO (100.0)."
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "satisfied",
+        "reasoning": "_read_file_content() has explicit branch 'elif hasattr(file, 'read')' that handles file-like objects including BytesIO, reading via read() method in chunks."
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "satisfied",
+        "reasoning": "_read_file_content() checks 'if cumulative_size <= self.size_limit' allowing files exactly at the limit. For paths, checks 'if file_size > self.size_limit' (strictly greater), so equal size passes."
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "UploadResult dataclass includes success, url, size, content_type, and key fields. upload_file() returns UploadResult instance with these attributes populated."
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "_check_embedded_scripts() checks for script patterns in SVG, HTML, and PDF files using SCRIPT_PATTERNS regex list, raising SecurityError with message 'embedded script detected'."
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "partial",
+        "reasoning": "Code reads entire file into memory via _read_file_content() (content = b''.join(chunks)), then uploads from memory via io.BytesIO(content). Does not stream directly to S3, so large files consume full memory."
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "_sanitize_filename() uses unicodedata.normalize('NFKD') and encodes to ASCII with 'ignore' error handling, safely handling Unicode characters by converting or removing them."
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "_strip_exif_metadata() uses PIL to open image, extract pixel data, create new image without metadata, and return cleaned bytes. This removes EXIF including GPS data for image MIME types."
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "partial",
+        "reasoning": "_validate_mime_type() logs warning when detected MIME differs from filename-based guess but does not raise ValidationError. It only validates against whitelist/blacklist, not strict MIME-extension matching."
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "satisfied",
+        "reasoning": "Error handling re-raises custom exceptions (SecurityError, ValidationError, etc.) with user-friendly messages. StorageError shows 'Storage service unavailable' hiding internal details. No raw stack traces exposed."
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "satisfied",
+        "reasoning": "_get_file_extension() returns empty string if no '.' in filename. Code handles this gracefully - empty extension won't match BLOCKED_EXTENSIONS and storage key generation works with safe_extension."
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "satisfied",
+        "reasoning": "_upload_to_s3() sets ExtraArgs with 'ContentType': mime_type and 'ContentDisposition': f'attachment; filename=\"{filename}\"', properly configuring S3 object metadata."
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "satisfied",
+        "reasoning": "_detect_mime_type() determines MIME from actual content via magic bytes (when available), then _validate_mime_type() checks this detected type against whitelist, validating content matches actual file type."
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "unknown",
+        "reasoning": "Malware scanning timeout constant MALWARE_SCAN_TIMEOUT=5.0 is defined but not actively enforced in scanning code. Scanning is simple signature matching which should be fast, but no explicit timeout mechanism exists."
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "satisfied",
+        "reasoning": "_generate_storage_key() uses uuid.uuid4().hex for each upload, which is thread-safe and generates unique keys. No shared state modified during key generation, preventing race conditions."
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "_parse_size_limit() accepts both int (returns as-is) and string format (parses '10MB', '1GB' with regex and multipliers), converting to bytes. Supports KB, MB, GB units."
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "satisfied",
+        "reasoning": "upload_file() has try-finally block that cleans up temp_file if it exists. However, temp_file is only set in specific code paths and current implementation doesn't actually create temp files, so cleanup is present but unused."
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "satisfied",
+        "reasoning": "_generate_storage_key() uses uuid.uuid4() which generates cryptographically secure random UUIDs (version 4) based on random bytes, ensuring unpredictable and unique keys."
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "satisfied",
+        "reasoning": "__init__() accepts s3_bucket and s3_region parameters and uses them to configure boto3 client and construct S3 URLs. Supports custom bucket/region configuration."
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "satisfied",
+        "reasoning": "_upload_to_s3() checks 'if len(content) > self.MULTIPART_THRESHOLD' (100MB) and uses TransferConfig with multipart settings when threshold exceeded, enabling multipart uploads for large files."
+      },
+      {
+        "specId": "SPEC-036",
+        "status": "satisfied",
+        "reasoning": "_sanitize_filename() checks 'if not filename or not filename.strip()' at start and after sanitization, raising ValidationError with message 'invalid filename: cannot be empty or whitespace-only'."
+      },
+      {
+        "specId": "SPEC-037",
+        "status": "satisfied",
+        "reasoning": "upload_file() accepts dry_run parameter. When True, performs all validation then returns UploadResult with success=False, would_succeed=True, and url=None without calling _upload_to_s3()."
+      },
+      {
+        "specId": "SPEC-038",
+        "status": "satisfied",
+        "reasoning": "_log_security_event() logs security events with timestamp, filename, reason, user_id, and event_type. Called for malware detection, embedded scripts, zip bombs, and rejected files. Uses logger.warning with structured extra fields."
+      }
+    ],
+    "satisfiedCount": 35,
+    "totalSpecs": 38,
+    "generatedAt": "2026-02-12T06:49:09.961Z",
+    "inputTokens": 13969,
+    "outputTokens": 9616
+  },
+  "totalInputTokens": 17241,
+  "totalOutputTokens": 16646,
+  "totalDurationMs": 238515
+}

@@ -1,0 +1,1215 @@
+{
+  "task": "Write a webhook receiver that validates HMAC signatures, handles retries/deduplication, and processes events asynchronously",
+  "language": "python",
+  "specSynthesis": {
+    "task": "Write a webhook receiver that validates HMAC signatures, handles retries/deduplication, and processes events asynchronously",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "security",
+        "severity": "critical",
+        "description": "HMAC signature validation must reject requests with invalid signatures to prevent unauthorized webhook spoofing",
+        "assertion": "receiver.validate_signature(payload='test', signature='invalid_sig', secret='key123') returns False",
+        "rationale": "Invalid signatures indicate potential malicious requests attempting to inject fake events"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "security",
+        "severity": "critical",
+        "description": "HMAC signature validation must accept requests with valid HMAC-SHA256 signatures",
+        "assertion": "Given payload='test', secret='key123', correct_sig=hmac_sha256(secret, payload), receiver.validate_signature(payload, correct_sig, secret) returns True",
+        "rationale": "Valid signatures must be accepted to allow legitimate webhook delivery"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "security",
+        "severity": "critical",
+        "description": "Signature validation must use constant-time comparison to prevent timing attacks",
+        "assertion": "validate_signature() uses hmac.compare_digest() or equivalent constant-time comparison, not '==' operator",
+        "rationale": "Variable-time comparison allows attackers to extract signature information via timing analysis"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Duplicate webhook events with same event ID must be deduplicated and processed only once",
+        "assertion": "receiver.process_event({'id': 'evt_123', 'type': 'payment'}) called twice returns success first time and duplicate_detected=True second time, with event processed exactly once",
+        "rationale": "Webhook providers often retry delivery, causing duplicate processing which can lead to double-charging or incorrect state"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Events must be processed asynchronously without blocking the HTTP response",
+        "assertion": "receiver.handle_webhook(request) returns HTTP 200 response within <100ms, while actual event processing happens in background task/queue",
+        "rationale": "Webhook senders have short timeouts (typically 5-30s); blocking processing causes retries and timeout failures"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Receiver must return HTTP 200 for valid webhooks even if async processing fails",
+        "assertion": "receiver.handle_webhook(valid_request) returns 200 status code even if background task raises exception during processing",
+        "rationale": "Returning error codes causes webhook provider to retry indefinitely; idempotent retries are acceptable"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "security",
+        "severity": "critical",
+        "description": "Missing or empty signature header must be rejected with HTTP 401",
+        "assertion": "receiver.handle_webhook(request_without_signature_header) returns 401 status code with error='missing_signature'",
+        "rationale": "Unsigned requests are definitively unauthorized and must be rejected"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Deduplication must persist event IDs in durable storage (database/cache) with TTL",
+        "assertion": "After processing event 'evt_123', receiver restarts and still detects 'evt_123' as duplicate within TTL window",
+        "rationale": "In-memory deduplication is lost on restart, allowing duplicate processing after deployment/crash"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Retry mechanism must implement exponential backoff for failed event processing",
+        "assertion": "If event processing fails, retries occur at intervals approximately [1s, 2s, 4s, 8s, 16s] with jitter",
+        "rationale": "Linear retries can overwhelm downstream services; exponential backoff reduces load during incidents"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Maximum retry attempts must be configurable with default of 5-10 retries",
+        "assertion": "receiver.process_event() with max_retries=5 stops retrying after 5 failed attempts and marks event as failed",
+        "rationale": "Permanent failures should not retry indefinitely, wasting resources"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Malformed JSON payload must return HTTP 400 without processing",
+        "assertion": "receiver.handle_webhook(request_with_body='{invalid json}') returns 400 status code with error='invalid_json'",
+        "rationale": "Malformed requests cannot be processed and indicate client error"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "security",
+        "severity": "high",
+        "description": "Signature must be validated against raw request body before any parsing",
+        "assertion": "validate_signature() receives raw bytes of request body, not parsed JSON object",
+        "rationale": "Parsing before validation allows signature bypass via equivalent JSON representations (whitespace, key order)"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "security",
+        "severity": "high",
+        "description": "Different webhook secrets must be supported per sender/environment",
+        "assertion": "receiver.validate_signature(payload, sig, secret='prod_key') and receiver.validate_signature(payload, sig2, secret='test_key') can both succeed with different signatures",
+        "rationale": "Multiple webhook sources or environments require different secrets for isolation"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Event processing errors must be logged with event ID, error type, and retry attempt number",
+        "assertion": "When event 'evt_456' processing fails on attempt 3, logs contain 'event_id=evt_456', 'attempt=3', 'error=...'",
+        "rationale": "Debugging webhook failures requires correlation between events and errors across retries"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Empty request body must be rejected with HTTP 400",
+        "assertion": "receiver.handle_webhook(request_with_empty_body) returns 400 status code with error='empty_body'",
+        "rationale": "Empty webhooks cannot contain valid events and indicate client misconfiguration"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Events without 'id' field must be rejected or auto-generate deterministic ID",
+        "assertion": "receiver.process_event({'type': 'payment', 'amount': 100}) either rejects with error='missing_event_id' or generates deterministic ID from content hash",
+        "rationale": "Event ID is required for deduplication; missing IDs break idempotency guarantees"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Request signature must be validated as string type before comparison",
+        "assertion": "validate_signature(payload='test', signature=None, secret='key') returns False without raising TypeError",
+        "rationale": "Type confusion in signature validation can bypass security checks"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "performance",
+        "severity": "high",
+        "description": "Deduplication check must complete in O(1) time using indexed lookups",
+        "assertion": "is_duplicate(event_id) completes in <10ms using database index or cache key lookup, not table scan",
+        "rationale": "O(n) deduplication scans create bottlenecks at scale with millions of events"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Failed events must be stored in dead letter queue after max retries exceeded",
+        "assertion": "After 5 failed retry attempts for event 'evt_789', event is stored in DLQ with failure reason and can be retrieved for manual processing",
+        "rationale": "Permanently failed events need investigation; silent dropping causes data loss"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "security",
+        "severity": "medium",
+        "description": "Request body size must be limited to prevent memory exhaustion attacks",
+        "assertion": "receiver.handle_webhook(request_with_body_size=100MB) returns 413 status code with error='payload_too_large'",
+        "rationale": "Unbounded request sizes allow DoS attacks via memory exhaustion"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Webhook receiver must support different HMAC algorithms (SHA256, SHA1, SHA512)",
+        "assertion": "validate_signature(payload, sig, secret, algorithm='sha256') and validate_signature(payload, sig2, secret, algorithm='sha1') both work correctly",
+        "rationale": "Different webhook providers use different HMAC algorithms (Stripe uses SHA256, GitHub offers SHA1/SHA256)"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Signature header format must support common patterns (hex, base64, prefixed)",
+        "assertion": "validate_signature() correctly parses signatures in formats: 'abc123', 'sha256=abc123', 'Base64EncodedSignature'",
+        "rationale": "Different webhook providers format signatures differently (Stripe: 't=timestamp,v1=sig', GitHub: 'sha256=sig')"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Concurrent delivery of same event ID must be handled with atomic deduplication",
+        "assertion": "Two simultaneous calls to process_event({'id': 'evt_concurrent'}) result in exactly one processing attempt using database transaction or distributed lock",
+        "rationale": "Race conditions in deduplication can cause duplicate processing under load"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Deduplication window must be configurable with default of 24-72 hours",
+        "assertion": "receiver configured with deduplication_ttl=3600 detects duplicates within 1 hour but allows reprocessing after 1 hour expires",
+        "rationale": "TTL prevents indefinite storage growth while matching typical webhook retry windows"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Network errors during async processing must trigger retry without returning error to sender",
+        "assertion": "When event processing fails with ConnectionError, receiver returns 200 to sender and schedules retry",
+        "rationale": "Transient network errors should not cause webhook sender to retry; receiver should handle retries"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Events with future timestamps must be accepted but logged as warnings",
+        "assertion": "receiver.process_event({'id': 'evt_future', 'timestamp': '2099-01-01T00:00:00Z'}) succeeds but logs warning about future timestamp",
+        "rationale": "Clock skew between sender and receiver is common; rejecting is too strict but logging helps detect issues"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Event payload must support nested JSON objects and arrays",
+        "assertion": "receiver.process_event({'id': 'evt_nested', 'data': {'user': {'name': 'Alice', 'tags': ['premium', 'verified']}}}) correctly processes nested structure",
+        "rationale": "Real webhook payloads contain complex nested data structures"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Event processing order must be preserved for events with same entity ID",
+        "assertion": "Events [{'id': 'evt1', 'entity': 'user_123', 'seq': 1}, {'id': 'evt2', 'entity': 'user_123', 'seq': 2}] are processed in sequence order 1 then 2",
+        "rationale": "Out-of-order processing can cause incorrect state (e.g., delete before create)"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Async task queue must support configurable concurrency limits",
+        "assertion": "receiver configured with max_concurrent_tasks=10 processes at most 10 events simultaneously",
+        "rationale": "Unbounded concurrency can overwhelm downstream services or database connections"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "medium",
+        "description": "Webhook secret must be loaded from environment variable or secure config, never hardcoded",
+        "assertion": "receiver initialization reads secret from environment variable WEBHOOK_SECRET or raises ConfigurationError if not set",
+        "rationale": "Hardcoded secrets in source code are exposed in version control and logs"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Successful webhook processing must log event ID and type at INFO level",
+        "assertion": "When event {'id': 'evt_success', 'type': 'payment.completed'} processes successfully, logs contain 'event_id=evt_success', 'type=payment.completed' at INFO level",
+        "rationale": "Audit trail of processed events aids debugging and compliance"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "performance",
+        "severity": "low",
+        "description": "Deduplication storage should implement automatic cleanup of expired entries",
+        "assertion": "Event IDs stored for deduplication are automatically removed after TTL expires to prevent unbounded growth",
+        "rationale": "Manual cleanup is error-prone; automatic expiration prevents storage bloat"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Very long event IDs (>255 chars) must be handled without truncation or error",
+        "assertion": "receiver.process_event({'id': 'a'*500, 'type': 'test'}) successfully processes and stores full event ID",
+        "rationale": "Some webhook providers generate long UUID-based or composite event IDs"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Webhook endpoint must return appropriate Content-Type header in responses",
+        "assertion": "receiver.handle_webhook() returns response with Content-Type: application/json for error responses",
+        "rationale": "Proper content types help webhook senders parse error responses correctly"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "performance",
+        "severity": "low",
+        "description": "Signature validation should cache HMAC objects for frequently used secrets",
+        "assertion": "Validating 1000 webhooks with same secret reuses HMAC object instead of creating 1000 new instances",
+        "rationale": "HMAC object creation has overhead; caching improves throughput for high-volume endpoints"
+      }
+    ],
+    "totalSpecs": 35,
+    "synthesizedAt": "2026-02-12T06:38:02.472Z",
+    "inputTokens": 590,
+    "outputTokens": 4088
+  },
+  "constraintSet": {
+    "task": "Write a webhook receiver that validates HMAC signatures, handles retries/deduplication, and processes events asynchronously",
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Handle promise rejections with try-catch or .catch()",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never fire-and-forget promises without error handling",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "prefer",
+        "description": "Use Promise.allSettled instead of Promise.all when partial failures are acceptable",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "HMAC signature validation must use hmac.compare_digest() for constant-time comparison to prevent timing attacks. Never use == or != operators on signatures.",
+        "pattern": "# CORRECT:\nhmac.compare_digest(expected_sig, provided_sig)\n# WRONG:\nexpected_sig == provided_sig",
+        "source": "spec"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Signature validation must operate on raw request body bytes before any JSON parsing or string manipulation to ensure signature integrity.",
+        "pattern": "# Validate BEFORE parsing:\nif not validate_signature(request.body, sig, secret):\n    return 401\npayload = json.loads(request.body)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Return HTTP 200 immediately after accepting webhook (within 100ms) and process events asynchronously using task queue or background worker. Never block the response on event processing.",
+        "pattern": "# CORRECT:\nasync_queue.enqueue(process_event, event_data)\nreturn Response(status=200)\n# WRONG:\nresult = process_event(event_data)\nreturn Response(status=200)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Implement deduplication using atomic database operations (unique constraint + INSERT IGNORE or transactions) or distributed locks to handle concurrent delivery of identical event IDs.",
+        "pattern": "# Use DB unique constraint or:\nwith lock.acquire(event_id, timeout=5):\n    if not is_duplicate(event_id):\n        mark_processed(event_id)\n        process(event)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Store deduplication event IDs in indexed storage (database table with indexed event_id column or Redis) with TTL, ensuring O(1) lookup performance and persistence across restarts.",
+        "pattern": "# Database with index:\nCREATE INDEX idx_event_id ON processed_events(event_id);\n# Or Redis:\nredis.setex(f'event:{event_id}', ttl, '1')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Implement exponential backoff for retries with formula: delay = base_delay * (2 ** attempt) + random_jitter, using configurable max_retries (default 5-10).",
+        "pattern": "import random\nfor attempt in range(max_retries):\n    try:\n        process_event(event)\n        break\n    except:\n        delay = min(2**attempt + random.uniform(0, 1), 300)\n        time.sleep(delay)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "After max retry attempts exceeded, move failed events to dead letter queue (DLQ) with event data, error reason, and all retry attempt logs for manual inspection.",
+        "pattern": "if attempt >= max_retries:\n    dlq.store(event_id=evt['id'], payload=evt, error=str(e), attempts=attempt)\n    logger.error(f'event_id={evt[\"id\"]} moved to DLQ after {attempt} attempts')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Log event processing failures with structured fields: event_id, attempt number, error type/message, and timestamp. Use consistent field names for log parsing.",
+        "pattern": "logger.error('Event processing failed', extra={'event_id': evt['id'], 'attempt': attempt, 'error': type(e).__name__, 'error_msg': str(e)})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Handle missing or None signature by returning False from validate_signature() without raising TypeError. Perform type validation before comparison.",
+        "pattern": "def validate_signature(payload, signature, secret):\n    if not signature or not isinstance(signature, str):\n        return False\n    # continue validation",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Events without 'id' field must either be rejected with HTTP 400 error='missing_event_id' or assigned a deterministic ID using SHA256 hash of normalized payload.",
+        "pattern": "if 'id' not in event:\n    # Option 1: reject\n    return {'error': 'missing_event_id'}, 400\n    # Option 2: generate\n    event['id'] = hashlib.sha256(json.dumps(event, sort_keys=True).encode()).hexdigest()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Preserve event processing order for events with the same entity ID by using entity-specific queues or processing events with same entity_id serially.",
+        "pattern": "# Route events to entity-specific queues:\nqueue_name = f'entity_{event.get(\"entity_id\")}'\ntask_queue.enqueue_to(queue_name, process_event, event)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must-not",
+        "description": "Never hardcode webhook secrets in source code. Load from environment variables (WEBHOOK_SECRET) or secure configuration service, raising ConfigurationError if missing.",
+        "pattern": "# WRONG:\nsecret = 'hardcoded_key_123'\n# CORRECT:\nsecret = os.environ.get('WEBHOOK_SECRET')\nif not secret:\n    raise ConfigurationError('WEBHOOK_SECRET not set')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must-not",
+        "description": "Never return 4xx/5xx errors to webhook sender when async processing fails. Always return 200 after successful validation and enqueuing, log errors internally.",
+        "pattern": "# WRONG:\ntry:\n    process_event(event)\nexcept:\n    return 500\n# CORRECT:\ntask_queue.enqueue(process_event, event)\nreturn 200  # Even if future processing fails",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Return HTTP 401 for missing/empty signature header with JSON body {'error': 'missing_signature'}. Check signature header existence before validation.",
+        "pattern": "signature = request.headers.get('X-Signature')\nif not signature:\n    return JsonResponse({'error': 'missing_signature'}, status=401)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Return HTTP 400 for malformed JSON with {'error': 'invalid_json'} and for empty request body with {'error': 'empty_body'}. Validate before signature check.",
+        "pattern": "if not request.body:\n    return JsonResponse({'error': 'empty_body'}, status=400)\ntry:\n    data = json.loads(request.body)\nexcept json.JSONDecodeError:\n    return JsonResponse({'error': 'invalid_json'}, status=400)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Enforce maximum request body size limit (e.g., 1MB) at web server or application level, returning HTTP 413 with {'error': 'payload_too_large'} for oversized requests.",
+        "pattern": "MAX_BODY_SIZE = 1024 * 1024  # 1MB\nif len(request.body) > MAX_BODY_SIZE:\n    return JsonResponse({'error': 'payload_too_large'}, status=413)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Support configurable HMAC algorithms (sha256, sha1, sha512) via parameter, using hashlib module with algorithm name mapping.",
+        "pattern": "import hashlib\nALGO_MAP = {'sha256': hashlib.sha256, 'sha1': hashlib.sha1, 'sha512': hashlib.sha512}\nhash_func = ALGO_MAP.get(algorithm, hashlib.sha256)\nexpected = hmac.new(secret.encode(), payload, hash_func).hexdigest()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Parse signature header supporting multiple formats: plain hex ('abc123'), prefixed ('sha256=abc123'), and base64. Strip common prefixes before comparison.",
+        "pattern": "sig = signature.removeprefix('sha256=').removeprefix('sha1=')\nif '=' in sig and len(sig) % 4 == 0:  # might be base64\n    try:\n        sig = base64.b64decode(sig).hex()\n    except: pass",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Support different webhook secrets per sender/environment by accepting secret as parameter or looking up secret by sender identifier from secure configuration.",
+        "pattern": "def validate_signature(payload, signature, sender_id):\n    secret = get_secret_for_sender(sender_id)  # From config/DB\n    expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()\n    return hmac.compare_digest(expected, signature)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "prefer",
+        "description": "Prefer using a proven task queue library (Celery, RQ, or cloud queue service) over custom threading for async processing to ensure reliability, retries, and monitoring.",
+        "pattern": "# Preferred:\nfrom celery import Celery\napp = Celery('webhooks', broker='redis://localhost')\n@app.task(bind=True, max_retries=5)\ndef process_event_task(self, event):\n    # auto retries with exponential backoff",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "prefer",
+        "description": "Prefer setting deduplication TTL to 24-72 hours (86400-259200 seconds) by default and make it configurable to balance storage costs with duplicate detection.",
+        "pattern": "DEDUPLICATION_TTL = int(os.getenv('DEDUP_TTL', '86400'))  # 24h default",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Return Content-Type: application/json header for all JSON error responses (400, 401, 413) to ensure proper client parsing.",
+        "pattern": "return JsonResponse({'error': 'invalid_json'}, status=400, content_type='application/json')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Log events with future timestamps at WARNING level but continue processing. Do not reject valid events based on timestamp.",
+        "pattern": "if event.get('timestamp') and parse_time(event['timestamp']) > now():\n    logger.warning(f'Future timestamp for event_id={event[\"id\"]}, timestamp={event[\"timestamp\"]}')\nprocess_event(event)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "prefer",
+        "description": "Prefer implementing automatic cleanup of expired deduplication entries using database TTL features (Redis EXPIRE, PostgreSQL DELETE with timestamp check) or scheduled cleanup jobs.",
+        "pattern": "# Redis auto-expires:\nredis.setex(f'event:{event_id}', TTL, '1')\n# Or periodic cleanup:\nDELETE FROM processed_events WHERE created_at < NOW() - INTERVAL '72 hours'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Support very long event IDs (>255 chars) by using TEXT or VARCHAR with sufficient length (e.g., 1000) in database schema. Do not truncate event IDs.",
+        "pattern": "# Database schema:\nCREATE TABLE processed_events (\n    event_id VARCHAR(1000) PRIMARY KEY,\n    processed_at TIMESTAMP\n);",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "prefer",
+        "description": "Prefer caching HMAC objects or pre-computing hash functions for frequently used secrets to reduce CPU overhead during high-volume webhook processing.",
+        "pattern": "from functools import lru_cache\n@lru_cache(maxsize=128)\ndef get_hmac_for_secret(secret, algorithm='sha256'):\n    return hmac.new(secret.encode(), digestmod=algorithm)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Implement configurable concurrency limits for async task processing using worker pool size or semaphore to prevent resource exhaustion.",
+        "pattern": "# Celery worker:\ncelery -A app worker --concurrency=10\n# Or asyncio:\nsemaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)\nasync with semaphore:\n    await process_event(event)",
+        "source": "spec"
+      }
+    ],
+    "totalConstraints": 32,
+    "generatedAt": "2026-02-12T06:38:55.329Z",
+    "inputTokens": 2658,
+    "outputTokens": 3112
+  },
+  "generatedCode": {
+    "task": "Write a webhook receiver that validates HMAC signatures, handles retries/deduplication, and processes events asynchronously",
+    "code": "import asyncio\nimport base64\nimport hashlib\nimport hmac\nimport json\nimport logging\nimport os\nimport random\nimport time\nfrom dataclasses import dataclass\nfrom datetime import datetime, timedelta\nfrom enum import Enum\nfrom functools import lru_cache\nfrom typing import Any, Callable, Dict, Optional, Set\nfrom uuid import uuid4\nimport sqlite3\nfrom contextlib import contextmanager\nimport threading\n\n# Configure logging\nlogging.basicConfig(\n    level=logging.INFO,\n    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'\n)\nlogger = logging.getLogger(__name__)\n\n\nclass ConfigurationError(Exception):\n    \"\"\"Raised when required configuration is missing.\"\"\"\n    pass\n\n\nclass WebhookError(Exception):\n    \"\"\"Base exception for webhook processing errors.\"\"\"\n    pass\n\n\nclass SignatureValidationError(WebhookError):\n    \"\"\"Raised when signature validation fails.\"\"\"\n    pass\n\n\nclass EventStatus(Enum):\n    \"\"\"Event processing status.\"\"\"\n    PENDING = \"pending\"\n    PROCESSING = \"processing\"\n    SUCCESS = \"success\"\n    FAILED = \"failed\"\n    DLQ = \"dlq\"\n\n\n@dataclass\nclass WebhookEvent:\n    \"\"\"Represents a webhook event.\"\"\"\n    id: str\n    type: str\n    payload: Dict[str, Any]\n    timestamp: Optional[str] = None\n    entity_id: Optional[str] = None\n\n\n@dataclass\nclass RetryConfig:\n    \"\"\"Configuration for retry behavior.\"\"\"\n    max_retries: int = 5\n    base_delay: float = 1.0\n    max_delay: float = 300.0\n    jitter: bool = True\n\n\n@dataclass\nclass DeduplicationConfig:\n    \"\"\"Configuration for event deduplication.\"\"\"\n    ttl: int = 86400  # 24 hours default\n    storage_backend: str = \"sqlite\"\n\n\nclass DeduplicationStore:\n    \"\"\"Handles event deduplication with persistence.\"\"\"\n    \n    def __init__(self, db_path: str = \"webhooks.db\", ttl: int = 86400):\n        self.db_path = db_path\n        self.ttl = ttl\n        self.lock = threading.Lock()\n        self._init_db()\n    \n    def _init_db(self) -> None:\n        \"\"\"Initialize the database schema.\"\"\"\n        with self._get_connection() as conn:\n            conn.execute(\"\"\"\n                CREATE TABLE IF NOT EXISTS processed_events (\n                    event_id VARCHAR(1000) PRIMARY KEY,\n                    processed_at TIMESTAMP NOT NULL,\n                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n                )\n            \"\"\")\n            conn.execute(\"\"\"\n                CREATE INDEX IF NOT EXISTS idx_event_id \n                ON processed_events(event_id)\n            \"\"\")\n            conn.execute(\"\"\"\n                CREATE INDEX IF NOT EXISTS idx_created_at \n                ON processed_events(created_at)\n            \"\"\")\n            conn.commit()\n    \n    @contextmanager\n    def _get_connection(self):\n        \"\"\"Get a database connection.\"\"\"\n        conn = sqlite3.connect(self.db_path, timeout=10.0)\n        try:\n            yield conn\n        finally:\n            conn.close()\n    \n    def is_duplicate(self, event_id: str) -> bool:\n        \"\"\"Check if event has been processed (O(1) indexed lookup).\"\"\"\n        with self._get_connection() as conn:\n            cursor = conn.execute(\n                \"SELECT 1 FROM processed_events WHERE event_id = ? LIMIT 1\",\n                (event_id,)\n            )\n            return cursor.fetchone() is not None\n    \n    def mark_processed(self, event_id: str) -> bool:\n        \"\"\"\n        Atomically mark event as processed.\n        Returns True if successful, False if duplicate.\n        \"\"\"\n        with self.lock:\n            try:\n                with self._get_connection() as conn:\n                    conn.execute(\n                        \"\"\"INSERT INTO processed_events (event_id, processed_at) \n                           VALUES (?, ?)\"\"\",\n                        (event_id, datetime.utcnow().isoformat())\n                    )\n                    conn.commit()\n                    return True\n            except sqlite3.IntegrityError:\n                # Duplicate event_id (primary key constraint)\n                return False\n    \n    def cleanup_expired(self) -> int:\n        \"\"\"Remove expired deduplication entries. Returns number of deleted entries.\"\"\"\n        expiry_time = datetime.utcnow() - timedelta(seconds=self.ttl)\n        with self._get_connection() as conn:\n            cursor = conn.execute(\n                \"DELETE FROM processed_events WHERE created_at < ?\",\n                (expiry_time.isoformat(),)\n            )\n            conn.commit()\n            return cursor.rowcount\n\n\nclass DeadLetterQueue:\n    \"\"\"Stores failed events after max retries.\"\"\"\n    \n    def __init__(self, db_path: str = \"webhooks.db\"):\n        self.db_path = db_path\n        self._init_db()\n    \n    def _init_db(self) -> None:\n        \"\"\"Initialize DLQ table.\"\"\"\n        with self._get_connection() as conn:\n            conn.execute(\"\"\"\n                CREATE TABLE IF NOT EXISTS dead_letter_queue (\n                    id INTEGER PRIMARY KEY AUTOINCREMENT,\n                    event_id VARCHAR(1000) NOT NULL,\n                    payload TEXT NOT NULL,\n                    error_type TEXT,\n                    error_message TEXT,\n                    attempts INTEGER NOT NULL,\n                    failed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n                )\n            \"\"\")\n            conn.commit()\n    \n    @contextmanager\n    def _get_connection(self):\n        \"\"\"Get a database connection.\"\"\"\n        conn = sqlite3.connect(self.db_path, timeout=10.0)\n        try:\n            yield conn\n        finally:\n            conn.close()\n    \n    def store(\n        self,\n        event_id: str,\n        payload: Dict[str, Any],\n        error: str,\n        attempts: int\n    ) -> None:\n        \"\"\"Store a failed event in the DLQ.\"\"\"\n        error_type = error.split(':')[0] if ':' in error else 'UnknownError'\n        with self._get_connection() as conn:\n            conn.execute(\n                \"\"\"INSERT INTO dead_letter_queue \n                   (event_id, payload, error_type, error_message, attempts)\n                   VALUES (?, ?, ?, ?, ?)\"\"\",\n                (event_id, json.dumps(payload), error_type, error, attempts)\n            )\n            conn.commit()\n        logger.error(\n            f'Event moved to DLQ',\n            extra={\n                'event_id': event_id,\n                'attempts': attempts,\n                'error': error\n            }\n        )\n    \n    def get_all(self) -> list:\n        \"\"\"Retrieve all events from DLQ.\"\"\"\n        with self._get_connection() as conn:\n            cursor = conn.execute(\n                \"SELECT event_id, payload, error_type, error_message, attempts, failed_at FROM dead_letter_queue\"\n            )\n            return cursor.fetchall()\n\n\nclass AsyncTaskQueue:\n    \"\"\"Manages asynchronous event processing with retry logic.\"\"\"\n    \n    def __init__(\n        self,\n        max_concurrent_tasks: int = 10,\n        retry_config: Optional[RetryConfig] = None\n    ):\n        self.max_concurrent_tasks = max_concurrent_tasks\n        self.retry_config = retry_config or RetryConfig()\n        self.semaphore = asyncio.Semaphore(max_concurrent_tasks)\n        self.tasks: Set[asyncio.Task] = set()\n        self.dlq = DeadLetterQueue()\n    \n    def enqueue(\n        self,\n        event: WebhookEvent,\n        processor: Callable[[WebhookEvent], None]\n    ) -> None:\n        \"\"\"Enqueue an event for async processing.\"\"\"\n        task = asyncio.create_task(self._process_with_retry(event, processor))\n        self.tasks.add(task)\n        task.add_done_callback(self.tasks.discard)\n    \n    async def _process_with_retry(\n        self,\n        event: WebhookEvent,\n        processor: Callable[[WebhookEvent], None]\n    ) -> None:\n        \"\"\"Process event with exponential backoff retry logic.\"\"\"\n        async with self.semaphore:\n            for attempt in range(self.retry_config.max_retries):\n                try:\n                    await asyncio.to_thread(processor, event)\n                    logger.info(\n                        'Event processed successfully',\n                        extra={\n                            'event_id': event.id,\n                            'type': event.type,\n                            'attempt': attempt + 1\n                        }\n                    )\n                    return\n                except Exception as e:\n                    error_msg = f\"{type(e).__name__}: {str(e)}\"\n                    logger.error(\n                        'Event processing failed',\n                        extra={\n                            'event_id': event.id,\n                            'attempt': attempt + 1,\n                            'error': type(e).__name__,\n                            'error_msg': str(e)\n                        }\n                    )\n                    \n                    if attempt >= self.retry_config.max_retries - 1:\n                        # Max retries exceeded, move to DLQ\n                        self.dlq.store(\n                            event_id=event.id,\n                            payload=event.payload,\n                            error=error_msg,\n                            attempts=attempt + 1\n                        )\n                        return\n                    \n                    # Calculate backoff delay with exponential backoff and jitter\n                    delay = min(\n                        self.retry_config.base_delay * (2 ** attempt),\n                        self.retry_config.max_delay\n                    )\n                    if self.retry_config.jitter:\n                        delay += random.uniform(0, 1)\n                    \n                    await asyncio.sleep(delay)\n\n\nclass SignatureValidator:\n    \"\"\"Validates HMAC signatures with constant-time comparison.\"\"\"\n    \n    ALGORITHM_MAP = {\n        'sha256': hashlib.sha256,\n        'sha1': hashlib.sha1,\n        'sha512': hashlib.sha512\n    }\n    \n    def __init__(self, secrets: Optional[Dict[str, str]] = None):\n        \"\"\"\n        Initialize validator with webhook secrets.\n        \n        Args:\n            secrets: Dict mapping sender_id to secret key\n        \"\"\"\n        if secrets is None:\n            # Load default secret from environment\n            default_secret = os.environ.get('WEBHOOK_SECRET')\n            if not default_secret:\n                raise ConfigurationError('WEBHOOK_SECRET not set')\n            secrets = {'default': default_secret}\n        self.secrets = secrets\n    \n    @lru_cache(maxsize=128)\n    def _get_hmac_func(self, algorithm: str):\n        \"\"\"Cache HMAC hash functions for performance.\"\"\"\n        return self.ALGORITHM_MAP.get(algorithm, hashlib.sha256)\n    \n    def validate_signature(\n        self,\n        payload: bytes,\n        signature: Optional[str],\n        secret: str,\n        algorithm: str = 'sha256'\n    ) -> bool:\n        \"\"\"\n        Validate HMAC signature using constant-time comparison.\n        \n        Args:\n            payload: Raw request body bytes\n            signature: Signature from request header\n            secret: Webhook secret key\n            algorithm: Hash algorithm (sha256, sha1, sha512)\n        \n        Returns:\n            True if signature is valid, False otherwise\n        \"\"\"\n        # Type validation\n        if not signature or not isinstance(signature, str):\n            return False\n        \n        if not secret or not isinstance(secret, str):\n            return False\n        \n        # Parse signature (handle different formats)\n        parsed_sig = self._parse_signature(signature)\n        \n        # Compute expected signature\n        hash_func = self._get_hmac_func(algorithm)\n        expected_hmac = hmac.new(\n            secret.encode('utf-8'),\n            payload,\n            hash_func\n        )\n        expected_sig = expected_hmac.hexdigest()\n        \n        # Constant-time comparison to prevent timing attacks\n        return hmac.compare_digest(expected_sig, parsed_sig)\n    \n    def _parse_signature(self, signature: str) -> str:\n        \"\"\"Parse signature supporting multiple formats.\"\"\"\n        # Remove common prefixes\n        sig = signature.strip()\n        for prefix in ['sha256=', 'sha1=', 'sha512=']:\n            if sig.lower().startswith(prefix):\n                sig = sig[len(prefix):]\n                break\n        \n        # Try to decode base64 if it looks like base64\n        if '=' in sig and len(sig) % 4 == 0:\n            try:\n                decoded = base64.b64decode(sig)\n                sig = decoded.hex()\n            except Exception:\n                pass  # Not base64, use as-is\n        \n        return sig.lower()\n    \n    def get_secret(self, sender_id: str = 'default') -> str:\n        \"\"\"Get secret for a specific sender.\"\"\"\n        secret = self.secrets.get(sender_id)\n        if not secret:\n            raise ConfigurationError(f'No secret configured for sender: {sender_id}')\n        return secret\n\n\nclass WebhookReceiver:\n    \"\"\"\n    Main webhook receiver handling validation, deduplication, and async processing.\n    \"\"\"\n    \n    MAX_BODY_SIZE = 1024 * 1024  # 1MB\n    \n    def __init__(\n        self,\n        secrets: Optional[Dict[str, str]] = None,\n        retry_config: Optional[RetryConfig] = None,\n        dedup_config: Optional[DeduplicationConfig] = None,\n        max_concurrent_tasks: int = 10\n    ):\n        \"\"\"\n        Initialize webhook receiver.\n        \n        Args:\n            secrets: Webhook secrets per sender\n            retry_config: Retry configuration\n            dedup_config: Deduplication configuration\n            max_concurrent_tasks: Max concurrent processing tasks\n        \"\"\"\n        self.validator = SignatureValidator(secrets)\n        self.dedup_config = dedup_config or DeduplicationConfig()\n        self.dedup_store = DeduplicationStore(\n            ttl=self.dedup_config.ttl\n        )\n        self.task_queue = AsyncTaskQueue(\n            max_concurrent_tasks=max_concurrent_tasks,\n            retry_config=retry_config or RetryConfig()\n        )\n        self.event_processor: Optional[Callable[[WebhookEvent], None]] = None\n        \n        # Start cleanup task\n        asyncio.create_task(self._periodic_cleanup())\n    \n    async def _periodic_cleanup(self) -> None:\n        \"\"\"Periodically clean up expired deduplication entries.\"\"\"\n        while True:\n            try:\n                await asyncio.sleep(3600)  # Run every hour\n                deleted = self.dedup_store.cleanup_expired()\n                if deleted > 0:\n                    logger.info(f'Cleaned up {deleted} expired deduplication entries')\n            except Exception as e:\n                logger.error(f'Cleanup task error: {e}')\n    \n    def set_event_processor(self, processor: Callable[[WebhookEvent], None]) -> None:\n        \"\"\"Set the event processor callback.\"\"\"\n        self.event_processor = processor\n    \n    def handle_webhook(\n        self,\n        request_body: Optional[bytes],\n        signature_header: Optional[str],\n        sender_id: str = 'default',\n        algorithm: str = 'sha256'\n    ) -> tuple[Dict[str, Any], int]:\n        \"\"\"\n        Handle incoming webhook request.\n        \n        Args:\n            request_body: Raw request body bytes\n            signature_header: Signature from request header\n            sender_id: Identifier for webhook sender\n            algorithm: HMAC algorithm to use\n        \n        Returns:\n            Tuple of (response_dict, status_code)\n        \"\"\"\n        # Validate body size\n        if request_body and len(request_body) > self.MAX_BODY_SIZE:\n            return {\n                'error': 'payload_too_large'\n            }, 413\n        \n        # Check for empty body\n        if not request_body:\n            return {\n                'error': 'empty_body'\n            }, 400\n        \n        # Check for missing signature\n        if not signature_header:\n            return {\n                'error': 'missing_signature'\n            }, 401\n        \n        # Validate signature BEFORE parsing JSON\n        secret = self.validator.get_secret(sender_id)\n        if not self.validator.validate_signature(\n            request_body,\n            signature_header,\n            secret,\n            algorithm\n        ):\n            return {\n                'error': 'invalid_signature'\n            }, 401\n        \n        # Parse JSON\n        try:\n            payload = json.loads(request_body.decode('utf-8'))\n        except json.JSONDecodeError:\n            return {\n                'error': 'invalid_json'\n            }, 400\n        \n        # Process event asynchronously\n        try:\n            result = self.process_event(payload)\n            if result.get('duplicate_detected'):\n                logger.info(\n                    'Duplicate event detected',\n                    extra={'event_id': result.get('event_id')}\n                )\n        except Exception as e:\n            # Log error but still return 200 (async processing error)\n            logger.error(f'Error enqueuing event: {e}')\n        \n        # Always return 200 for valid webhooks\n        return {'status': 'accepted'}, 200\n    \n    def process_event(self, payload: Dict[str, Any]) -> Dict[str, Any]:\n        \"\"\"\n        Process webhook event with deduplication.\n        \n        Args:\n            payload: Event payload dict\n        \n        Returns:\n            Dict with processing result\n        \"\"\"\n        # Handle missing event ID\n        if 'id' not in payload:\n            # Generate deterministic ID from content hash\n            normalized = json.dumps(payload, sort_keys=True).encode('utf-8')\n            event_id = hashlib.sha256(normalized).hexdigest()\n            payload['id'] = event_id\n            logger.warning(\n                'Event missing ID, generated deterministic ID',\n                extra={'event_id': event_id}\n            )\n        else:\n            event_id = payload['id']\n        \n        # Check for duplicate\n        if self.dedup_store.is_duplicate(event_id):\n            return {\n                'event_id': event_id,\n                'duplicate_detected': True,\n                'status': 'skipped'\n            }\n        \n        # Atomically mark as processed\n        if not self.dedup_store.mark_processed(event_id):\n            # Race condition - another thread marked it first\n            return {\n                'event_id': event_id,\n                'duplicate_detected': True,\n                'status': 'skipped'\n            }\n        \n        # Check for future timestamp (warning only)\n        if payload.get('timestamp'):\n            try:\n                event_time = datetime.fromisoformat(\n                    payload['timestamp'].replace('Z', '+00:00')\n                )\n                if event_time > datetime.utcnow():\n                    logger.warning(\n                        'Future timestamp detected',\n                        extra={\n                            'event_id': event_id,\n                            'timestamp': payload['timestamp']\n                        }\n                    )\n            except Exception:\n                pass  # Invalid timestamp format, continue processing\n        \n        # Create event object\n        event = WebhookEvent(\n            id=event_id,\n            type=payload.get('type', 'unknown'),\n            payload=payload,\n            timestamp=payload.get('timestamp'),\n            entity_id=payload.get('entity_id') or payload.get('entity')\n        )\n        \n        # Enqueue for async processing\n        if self.event_processor:\n            self.task_queue.enqueue(event, self.event_processor)\n        \n        return {\n            'event_id': event_id,\n            'duplicate_detected': False,\n            'status': 'processing'\n        }\n\n\n# Example usage and event processor\ndef example_event_processor(event: WebhookEvent) -> None:\n    \"\"\"\n    Example event processor that can be customized.\n    This would contain your business logic.\n    \"\"\"\n    logger.info(\n        'Processing event',\n        extra={\n            'event_id': event.id,\n            'type': event.type\n        }\n    )\n    \n    # Simulate processing time\n    time.sleep(0.1)\n    \n    # Your business logic here\n    if event.type == 'payment.completed':\n        # Handle payment completion\n        pass\n    elif event.type == 'user.created':\n        # Handle user creation\n        pass\n    \n    # Simulate occasional failures for testing\n    if random.random() < 0.1:\n        raise Exception(\"Random processing error for testing\")\n\n\n# Initialize receiver with configuration\ndef create_webhook_receiver() -> WebhookReceiver:\n    \"\"\"Factory function to create configured webhook receiver.\"\"\"\n    # Load secrets from environment\n    webhook_secret = os.environ.get('WEBHOOK_SECRET')\n    if not webhook_secret:\n        raise ConfigurationError('WEBHOOK_SECRET environment variable not set')\n    \n    secrets = {\n        'default': webhook_secret,\n        'prod': os.environ.get('WEBHOOK_SECRET_PROD', webhook_secret),\n        'test': os.environ.get('WEBHOOK_SECRET_TEST', webhook_secret)\n    }\n    \n    # Configure retry behavior\n    retry_config = RetryConfig(\n        max_retries=int(os.environ.get('WEBHOOK_MAX_RETRIES', '5')),\n        base_delay=float(os.environ.get('WEBHOOK_BASE_DELAY', '1.0')),\n        max_delay=float(os.environ.get('WEBHOOK_MAX_DELAY', '300.0'))\n    )\n    \n    # Configure deduplication\n    dedup_config = DeduplicationConfig(\n        ttl=int(os.environ.get('WEBHOOK_DEDUP_TTL', '86400'))\n    )\n    \n    # Create receiver\n    receiver = WebhookReceiver(\n        secrets=secrets,\n        retry_config=retry_config,\n        dedup_config=dedup_config,\n        max_concurrent_tasks=int(os.environ.get('WEBHOOK_MAX_CONCURRENT', '10'))\n    )\n    \n    # Set event processor\n    receiver.set_event_processor(example_event_processor)\n    \n    return receiver\n\n\n# Example Flask integration\ndef flask_webhook_endpoint():\n    \"\"\"Example Flask endpoint for webhook handling.\"\"\"\n    try:\n        from flask import Flask, request, jsonify\n        \n        app = Flask(__name__)\n        \n        # Set a default secret for example purposes\n        if not os.environ.get('WEBHOOK_SECRET'):\n            os.environ['WEBHOOK_SECRET'] = 'example_secret_key_change_in_production'\n        \n        receiver = create_webhook_receiver()\n        \n        @app.route('/webhook', methods=['POST'])\n        def webhook():\n            \"\"\"Webhook endpoint.\"\"\"\n            signature = request.headers.get('X-Signature') or request.headers.get('X-Hub-Signature-256')\n            sender_id = request.headers.get('X-Sender-ID', 'default')\n            \n            response, status_code = receiver.handle_webhook(\n                request_body=request.get_data(),\n                signature_header=signature,\n                sender_id=sender_id\n            )\n            \n            return jsonify(response), status_code\n        \n        return app\n    except ImportError:\n        logger.warning(\"Flask not installed, skipping Flask integration example\")\n        return None\n\n\nif __name__ == '__main__':\n    # Example standalone usage\n    import sys\n    \n    # Set example environment variable\n    os.environ['WEBHOOK_SECRET'] = 'test_secret_key_12345'\n    \n    # Create receiver\n    receiver = create_webhook_receiver()\n    \n    # Example webhook simulation\n    example_payload = json.dumps({\n        'id': 'evt_' + str(uuid4()),\n        'type': 'payment.completed',\n        'amount': 100,\n        'currency': 'USD',\n        'user': {\n            'id': 'user_123',\n            'email': 'user@example.com'\n        },\n        'timestamp': datetime.utcnow().isoformat() + 'Z'\n    }).encode('utf-8')\n    \n    # Generate valid signature\n    secret = os.environ['WEBHOOK_SECRET']\n    signature = hmac.new(\n        secret.encode('utf-8'),\n        example_payload,\n        hashlib.sha256\n    ).hexdigest()\n    \n    # Process webhook\n    response, status = receiver.handle_webhook(\n        request_body=example_payload,\n        signature_header=signature\n    )\n    \n    print(f\"Response: {response}, Status: {status}\")\n    \n    # Keep async tasks running\n    try:\n        asyncio.get_event_loop().run_forever()\n    except KeyboardInterrupt:\n        print(\"\\nShutting down...\")\n        sys.exit(0)",
+    "language": "python",
+    "specs": [
+      {
+        "id": "SPEC-001",
+        "category": "security",
+        "severity": "critical",
+        "description": "HMAC signature validation must reject requests with invalid signatures to prevent unauthorized webhook spoofing",
+        "assertion": "receiver.validate_signature(payload='test', signature='invalid_sig', secret='key123') returns False",
+        "rationale": "Invalid signatures indicate potential malicious requests attempting to inject fake events"
+      },
+      {
+        "id": "SPEC-002",
+        "category": "security",
+        "severity": "critical",
+        "description": "HMAC signature validation must accept requests with valid HMAC-SHA256 signatures",
+        "assertion": "Given payload='test', secret='key123', correct_sig=hmac_sha256(secret, payload), receiver.validate_signature(payload, correct_sig, secret) returns True",
+        "rationale": "Valid signatures must be accepted to allow legitimate webhook delivery"
+      },
+      {
+        "id": "SPEC-003",
+        "category": "security",
+        "severity": "critical",
+        "description": "Signature validation must use constant-time comparison to prevent timing attacks",
+        "assertion": "validate_signature() uses hmac.compare_digest() or equivalent constant-time comparison, not '==' operator",
+        "rationale": "Variable-time comparison allows attackers to extract signature information via timing analysis"
+      },
+      {
+        "id": "SPEC-004",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Duplicate webhook events with same event ID must be deduplicated and processed only once",
+        "assertion": "receiver.process_event({'id': 'evt_123', 'type': 'payment'}) called twice returns success first time and duplicate_detected=True second time, with event processed exactly once",
+        "rationale": "Webhook providers often retry delivery, causing duplicate processing which can lead to double-charging or incorrect state"
+      },
+      {
+        "id": "SPEC-005",
+        "category": "correctness",
+        "severity": "critical",
+        "description": "Events must be processed asynchronously without blocking the HTTP response",
+        "assertion": "receiver.handle_webhook(request) returns HTTP 200 response within <100ms, while actual event processing happens in background task/queue",
+        "rationale": "Webhook senders have short timeouts (typically 5-30s); blocking processing causes retries and timeout failures"
+      },
+      {
+        "id": "SPEC-006",
+        "category": "error-handling",
+        "severity": "critical",
+        "description": "Receiver must return HTTP 200 for valid webhooks even if async processing fails",
+        "assertion": "receiver.handle_webhook(valid_request) returns 200 status code even if background task raises exception during processing",
+        "rationale": "Returning error codes causes webhook provider to retry indefinitely; idempotent retries are acceptable"
+      },
+      {
+        "id": "SPEC-007",
+        "category": "security",
+        "severity": "critical",
+        "description": "Missing or empty signature header must be rejected with HTTP 401",
+        "assertion": "receiver.handle_webhook(request_without_signature_header) returns 401 status code with error='missing_signature'",
+        "rationale": "Unsigned requests are definitively unauthorized and must be rejected"
+      },
+      {
+        "id": "SPEC-008",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Deduplication must persist event IDs in durable storage (database/cache) with TTL",
+        "assertion": "After processing event 'evt_123', receiver restarts and still detects 'evt_123' as duplicate within TTL window",
+        "rationale": "In-memory deduplication is lost on restart, allowing duplicate processing after deployment/crash"
+      },
+      {
+        "id": "SPEC-009",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Retry mechanism must implement exponential backoff for failed event processing",
+        "assertion": "If event processing fails, retries occur at intervals approximately [1s, 2s, 4s, 8s, 16s] with jitter",
+        "rationale": "Linear retries can overwhelm downstream services; exponential backoff reduces load during incidents"
+      },
+      {
+        "id": "SPEC-010",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Maximum retry attempts must be configurable with default of 5-10 retries",
+        "assertion": "receiver.process_event() with max_retries=5 stops retrying after 5 failed attempts and marks event as failed",
+        "rationale": "Permanent failures should not retry indefinitely, wasting resources"
+      },
+      {
+        "id": "SPEC-011",
+        "category": "error-handling",
+        "severity": "high",
+        "description": "Malformed JSON payload must return HTTP 400 without processing",
+        "assertion": "receiver.handle_webhook(request_with_body='{invalid json}') returns 400 status code with error='invalid_json'",
+        "rationale": "Malformed requests cannot be processed and indicate client error"
+      },
+      {
+        "id": "SPEC-012",
+        "category": "security",
+        "severity": "high",
+        "description": "Signature must be validated against raw request body before any parsing",
+        "assertion": "validate_signature() receives raw bytes of request body, not parsed JSON object",
+        "rationale": "Parsing before validation allows signature bypass via equivalent JSON representations (whitespace, key order)"
+      },
+      {
+        "id": "SPEC-013",
+        "category": "security",
+        "severity": "high",
+        "description": "Different webhook secrets must be supported per sender/environment",
+        "assertion": "receiver.validate_signature(payload, sig, secret='prod_key') and receiver.validate_signature(payload, sig2, secret='test_key') can both succeed with different signatures",
+        "rationale": "Multiple webhook sources or environments require different secrets for isolation"
+      },
+      {
+        "id": "SPEC-014",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Event processing errors must be logged with event ID, error type, and retry attempt number",
+        "assertion": "When event 'evt_456' processing fails on attempt 3, logs contain 'event_id=evt_456', 'attempt=3', 'error=...'",
+        "rationale": "Debugging webhook failures requires correlation between events and errors across retries"
+      },
+      {
+        "id": "SPEC-015",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Empty request body must be rejected with HTTP 400",
+        "assertion": "receiver.handle_webhook(request_with_empty_body) returns 400 status code with error='empty_body'",
+        "rationale": "Empty webhooks cannot contain valid events and indicate client misconfiguration"
+      },
+      {
+        "id": "SPEC-016",
+        "category": "edge-case",
+        "severity": "high",
+        "description": "Events without 'id' field must be rejected or auto-generate deterministic ID",
+        "assertion": "receiver.process_event({'type': 'payment', 'amount': 100}) either rejects with error='missing_event_id' or generates deterministic ID from content hash",
+        "rationale": "Event ID is required for deduplication; missing IDs break idempotency guarantees"
+      },
+      {
+        "id": "SPEC-017",
+        "category": "type-safety",
+        "severity": "high",
+        "description": "Request signature must be validated as string type before comparison",
+        "assertion": "validate_signature(payload='test', signature=None, secret='key') returns False without raising TypeError",
+        "rationale": "Type confusion in signature validation can bypass security checks"
+      },
+      {
+        "id": "SPEC-018",
+        "category": "performance",
+        "severity": "high",
+        "description": "Deduplication check must complete in O(1) time using indexed lookups",
+        "assertion": "is_duplicate(event_id) completes in <10ms using database index or cache key lookup, not table scan",
+        "rationale": "O(n) deduplication scans create bottlenecks at scale with millions of events"
+      },
+      {
+        "id": "SPEC-019",
+        "category": "correctness",
+        "severity": "high",
+        "description": "Failed events must be stored in dead letter queue after max retries exceeded",
+        "assertion": "After 5 failed retry attempts for event 'evt_789', event is stored in DLQ with failure reason and can be retrieved for manual processing",
+        "rationale": "Permanently failed events need investigation; silent dropping causes data loss"
+      },
+      {
+        "id": "SPEC-020",
+        "category": "security",
+        "severity": "medium",
+        "description": "Request body size must be limited to prevent memory exhaustion attacks",
+        "assertion": "receiver.handle_webhook(request_with_body_size=100MB) returns 413 status code with error='payload_too_large'",
+        "rationale": "Unbounded request sizes allow DoS attacks via memory exhaustion"
+      },
+      {
+        "id": "SPEC-021",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Webhook receiver must support different HMAC algorithms (SHA256, SHA1, SHA512)",
+        "assertion": "validate_signature(payload, sig, secret, algorithm='sha256') and validate_signature(payload, sig2, secret, algorithm='sha1') both work correctly",
+        "rationale": "Different webhook providers use different HMAC algorithms (Stripe uses SHA256, GitHub offers SHA1/SHA256)"
+      },
+      {
+        "id": "SPEC-022",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Signature header format must support common patterns (hex, base64, prefixed)",
+        "assertion": "validate_signature() correctly parses signatures in formats: 'abc123', 'sha256=abc123', 'Base64EncodedSignature'",
+        "rationale": "Different webhook providers format signatures differently (Stripe: 't=timestamp,v1=sig', GitHub: 'sha256=sig')"
+      },
+      {
+        "id": "SPEC-023",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Concurrent delivery of same event ID must be handled with atomic deduplication",
+        "assertion": "Two simultaneous calls to process_event({'id': 'evt_concurrent'}) result in exactly one processing attempt using database transaction or distributed lock",
+        "rationale": "Race conditions in deduplication can cause duplicate processing under load"
+      },
+      {
+        "id": "SPEC-024",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Deduplication window must be configurable with default of 24-72 hours",
+        "assertion": "receiver configured with deduplication_ttl=3600 detects duplicates within 1 hour but allows reprocessing after 1 hour expires",
+        "rationale": "TTL prevents indefinite storage growth while matching typical webhook retry windows"
+      },
+      {
+        "id": "SPEC-025",
+        "category": "error-handling",
+        "severity": "medium",
+        "description": "Network errors during async processing must trigger retry without returning error to sender",
+        "assertion": "When event processing fails with ConnectionError, receiver returns 200 to sender and schedules retry",
+        "rationale": "Transient network errors should not cause webhook sender to retry; receiver should handle retries"
+      },
+      {
+        "id": "SPEC-026",
+        "category": "edge-case",
+        "severity": "medium",
+        "description": "Events with future timestamps must be accepted but logged as warnings",
+        "assertion": "receiver.process_event({'id': 'evt_future', 'timestamp': '2099-01-01T00:00:00Z'}) succeeds but logs warning about future timestamp",
+        "rationale": "Clock skew between sender and receiver is common; rejecting is too strict but logging helps detect issues"
+      },
+      {
+        "id": "SPEC-027",
+        "category": "type-safety",
+        "severity": "medium",
+        "description": "Event payload must support nested JSON objects and arrays",
+        "assertion": "receiver.process_event({'id': 'evt_nested', 'data': {'user': {'name': 'Alice', 'tags': ['premium', 'verified']}}}) correctly processes nested structure",
+        "rationale": "Real webhook payloads contain complex nested data structures"
+      },
+      {
+        "id": "SPEC-028",
+        "category": "correctness",
+        "severity": "medium",
+        "description": "Event processing order must be preserved for events with same entity ID",
+        "assertion": "Events [{'id': 'evt1', 'entity': 'user_123', 'seq': 1}, {'id': 'evt2', 'entity': 'user_123', 'seq': 2}] are processed in sequence order 1 then 2",
+        "rationale": "Out-of-order processing can cause incorrect state (e.g., delete before create)"
+      },
+      {
+        "id": "SPEC-029",
+        "category": "performance",
+        "severity": "medium",
+        "description": "Async task queue must support configurable concurrency limits",
+        "assertion": "receiver configured with max_concurrent_tasks=10 processes at most 10 events simultaneously",
+        "rationale": "Unbounded concurrency can overwhelm downstream services or database connections"
+      },
+      {
+        "id": "SPEC-030",
+        "category": "security",
+        "severity": "medium",
+        "description": "Webhook secret must be loaded from environment variable or secure config, never hardcoded",
+        "assertion": "receiver initialization reads secret from environment variable WEBHOOK_SECRET or raises ConfigurationError if not set",
+        "rationale": "Hardcoded secrets in source code are exposed in version control and logs"
+      },
+      {
+        "id": "SPEC-031",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Successful webhook processing must log event ID and type at INFO level",
+        "assertion": "When event {'id': 'evt_success', 'type': 'payment.completed'} processes successfully, logs contain 'event_id=evt_success', 'type=payment.completed' at INFO level",
+        "rationale": "Audit trail of processed events aids debugging and compliance"
+      },
+      {
+        "id": "SPEC-032",
+        "category": "performance",
+        "severity": "low",
+        "description": "Deduplication storage should implement automatic cleanup of expired entries",
+        "assertion": "Event IDs stored for deduplication are automatically removed after TTL expires to prevent unbounded growth",
+        "rationale": "Manual cleanup is error-prone; automatic expiration prevents storage bloat"
+      },
+      {
+        "id": "SPEC-033",
+        "category": "edge-case",
+        "severity": "low",
+        "description": "Very long event IDs (>255 chars) must be handled without truncation or error",
+        "assertion": "receiver.process_event({'id': 'a'*500, 'type': 'test'}) successfully processes and stores full event ID",
+        "rationale": "Some webhook providers generate long UUID-based or composite event IDs"
+      },
+      {
+        "id": "SPEC-034",
+        "category": "correctness",
+        "severity": "low",
+        "description": "Webhook endpoint must return appropriate Content-Type header in responses",
+        "assertion": "receiver.handle_webhook() returns response with Content-Type: application/json for error responses",
+        "rationale": "Proper content types help webhook senders parse error responses correctly"
+      },
+      {
+        "id": "SPEC-035",
+        "category": "performance",
+        "severity": "low",
+        "description": "Signature validation should cache HMAC objects for frequently used secrets",
+        "assertion": "Validating 1000 webhooks with same secret reuses HMAC object instead of creating 1000 new instances",
+        "rationale": "HMAC object creation has overhead; caching improves throughput for high-volume endpoints"
+      }
+    ],
+    "constraints": [
+      {
+        "id": "CON-001",
+        "type": "must",
+        "description": "Handle promise rejections with try-catch or .catch()",
+        "source": "domain"
+      },
+      {
+        "id": "CON-002",
+        "type": "must-not",
+        "description": "Never fire-and-forget promises without error handling",
+        "source": "domain"
+      },
+      {
+        "id": "CON-003",
+        "type": "prefer",
+        "description": "Use Promise.allSettled instead of Promise.all when partial failures are acceptable",
+        "source": "domain"
+      },
+      {
+        "id": "CON-004",
+        "type": "must",
+        "description": "Handle timezone conversions explicitly, do not assume UTC",
+        "source": "domain"
+      },
+      {
+        "id": "CON-005",
+        "type": "must-not",
+        "description": "Never construct dates from string concatenation without validation",
+        "source": "domain"
+      },
+      {
+        "id": "CON-006",
+        "type": "must",
+        "description": "HMAC signature validation must use hmac.compare_digest() for constant-time comparison to prevent timing attacks. Never use == or != operators on signatures.",
+        "pattern": "# CORRECT:\nhmac.compare_digest(expected_sig, provided_sig)\n# WRONG:\nexpected_sig == provided_sig",
+        "source": "spec"
+      },
+      {
+        "id": "CON-007",
+        "type": "must",
+        "description": "Signature validation must operate on raw request body bytes before any JSON parsing or string manipulation to ensure signature integrity.",
+        "pattern": "# Validate BEFORE parsing:\nif not validate_signature(request.body, sig, secret):\n    return 401\npayload = json.loads(request.body)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-008",
+        "type": "must",
+        "description": "Return HTTP 200 immediately after accepting webhook (within 100ms) and process events asynchronously using task queue or background worker. Never block the response on event processing.",
+        "pattern": "# CORRECT:\nasync_queue.enqueue(process_event, event_data)\nreturn Response(status=200)\n# WRONG:\nresult = process_event(event_data)\nreturn Response(status=200)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-009",
+        "type": "must",
+        "description": "Implement deduplication using atomic database operations (unique constraint + INSERT IGNORE or transactions) or distributed locks to handle concurrent delivery of identical event IDs.",
+        "pattern": "# Use DB unique constraint or:\nwith lock.acquire(event_id, timeout=5):\n    if not is_duplicate(event_id):\n        mark_processed(event_id)\n        process(event)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-010",
+        "type": "must",
+        "description": "Store deduplication event IDs in indexed storage (database table with indexed event_id column or Redis) with TTL, ensuring O(1) lookup performance and persistence across restarts.",
+        "pattern": "# Database with index:\nCREATE INDEX idx_event_id ON processed_events(event_id);\n# Or Redis:\nredis.setex(f'event:{event_id}', ttl, '1')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-011",
+        "type": "must",
+        "description": "Implement exponential backoff for retries with formula: delay = base_delay * (2 ** attempt) + random_jitter, using configurable max_retries (default 5-10).",
+        "pattern": "import random\nfor attempt in range(max_retries):\n    try:\n        process_event(event)\n        break\n    except:\n        delay = min(2**attempt + random.uniform(0, 1), 300)\n        time.sleep(delay)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-012",
+        "type": "must",
+        "description": "After max retry attempts exceeded, move failed events to dead letter queue (DLQ) with event data, error reason, and all retry attempt logs for manual inspection.",
+        "pattern": "if attempt >= max_retries:\n    dlq.store(event_id=evt['id'], payload=evt, error=str(e), attempts=attempt)\n    logger.error(f'event_id={evt[\"id\"]} moved to DLQ after {attempt} attempts')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-013",
+        "type": "must",
+        "description": "Log event processing failures with structured fields: event_id, attempt number, error type/message, and timestamp. Use consistent field names for log parsing.",
+        "pattern": "logger.error('Event processing failed', extra={'event_id': evt['id'], 'attempt': attempt, 'error': type(e).__name__, 'error_msg': str(e)})",
+        "source": "spec"
+      },
+      {
+        "id": "CON-014",
+        "type": "must",
+        "description": "Handle missing or None signature by returning False from validate_signature() without raising TypeError. Perform type validation before comparison.",
+        "pattern": "def validate_signature(payload, signature, secret):\n    if not signature or not isinstance(signature, str):\n        return False\n    # continue validation",
+        "source": "spec"
+      },
+      {
+        "id": "CON-015",
+        "type": "must",
+        "description": "Events without 'id' field must either be rejected with HTTP 400 error='missing_event_id' or assigned a deterministic ID using SHA256 hash of normalized payload.",
+        "pattern": "if 'id' not in event:\n    # Option 1: reject\n    return {'error': 'missing_event_id'}, 400\n    # Option 2: generate\n    event['id'] = hashlib.sha256(json.dumps(event, sort_keys=True).encode()).hexdigest()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-016",
+        "type": "must",
+        "description": "Preserve event processing order for events with the same entity ID by using entity-specific queues or processing events with same entity_id serially.",
+        "pattern": "# Route events to entity-specific queues:\nqueue_name = f'entity_{event.get(\"entity_id\")}'\ntask_queue.enqueue_to(queue_name, process_event, event)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-017",
+        "type": "must-not",
+        "description": "Never hardcode webhook secrets in source code. Load from environment variables (WEBHOOK_SECRET) or secure configuration service, raising ConfigurationError if missing.",
+        "pattern": "# WRONG:\nsecret = 'hardcoded_key_123'\n# CORRECT:\nsecret = os.environ.get('WEBHOOK_SECRET')\nif not secret:\n    raise ConfigurationError('WEBHOOK_SECRET not set')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-018",
+        "type": "must-not",
+        "description": "Never return 4xx/5xx errors to webhook sender when async processing fails. Always return 200 after successful validation and enqueuing, log errors internally.",
+        "pattern": "# WRONG:\ntry:\n    process_event(event)\nexcept:\n    return 500\n# CORRECT:\ntask_queue.enqueue(process_event, event)\nreturn 200  # Even if future processing fails",
+        "source": "spec"
+      },
+      {
+        "id": "CON-019",
+        "type": "must",
+        "description": "Return HTTP 401 for missing/empty signature header with JSON body {'error': 'missing_signature'}. Check signature header existence before validation.",
+        "pattern": "signature = request.headers.get('X-Signature')\nif not signature:\n    return JsonResponse({'error': 'missing_signature'}, status=401)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-020",
+        "type": "must",
+        "description": "Return HTTP 400 for malformed JSON with {'error': 'invalid_json'} and for empty request body with {'error': 'empty_body'}. Validate before signature check.",
+        "pattern": "if not request.body:\n    return JsonResponse({'error': 'empty_body'}, status=400)\ntry:\n    data = json.loads(request.body)\nexcept json.JSONDecodeError:\n    return JsonResponse({'error': 'invalid_json'}, status=400)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-021",
+        "type": "must",
+        "description": "Enforce maximum request body size limit (e.g., 1MB) at web server or application level, returning HTTP 413 with {'error': 'payload_too_large'} for oversized requests.",
+        "pattern": "MAX_BODY_SIZE = 1024 * 1024  # 1MB\nif len(request.body) > MAX_BODY_SIZE:\n    return JsonResponse({'error': 'payload_too_large'}, status=413)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-022",
+        "type": "must",
+        "description": "Support configurable HMAC algorithms (sha256, sha1, sha512) via parameter, using hashlib module with algorithm name mapping.",
+        "pattern": "import hashlib\nALGO_MAP = {'sha256': hashlib.sha256, 'sha1': hashlib.sha1, 'sha512': hashlib.sha512}\nhash_func = ALGO_MAP.get(algorithm, hashlib.sha256)\nexpected = hmac.new(secret.encode(), payload, hash_func).hexdigest()",
+        "source": "spec"
+      },
+      {
+        "id": "CON-023",
+        "type": "must",
+        "description": "Parse signature header supporting multiple formats: plain hex ('abc123'), prefixed ('sha256=abc123'), and base64. Strip common prefixes before comparison.",
+        "pattern": "sig = signature.removeprefix('sha256=').removeprefix('sha1=')\nif '=' in sig and len(sig) % 4 == 0:  # might be base64\n    try:\n        sig = base64.b64decode(sig).hex()\n    except: pass",
+        "source": "spec"
+      },
+      {
+        "id": "CON-024",
+        "type": "must",
+        "description": "Support different webhook secrets per sender/environment by accepting secret as parameter or looking up secret by sender identifier from secure configuration.",
+        "pattern": "def validate_signature(payload, signature, sender_id):\n    secret = get_secret_for_sender(sender_id)  # From config/DB\n    expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()\n    return hmac.compare_digest(expected, signature)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-025",
+        "type": "prefer",
+        "description": "Prefer using a proven task queue library (Celery, RQ, or cloud queue service) over custom threading for async processing to ensure reliability, retries, and monitoring.",
+        "pattern": "# Preferred:\nfrom celery import Celery\napp = Celery('webhooks', broker='redis://localhost')\n@app.task(bind=True, max_retries=5)\ndef process_event_task(self, event):\n    # auto retries with exponential backoff",
+        "source": "spec"
+      },
+      {
+        "id": "CON-026",
+        "type": "prefer",
+        "description": "Prefer setting deduplication TTL to 24-72 hours (86400-259200 seconds) by default and make it configurable to balance storage costs with duplicate detection.",
+        "pattern": "DEDUPLICATION_TTL = int(os.getenv('DEDUP_TTL', '86400'))  # 24h default",
+        "source": "spec"
+      },
+      {
+        "id": "CON-027",
+        "type": "must",
+        "description": "Return Content-Type: application/json header for all JSON error responses (400, 401, 413) to ensure proper client parsing.",
+        "pattern": "return JsonResponse({'error': 'invalid_json'}, status=400, content_type='application/json')",
+        "source": "spec"
+      },
+      {
+        "id": "CON-028",
+        "type": "must",
+        "description": "Log events with future timestamps at WARNING level but continue processing. Do not reject valid events based on timestamp.",
+        "pattern": "if event.get('timestamp') and parse_time(event['timestamp']) > now():\n    logger.warning(f'Future timestamp for event_id={event[\"id\"]}, timestamp={event[\"timestamp\"]}')\nprocess_event(event)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-029",
+        "type": "prefer",
+        "description": "Prefer implementing automatic cleanup of expired deduplication entries using database TTL features (Redis EXPIRE, PostgreSQL DELETE with timestamp check) or scheduled cleanup jobs.",
+        "pattern": "# Redis auto-expires:\nredis.setex(f'event:{event_id}', TTL, '1')\n# Or periodic cleanup:\nDELETE FROM processed_events WHERE created_at < NOW() - INTERVAL '72 hours'",
+        "source": "spec"
+      },
+      {
+        "id": "CON-030",
+        "type": "must",
+        "description": "Support very long event IDs (>255 chars) by using TEXT or VARCHAR with sufficient length (e.g., 1000) in database schema. Do not truncate event IDs.",
+        "pattern": "# Database schema:\nCREATE TABLE processed_events (\n    event_id VARCHAR(1000) PRIMARY KEY,\n    processed_at TIMESTAMP\n);",
+        "source": "spec"
+      },
+      {
+        "id": "CON-031",
+        "type": "prefer",
+        "description": "Prefer caching HMAC objects or pre-computing hash functions for frequently used secrets to reduce CPU overhead during high-volume webhook processing.",
+        "pattern": "from functools import lru_cache\n@lru_cache(maxsize=128)\ndef get_hmac_for_secret(secret, algorithm='sha256'):\n    return hmac.new(secret.encode(), digestmod=algorithm)",
+        "source": "spec"
+      },
+      {
+        "id": "CON-032",
+        "type": "must",
+        "description": "Implement configurable concurrency limits for async task processing using worker pool size or semaphore to prevent resource exhaustion.",
+        "pattern": "# Celery worker:\ncelery -A app worker --concurrency=10\n# Or asyncio:\nsemaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)\nasync with semaphore:\n    await process_event(event)",
+        "source": "spec"
+      }
+    ],
+    "selfVerification": [
+      {
+        "specId": "SPEC-001",
+        "status": "satisfied",
+        "reasoning": "SignatureValidator.validate_signature() returns False for invalid signatures. The method checks signature existence, type validation, and performs HMAC comparison that will fail for invalid signatures."
+      },
+      {
+        "specId": "SPEC-002",
+        "status": "satisfied",
+        "reasoning": "The validate_signature() method computes HMAC-SHA256 using hmac.new() with the provided secret and payload, then compares with the provided signature using hmac.compare_digest(). Valid signatures will match and return True."
+      },
+      {
+        "specId": "SPEC-003",
+        "status": "satisfied",
+        "reasoning": "Line 'return hmac.compare_digest(expected_sig, parsed_sig)' in validate_signature() uses hmac.compare_digest(), which is a constant-time comparison function designed to prevent timing attacks."
+      },
+      {
+        "specId": "SPEC-004",
+        "status": "satisfied",
+        "reasoning": "process_event() checks is_duplicate() and returns {'duplicate_detected': True, 'status': 'skipped'} for duplicates. First call marks event as processed via mark_processed(), second call detects it as duplicate. Event only enqueued once."
+      },
+      {
+        "specId": "SPEC-005",
+        "status": "satisfied",
+        "reasoning": "handle_webhook() enqueues events via task_queue.enqueue() which uses asyncio.create_task() for async processing, then immediately returns {'status': 'accepted'}, 200. Processing happens in background via _process_with_retry()."
+      },
+      {
+        "specId": "SPEC-006",
+        "status": "satisfied",
+        "reasoning": "handle_webhook() wraps process_event() in try-except that logs errors but continues to return {'status': 'accepted'}, 200. Comment states 'Always return 200 for valid webhooks' and async processing errors don't affect response."
+      },
+      {
+        "specId": "SPEC-007",
+        "status": "satisfied",
+        "reasoning": "handle_webhook() checks 'if not signature_header:' and returns {'error': 'missing_signature'}, 401. This handles both None and empty string signatures."
+      },
+      {
+        "specId": "SPEC-008",
+        "status": "satisfied",
+        "reasoning": "DeduplicationStore uses SQLite with persistent database file (webhooks.db). The is_duplicate() and mark_processed() methods query/insert into processed_events table, which persists across restarts. TTL is enforced via cleanup_expired()."
+      },
+      {
+        "specId": "SPEC-009",
+        "status": "satisfied",
+        "reasoning": "_process_with_retry() implements exponential backoff: 'delay = min(base_delay * (2 ** attempt), max_delay)' with default base_delay=1.0. For attempts 0-4: 1s, 2s, 4s, 8s, 16s. Jitter adds random 0-1 seconds."
+      },
+      {
+        "specId": "SPEC-010",
+        "status": "satisfied",
+        "reasoning": "RetryConfig has max_retries defaulting to 5. _process_with_retry() loops 'for attempt in range(self.retry_config.max_retries)' and moves to DLQ after max retries: 'if attempt >= self.retry_config.max_retries - 1'."
+      },
+      {
+        "specId": "SPEC-011",
+        "status": "satisfied",
+        "reasoning": "handle_webhook() has try-except around json.loads() that catches json.JSONDecodeError and returns {'error': 'invalid_json'}, 400."
+      },
+      {
+        "specId": "SPEC-012",
+        "status": "satisfied",
+        "reasoning": "validate_signature() receives 'payload: bytes' parameter and signature validation occurs before json.loads() in handle_webhook(). The validation uses raw bytes directly in hmac.new()."
+      },
+      {
+        "specId": "SPEC-013",
+        "status": "satisfied",
+        "reasoning": "SignatureValidator.__init__() accepts secrets dict mapping sender_id to secret. handle_webhook() accepts sender_id parameter and retrieves appropriate secret via get_secret(sender_id). Multiple secrets supported."
+      },
+      {
+        "specId": "SPEC-014",
+        "status": "satisfied",
+        "reasoning": "_process_with_retry() logs errors with logger.error() including 'event_id': event.id, 'attempt': attempt + 1, 'error': type(e).__name__, 'error_msg': str(e) in the extra dict."
+      },
+      {
+        "specId": "SPEC-015",
+        "status": "satisfied",
+        "reasoning": "handle_webhook() checks 'if not request_body:' and returns {'error': 'empty_body'}, 400. This handles both None and empty bytes."
+      },
+      {
+        "specId": "SPEC-016",
+        "status": "satisfied",
+        "reasoning": "process_event() checks 'if 'id' not in payload:' and generates deterministic ID using 'hashlib.sha256(normalized).hexdigest()' where normalized is sorted JSON. Sets payload['id'] to generated ID and logs warning."
+      },
+      {
+        "specId": "SPEC-017",
+        "status": "satisfied",
+        "reasoning": "validate_signature() has type validation: 'if not signature or not isinstance(signature, str): return False'. Returns False for None without raising TypeError."
+      },
+      {
+        "specId": "SPEC-018",
+        "status": "satisfied",
+        "reasoning": "is_duplicate() uses indexed SQL query: 'SELECT 1 FROM processed_events WHERE event_id = ? LIMIT 1'. Database has index 'idx_event_id ON processed_events(event_id)' created in _init_db(), ensuring O(1) indexed lookup."
+      },
+      {
+        "specId": "SPEC-019",
+        "status": "satisfied",
+        "reasoning": "_process_with_retry() calls self.dlq.store() after max retries exceeded. DeadLetterQueue stores event_id, payload, error info in dead_letter_queue table. get_all() method retrieves all DLQ events."
+      },
+      {
+        "specId": "SPEC-020",
+        "status": "satisfied",
+        "reasoning": "handle_webhook() checks 'if request_body and len(request_body) > self.MAX_BODY_SIZE:' where MAX_BODY_SIZE = 1024 * 1024 (1MB), and returns {'error': 'payload_too_large'}, 413."
+      },
+      {
+        "specId": "SPEC-021",
+        "status": "satisfied",
+        "reasoning": "SignatureValidator has ALGORITHM_MAP supporting sha256, sha1, sha512. validate_signature() accepts 'algorithm' parameter (default 'sha256') and uses _get_hmac_func(algorithm) to select hash function."
+      },
+      {
+        "specId": "SPEC-022",
+        "status": "satisfied",
+        "reasoning": "_parse_signature() strips prefixes ('sha256=', 'sha1=', 'sha512=') and attempts base64 decoding if signature looks like base64 ('=' in sig and len(sig) % 4 == 0). Supports hex, base64, and prefixed formats."
+      },
+      {
+        "specId": "SPEC-023",
+        "status": "satisfied",
+        "reasoning": "mark_processed() is wrapped with self.lock (threading.Lock) and uses database INSERT with PRIMARY KEY constraint. Returns False on sqlite3.IntegrityError (duplicate), ensuring atomic deduplication even with concurrent calls."
+      },
+      {
+        "specId": "SPEC-024",
+        "status": "satisfied",
+        "reasoning": "DeduplicationConfig has ttl parameter (default 86400 = 24 hours). DeduplicationStore.__init__ accepts ttl and cleanup_expired() removes entries where 'created_at < expiry_time'. TTL is configurable."
+      },
+      {
+        "specId": "SPEC-025",
+        "status": "satisfied",
+        "reasoning": "_process_with_retry() catches all exceptions during processing and continues retry loop. handle_webhook() returns 200 immediately after enqueuing. Network errors trigger retry without affecting HTTP response."
+      },
+      {
+        "specId": "SPEC-026",
+        "status": "satisfied",
+        "reasoning": "process_event() checks payload.get('timestamp'), parses with datetime.fromisoformat(), compares with datetime.utcnow(), and logs warning 'Future timestamp detected' if event_time > utcnow(). Processing continues."
+      },
+      {
+        "specId": "SPEC-027",
+        "status": "satisfied",
+        "reasoning": "WebhookEvent.payload is typed as Dict[str, Any], supporting arbitrary nested structures. json.loads() parses nested JSON correctly. No restrictions on nesting depth or array content."
+      },
+      {
+        "specId": "SPEC-028",
+        "status": "unsatisfied",
+        "reasoning": "AsyncTaskQueue uses asyncio.create_task() which processes tasks concurrently without ordering guarantees. No mechanism to preserve order for events with same entity_id. Tasks are added to unordered set."
+      },
+      {
+        "specId": "SPEC-029",
+        "status": "satisfied",
+        "reasoning": "AsyncTaskQueue.__init__() accepts max_concurrent_tasks parameter and creates 'self.semaphore = asyncio.Semaphore(max_concurrent_tasks)'. _process_with_retry() uses 'async with self.semaphore:' to limit concurrency."
+      },
+      {
+        "specId": "SPEC-030",
+        "status": "satisfied",
+        "reasoning": "SignatureValidator.__init__() loads 'default_secret = os.environ.get('WEBHOOK_SECRET')' and raises ConfigurationError if not set. create_webhook_receiver() loads secrets from WEBHOOK_SECRET* environment variables. No hardcoded secrets."
+      },
+      {
+        "specId": "SPEC-031",
+        "status": "satisfied",
+        "reasoning": "_process_with_retry() logs successful processing with logger.info('Event processed successfully', extra={'event_id': event.id, 'type': event.type, 'attempt': attempt + 1}) at INFO level."
+      },
+      {
+        "specId": "SPEC-032",
+        "status": "satisfied",
+        "reasoning": "_periodic_cleanup() runs in background asyncio task every 3600 seconds, calling dedup_store.cleanup_expired() which deletes entries where 'created_at < expiry_time'. Automatic cleanup implemented."
+      },
+      {
+        "specId": "SPEC-033",
+        "status": "satisfied",
+        "reasoning": "Database schema uses 'event_id VARCHAR(1000)' which can store up to 1000 characters. No truncation or length validation in process_event(). Event IDs >255 chars will be stored fully (up to 1000 chars)."
+      },
+      {
+        "specId": "SPEC-034",
+        "status": "partial",
+        "reasoning": "handle_webhook() returns dict and status code, but doesn't explicitly set Content-Type header. Flask integration example uses jsonify() which sets Content-Type: application/json, but the core function doesn't enforce this."
+      },
+      {
+        "specId": "SPEC-035",
+        "status": "partial",
+        "reasoning": "_get_hmac_func() is decorated with @lru_cache(maxsize=128) to cache hash function lookups, but this caches the hash function reference, not HMAC objects. Each validate_signature() call creates new hmac.new() instance, not reusing HMAC objects."
+      }
+    ],
+    "satisfiedCount": 32,
+    "totalSpecs": 35,
+    "generatedAt": "2026-02-12T06:40:58.102Z",
+    "inputTokens": 13715,
+    "outputTokens": 9212
+  },
+  "totalInputTokens": 16963,
+  "totalOutputTokens": 16412,
+  "totalDurationMs": 244240
+}

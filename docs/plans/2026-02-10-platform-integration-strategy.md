@@ -119,26 +119,45 @@ Approach with data, not a pitch:
 
 ## Revenue Model
 
-### API Pricing (Usage-Based)
+### Per-Pipeline Pricing
 
-| Tier | Volume | Price per verification | Monthly |
-|------|--------|-----------------------|---------|
-| Developer (free) | 100 calls/month | $0.00 | $0 |
-| Startup | 5,000 calls/month | $0.04 | $200 |
-| Growth | 50,000 calls/month | $0.025 | $1,250 |
-| Platform | 500,000+ calls/month | $0.01-0.02 | $5,000-10,000 |
-| Enterprise | Custom | Negotiated | $10,000-50,000 |
+LUCID prices per **pipeline invocation**, not per API call. Each pipeline invocation involves multiple internal API calls (3 for Forward, 4 for Reverse), but customers think in terms of **tasks** — "verify this code" or "generate this function" — not raw API calls. Per-pipeline pricing is simpler to reason about, aligns with customer value, and ensures healthy margins regardless of internal call count.
 
-**Unit economics:**
-- Cost per call: $0.003-0.014 (Anthropic API)
-- Revenue per call: $0.01-0.04
-- Gross margin: 60-90% depending on task complexity
+**Two products:**
+- **Forward LUCID (Verify):** Takes existing code, runs extract → verify → remediate. 3 internal API calls, ~$0.085 cost per invocation.
+- **Reverse LUCID (Generate):** Takes a spec, runs constrain → generate → self-verify → remediate. 4 internal API calls, ~$0.163 cost per invocation.
+- **Full Loop:** Forward + Reverse combined (verify existing code, then regenerate failures). ~$0.248 cost per invocation.
 
-**Why usage-based beats seat-based:**
-- Aligns with how platforms think (cost per generation, not cost per developer)
-- Scales automatically with platform growth
-- No sales friction around "how many seats"
-- Platforms can A/B test without commitment
+| Tier | Forward (Verify) | Reverse (Generate) | Full Loop | Monthly |
+|------|-----------------|-------------------|-----------|---------|
+| Free | 50 verifies/mo | 20 generates/mo | — | $0 |
+| Developer | $0.15/verify | $0.30/generate | $0.40/task | Pay-as-you-go |
+| Startup | $0.12/verify | $0.25/generate | $0.35/task | $99/mo (includes 500 verifies) |
+| Platform | $0.06/verify | $0.15/generate | $0.20/task | $2,500/mo minimum |
+| Enterprise | Negotiated | Negotiated | Negotiated | $10,000+/mo |
+
+**Unit economics by tier:**
+
+| Tier | Product | Revenue | Cost | Gross Margin |
+|------|---------|---------|------|-------------|
+| Developer | Forward | $0.15 | $0.085 | 43% |
+| Developer | Reverse | $0.30 | $0.163 | 46% |
+| Developer | Full Loop | $0.40 | $0.248 | 38% |
+| Startup | Forward | $0.12 | $0.085 | 29% |
+| Startup | Reverse | $0.25 | $0.163 | 35% |
+| Startup | Full Loop | $0.35 | $0.248 | 29% |
+| Platform | Forward | $0.06 | $0.085 | -42% (volume subsidized by minimum) |
+| Platform | Reverse | $0.15 | $0.163 | -9% (volume subsidized by minimum) |
+| Platform | Full Loop | $0.20 | $0.248 | -19% (volume subsidized by minimum) |
+
+*Platform tier unit economics are negative but offset by the $2,500/mo minimum commitment. At platform scale, Anthropic API costs decrease with negotiated volume pricing, pushing margins positive.*
+
+**Why per-pipeline beats per-call:**
+- Customers think in tasks ("verify this file"), not API calls. Simpler mental model.
+- Per-call pricing at $0.04 would make Reverse LUCID margin-negative (4 calls x $0.04 = $0.16 revenue vs $0.163 cost).
+- Per-pipeline lets us price each product according to the value it delivers, not the cost structure behind it.
+- Scales naturally with platform growth — more verifications = more revenue.
+- Platforms can A/B test without commitment on the free tier.
 
 ### Enterprise / Platform Contracts
 
@@ -146,9 +165,9 @@ For platforms integrating LUCID into their pipeline:
 
 | Contract type | Annual value | What's included |
 |---------------|-------------|-----------------|
-| Pilot | $0 (3 months) | API access, 50K calls, dedicated support |
-| Standard integration | $60K-120K/yr | Unlimited calls, SLA, priority support |
-| Strategic partnership | $120K-500K/yr | Co-marketing, custom verification strategies, dedicated instance |
+| Pilot | $0 (3 months) | API access, 1,000 verifies + 500 generates, dedicated support |
+| Standard integration | $30K-60K/yr | $2,500/mo minimum, volume pricing, SLA, priority support |
+| Strategic partnership | $120K-500K/yr | Co-marketing, custom verification strategies, dedicated instance, negotiated rates |
 
 ---
 
