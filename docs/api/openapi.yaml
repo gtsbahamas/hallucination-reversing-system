@@ -1,0 +1,573 @@
+openapi: 3.1.0
+info:
+  title: LUCID API
+  version: 1.0.0
+  description: |
+    The LUCID API provides formal verification of AI-generated code through two
+    complementary pipelines:
+
+    - **Forward Pipeline** — Submit existing code for claim extraction, formal
+      verification, and automated remediation.
+    - **Reverse Pipeline** — Submit a task description to generate a formal spec,
+      derive constraints, produce verified code, and validate it against the spec.
+
+    LUCID uses a hallucination-verification loop inspired by predictive processing
+    (Friston's Free Energy Principle) to iteratively converge on provably correct
+    code. In benchmarks, LUCID achieves **100% pass@5 on HumanEval** and a
+    **+36% relative improvement on SWE-bench Lite**.
+
+    ## Authentication
+
+    All endpoints except `/health` and `/keys` require a Bearer token. Obtain a
+    free API key via `POST /api/v1/keys` and include it in the `Authorization`
+    header:
+
+    ```
+    Authorization: Bearer lucid_xxxxxxxxxxxxxxxxxxxx
+    ```
+
+    ## Rate Limits
+
+    Rate limits vary by tier. When exceeded, the API returns `429 Too Many Requests`
+    with a `Retry-After` header indicating how many seconds to wait.
+
+    | Tier      | Requests/min | Forward/mo | Reverse/mo |
+    |-----------|-------------|------------|------------|
+    | free      | 5           | 50         | 20         |
+    | developer | 20          | unlimited  | unlimited  |
+    | startup   | 60          | unlimited  | unlimited  |
+    | platform  | 200         | unlimited  | unlimited  |
+  contact:
+    name: LUCID Support
+    email: tyclaude@snapperland.com
+    url: https://trylucid.dev
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://trylucid.dev
+    description: Production
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "lk_live_*"
+      description: API key obtained from `POST /api/v1/keys`. Prefix is `lk_live_`.
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code.
+          example: RATE_LIMIT_EXCEEDED
+        message:
+          type: string
+          description: Human-readable error description.
+          example: Rate limit exceeded. Retry after 12 seconds.
+
+    Claim:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique claim identifier.
+          example: claim_01
+        description:
+          type: string
+          description: Natural-language description of the claim.
+          example: Function returns the sum of all elements in the list.
+        location:
+          type: string
+          description: Code location (function name, line range).
+          example: "sum_list:1-5"
+        severity:
+          type: string
+          enum: [critical, major, minor, info]
+          example: critical
+
+    VerificationResult:
+      type: object
+      properties:
+        claim_id:
+          type: string
+          example: claim_01
+        status:
+          type: string
+          enum: [verified, falsified, unknown, timeout]
+          example: verified
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          example: 0.98
+        evidence:
+          type: string
+          description: Explanation or counterexample.
+          example: All test cases pass; edge case [] returns 0.
+
+    RemediationTask:
+      type: object
+      properties:
+        claim_id:
+          type: string
+          example: claim_01
+        action:
+          type: string
+          description: Recommended fix.
+          example: Add bounds check for empty input.
+        priority:
+          type: string
+          enum: [high, medium, low]
+          example: high
+
+    UsageStats:
+      type: object
+      properties:
+        input_tokens:
+          type: integer
+          description: Total input tokens consumed by this request.
+          example: 1240
+        output_tokens:
+          type: integer
+          description: Total output tokens consumed by this request.
+          example: 860
+        pipeline_calls:
+          type: integer
+          description: Number of LLM calls made within the pipeline.
+          example: 4
+        duration_ms:
+          type: integer
+          description: Total request duration in milliseconds.
+          example: 3200
+
+    ForwardRequest:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          description: Source code to verify.
+          example: |
+            def sum_list(nums):
+                return sum(nums)
+        language:
+          type: string
+          description: Programming language. Auto-detected if omitted.
+          example: python
+        context:
+          type: string
+          description: Optional context about the code's purpose.
+          example: This function should handle empty lists and return 0.
+
+    ForwardResponse:
+      type: object
+      properties:
+        request_id:
+          type: string
+          description: Unique request identifier for support and tracing.
+          example: req_abc123def456
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/Claim'
+        verification:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationResult'
+        remediation:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemediationTask'
+        verified_code:
+          type: string
+          description: Remediated code (if changes were needed). Null if original code passed all checks.
+          nullable: true
+        usage:
+          $ref: '#/components/schemas/UsageStats'
+
+    ReverseRequest:
+      type: object
+      required:
+        - task
+      properties:
+        task:
+          type: string
+          description: Natural-language description of the coding task.
+          example: Write a function that returns the nth Fibonacci number using memoization.
+        language:
+          type: string
+          description: Target programming language. Defaults to python.
+          example: python
+
+    Constraint:
+      type: object
+      properties:
+        id:
+          type: string
+          example: C1
+        description:
+          type: string
+          example: "fib(0) == 0"
+        type:
+          type: string
+          enum: [precondition, postcondition, invariant]
+          example: postcondition
+
+    ReverseResponse:
+      type: object
+      properties:
+        request_id:
+          type: string
+          example: req_xyz789ghi012
+        spec:
+          type: string
+          description: Generated formal specification.
+        constraints:
+          type: array
+          items:
+            $ref: '#/components/schemas/Constraint'
+        code:
+          type: string
+          description: Generated code that satisfies the spec.
+        verification:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationResult'
+        usage:
+          $ref: '#/components/schemas/UsageStats'
+
+    UsageResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          format: date
+          description: Current billing month (first day).
+          example: "2026-02-01"
+        tier:
+          type: string
+          example: developer
+        forward:
+          type: object
+          properties:
+            used:
+              type: integer
+              example: 142
+            limit:
+              type: integer
+              nullable: true
+              description: Null means unlimited.
+              example: null
+        reverse:
+          type: object
+          properties:
+            used:
+              type: integer
+              example: 37
+            limit:
+              type: integer
+              nullable: true
+              example: null
+        tokens:
+          type: object
+          properties:
+            input:
+              type: integer
+              example: 245000
+            output:
+              type: integer
+              example: 189000
+
+    CreateKeyRequest:
+      type: object
+      required:
+        - email
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email address for the key owner.
+          example: dev@example.com
+        name:
+          type: string
+          description: Human-readable name for this key.
+          example: My App - Production
+        tier:
+          type: string
+          description: Requested tier. Only "free" is available without contacting sales.
+          default: free
+          example: free
+
+    CreateKeyResponse:
+      type: object
+      properties:
+        api_key:
+          type: string
+          description: |
+            The full API key. **This is shown only once.** Store it securely.
+          example: lucid_sk_a1b2c3d4e5f6g7h8i9j0
+        key_prefix:
+          type: string
+          description: Non-secret prefix for identifying the key.
+          example: lucid_sk_a1b2
+        tier:
+          type: string
+          example: free
+        limits:
+          type: object
+          properties:
+            forward_monthly:
+              type: integer
+              nullable: true
+              example: 50
+            reverse_monthly:
+              type: integer
+              nullable: true
+              example: 20
+            requests_per_minute:
+              type: integer
+              example: 5
+
+paths:
+  /api/v1/health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: Returns API health status. No authentication required.
+      security: []
+      tags:
+        - System
+      responses:
+        '200':
+          description: API is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 1.0.0
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/v1/forward:
+    post:
+      operationId: forwardPipeline
+      summary: Forward LUCID pipeline
+      description: |
+        Submit code for claim extraction, formal verification, and automated
+        remediation. The pipeline:
+
+        1. **Extract** claims (what the code promises to do)
+        2. **Verify** each claim using formal methods
+        3. **Remediate** falsified claims with targeted fixes
+        4. Return verified code with full audit trail
+      tags:
+        - Pipelines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForwardRequest'
+      responses:
+        '200':
+          description: Verification completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForwardResponse'
+        '400':
+          description: Invalid request (missing or malformed code).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_REQUEST
+                message: "\"code\" field is required and must be a non-empty string."
+        '401':
+          description: Missing or invalid API key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: UNAUTHORIZED
+                message: Invalid or missing API key.
+        '429':
+          description: Rate limit exceeded.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: RATE_LIMIT_EXCEEDED
+                message: Rate limit exceeded. Retry after 12 seconds.
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INTERNAL_ERROR
+                message: An unexpected error occurred. Contact support with request_id.
+
+  /api/v1/reverse:
+    post:
+      operationId: reversePipeline
+      summary: Reverse LUCID pipeline
+      description: |
+        Submit a task description to generate verified code from scratch.
+        The pipeline:
+
+        1. **Specify** — generate a formal spec from the task description
+        2. **Constrain** — derive verifiable constraints from the spec
+        3. **Generate** — produce code that satisfies the constraints
+        4. **Verify** — validate the code against the spec
+        5. **Iterate** — if verification fails, refine and retry (up to 5 iterations)
+      tags:
+        - Pipelines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReverseRequest'
+      responses:
+        '200':
+          description: Code generated and verified successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReverseResponse'
+        '400':
+          description: Invalid request (missing or malformed task).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_REQUEST
+                message: "\"task\" field is required and must be a non-empty string."
+        '401':
+          description: Missing or invalid API key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/usage:
+    get:
+      operationId: getUsage
+      summary: Get usage statistics
+      description: Returns current month usage statistics for the authenticated API key.
+      tags:
+        - Account
+      responses:
+        '200':
+          description: Usage statistics returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageResponse'
+        '401':
+          description: Missing or invalid API key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/keys:
+    post:
+      operationId: createKey
+      summary: Create API key
+      description: |
+        Create a new API key for the free tier. No authentication required.
+        The full key is returned **only once** in the response — store it securely.
+
+        For developer, startup, or platform tiers, contact sales@trylucid.dev.
+      security: []
+      tags:
+        - Account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKeyRequest'
+      responses:
+        '201':
+          description: API key created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateKeyResponse'
+        '400':
+          description: Invalid request (missing email or name).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_REQUEST
+                message: "\"email\" must be a valid email address."
+        '409':
+          description: Email already has a key for the requested tier.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: CONFLICT
+                message: An API key already exists for this email and tier.
+
+tags:
+  - name: Pipelines
+    description: LUCID verification pipelines (Forward and Reverse).
+  - name: Account
+    description: API key management and usage tracking.
+  - name: System
+    description: Health and status endpoints.

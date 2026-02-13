@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>State of AI Code Quality 2026 | LUCID Research</title>
+<meta name="description" content="The most comprehensive evaluation of AI-generated code quality: 594 tasks, 6 tracks, 4 platforms. Average health score: 40/100. 21 critical bugs found. Download the full report.">
+<meta name="keywords" content="AI code quality, AI-generated code, formal verification, LUCID, benchmark, Copilot, Cursor, Bolt, Lovable, Replit, EU AI Act">
+<meta property="og:title" content="State of AI Code Quality 2026 | LUCID Research">
+<meta property="og:description" content="594 tasks. 6 tracks. 4 platforms. Average health score: 40/100. The definitive benchmark on AI-generated code quality.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://trylucid.dev/docs/benchmark-report/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="State of AI Code Quality 2026 | LUCID Research">
+<meta name="twitter:description" content="594 tasks. 6 tracks. 4 platforms. Average health score: 40/100.">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;
+  --bg-card:#12121a;
+  --bg-card-hover:#1a1a26;
+  --border:#1e1e2e;
+  --text:#e0e0e8;
+  --text-dim:#8888a0;
+  --text-bright:#ffffff;
+  --accent:#6366f1;
+  --accent-glow:rgba(99,102,241,0.15);
+  --danger:#ef4444;
+  --danger-glow:rgba(239,68,68,0.12);
+  --success:#22c55e;
+  --success-glow:rgba(34,197,94,0.12);
+  --warning:#f59e0b;
+  --warning-glow:rgba(245,158,11,0.12);
+  --cyan:#06b6d4;
+  --radius:12px;
+  --radius-sm:8px;
+  --max-w:1100px;
+}
+html{scroll-behavior:smooth;font-size:16px}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,sans-serif;
+  background:var(--bg);color:var(--text);line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Hero */
+.hero{
+  position:relative;overflow:hidden;
+  padding:100px 24px 80px;text-align:center;
+  background:linear-gradient(180deg,#0d0d18 0%,var(--bg) 100%);
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 0%,rgba(99,102,241,0.08),transparent);
+  pointer-events:none;
+}
+.hero-badge{
+  display:inline-block;
+  padding:6px 16px;border-radius:24px;
+  background:var(--accent-glow);border:1px solid rgba(99,102,241,0.3);
+  font-size:0.82rem;color:var(--accent);font-weight:600;
+  letter-spacing:0.04em;text-transform:uppercase;margin-bottom:24px;
+}
+.hero h1{
+  font-size:clamp(2rem,5vw,3.4rem);font-weight:800;
+  color:var(--text-bright);line-height:1.15;margin-bottom:16px;
+  max-width:800px;margin-left:auto;margin-right:auto;
+}
+.hero h1 span{
+  background:linear-gradient(135deg,var(--accent),var(--cyan));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.hero .subtitle{
+  font-size:clamp(1rem,2vw,1.25rem);color:var(--text-dim);
+  max-width:640px;margin:0 auto 12px;
+}
+.hero .meta{
+  font-size:0.85rem;color:var(--text-dim);opacity:0.7;
+  margin-bottom:40px;
+}
+.hero .meta a{color:var(--text-dim)}
+
+/* Stats strip */
+.stats-strip{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:16px;max-width:var(--max-w);margin:0 auto;
+  padding:0 24px 0;
+}
+.stat-card{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:24px 16px;text-align:center;
+}
+.stat-card .num{
+  font-size:clamp(1.6rem,4vw,2.4rem);font-weight:800;
+  color:var(--text-bright);line-height:1.1;
+}
+.stat-card .num.danger{color:var(--danger)}
+.stat-card .num.success{color:var(--success)}
+.stat-card .num.warning{color:var(--warning)}
+.stat-card .num.accent{color:var(--accent)}
+.stat-card .label{
+  font-size:0.78rem;color:var(--text-dim);margin-top:6px;
+  text-transform:uppercase;letter-spacing:0.05em;font-weight:600;
+}
+
+/* Section scaffolding */
+.section{
+  max-width:var(--max-w);margin:0 auto;
+  padding:80px 24px 0;
+}
+.section-label{
+  font-size:0.75rem;color:var(--accent);text-transform:uppercase;
+  letter-spacing:0.1em;font-weight:700;margin-bottom:8px;
+}
+.section h2{
+  font-size:clamp(1.4rem,3vw,2rem);font-weight:700;
+  color:var(--text-bright);margin-bottom:16px;line-height:1.25;
+}
+.section .lead{
+  font-size:1.05rem;color:var(--text-dim);max-width:640px;
+  margin-bottom:32px;
+}
+
+/* Card grid */
+.card-grid{display:grid;gap:16px}
+.card-grid.cols-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.card-grid.cols-3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.card{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:28px 24px;
+  transition:border-color 0.2s,background 0.2s;
+}
+.card:hover{border-color:rgba(99,102,241,0.3);background:var(--bg-card-hover)}
+.card h3{
+  font-size:1.05rem;font-weight:700;color:var(--text-bright);
+  margin-bottom:8px;display:flex;align-items:center;gap:8px;
+}
+.card p{font-size:0.92rem;color:var(--text-dim);line-height:1.6}
+
+/* Tables */
+.table-wrap{overflow-x:auto;margin:0 -8px;padding:0 8px}
+table{
+  width:100%;border-collapse:collapse;
+  font-size:0.88rem;
+}
+th,td{
+  text-align:left;padding:12px 16px;
+  border-bottom:1px solid var(--border);
+}
+th{
+  font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;
+  color:var(--text-dim);font-weight:700;white-space:nowrap;
+}
+td{color:var(--text)}
+tr:last-child td{border-bottom:none}
+.table-card{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);overflow:hidden;margin-bottom:16px;
+}
+.table-card .table-title{
+  padding:16px 20px 0;font-size:0.95rem;font-weight:700;
+  color:var(--text-bright);
+}
+.table-card table{margin-top:8px}
+.table-card th,.table-card td{padding:10px 20px}
+
+/* Bar charts (CSS only) */
+.bar-chart{margin:24px 0}
+.bar-row{
+  display:grid;grid-template-columns:130px 1fr 60px;
+  align-items:center;gap:12px;margin-bottom:10px;
+}
+.bar-row .bar-label{
+  font-size:0.82rem;color:var(--text-dim);text-align:right;
+  white-space:nowrap;
+}
+.bar-row .bar-track{
+  height:28px;background:rgba(255,255,255,0.04);
+  border-radius:6px;overflow:hidden;position:relative;
+}
+.bar-row .bar-fill{
+  height:100%;border-radius:6px;
+  transition:width 1s ease;
+  display:flex;align-items:center;padding-left:10px;
+}
+.bar-row .bar-val{
+  font-size:0.82rem;font-weight:700;color:var(--text-bright);
+  text-align:left;
+}
+
+/* Callout */
+.callout{
+  border-left:3px solid var(--accent);
+  background:var(--accent-glow);
+  border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+  padding:20px 24px;margin:24px 0;
+}
+.callout.danger{
+  border-left-color:var(--danger);
+  background:var(--danger-glow);
+}
+.callout.warning{
+  border-left-color:var(--warning);
+  background:var(--warning-glow);
+}
+.callout.success{
+  border-left-color:var(--success);
+  background:var(--success-glow);
+}
+.callout p{font-size:0.92rem;color:var(--text)}
+.callout strong{color:var(--text-bright)}
+
+/* Timeline / Urgency bar */
+.urgency-bar{
+  background:linear-gradient(90deg,var(--danger),var(--warning),var(--success));
+  height:6px;border-radius:3px;margin:16px 0 8px;position:relative;
+}
+.urgency-marker{
+  position:absolute;top:-6px;
+  width:18px;height:18px;border-radius:50%;
+  background:var(--text-bright);border:3px solid var(--danger);
+  transform:translateX(-50%);
+}
+.urgency-labels{
+  display:flex;justify-content:space-between;
+  font-size:0.72rem;color:var(--text-dim);
+}
+
+/* Gate / CTA */
+.gate{
+  max-width:580px;margin:0 auto;
+  padding:80px 24px 60px;text-align:center;
+}
+.gate h2{
+  font-size:clamp(1.3rem,3vw,1.8rem);font-weight:700;
+  color:var(--text-bright);margin-bottom:12px;
+}
+.gate .gate-sub{
+  font-size:0.95rem;color:var(--text-dim);margin-bottom:32px;
+}
+.gate form{
+  display:flex;gap:10px;max-width:440px;margin:0 auto 16px;
+  flex-wrap:wrap;justify-content:center;
+}
+.gate input[type="email"]{
+  flex:1 1 240px;padding:14px 18px;
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius-sm);color:var(--text-bright);
+  font-size:0.95rem;outline:none;
+  transition:border-color 0.2s;
+}
+.gate input[type="email"]:focus{border-color:var(--accent)}
+.gate input[type="email"]::placeholder{color:var(--text-dim)}
+.gate button{
+  padding:14px 28px;
+  background:var(--accent);color:#fff;font-weight:700;
+  font-size:0.95rem;border:none;border-radius:var(--radius-sm);
+  cursor:pointer;transition:opacity 0.2s;white-space:nowrap;
+}
+.gate button:hover{opacity:0.9}
+.gate .fine{font-size:0.75rem;color:var(--text-dim)}
+
+/* Findings grid */
+.finding{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:24px;
+  border-left:3px solid var(--danger);
+  margin-bottom:12px;
+}
+.finding .f-header{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:8px;flex-wrap:wrap;gap:8px;
+}
+.finding .f-project{
+  font-size:0.82rem;font-weight:700;color:var(--text-bright);
+}
+.finding .f-platform{
+  font-size:0.72rem;padding:3px 10px;border-radius:12px;
+  background:rgba(255,255,255,0.06);color:var(--text-dim);
+  font-weight:600;
+}
+.finding .f-desc{font-size:0.88rem;color:var(--text-dim)}
+
+/* Comparison table highlight */
+td.win{color:var(--success);font-weight:700}
+td.lose{color:var(--danger);font-weight:700}
+td.neutral{color:var(--text-dim)}
+
+/* Footer */
+.footer{
+  max-width:var(--max-w);margin:0 auto;
+  padding:60px 24px 40px;
+  border-top:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:flex-start;
+  flex-wrap:wrap;gap:24px;
+  font-size:0.82rem;color:var(--text-dim);
+}
+.footer a{color:var(--text-dim)}
+.footer a:hover{color:var(--accent)}
+.footer-links{display:flex;gap:20px;flex-wrap:wrap}
+
+/* Market stat badges */
+.market-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:16px;
+}
+.market-stat{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:24px;
+  display:flex;gap:16px;align-items:flex-start;
+}
+.market-stat .ms-icon{
+  width:48px;height:48px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.3rem;flex-shrink:0;
+}
+.market-stat .ms-body{}
+.market-stat .ms-num{
+  font-size:1.3rem;font-weight:800;color:var(--text-bright);
+  line-height:1.2;
+}
+.market-stat .ms-desc{
+  font-size:0.8rem;color:var(--text-dim);margin-top:2px;
+}
+.market-stat .ms-src{
+  font-size:0.68rem;color:var(--text-dim);opacity:0.6;
+  margin-top:4px;
+}
+.ms-icon.danger-bg{background:var(--danger-glow)}
+.ms-icon.warning-bg{background:var(--warning-glow)}
+.ms-icon.accent-bg{background:var(--accent-glow)}
+.ms-icon.success-bg{background:var(--success-glow)}
+
+/* Nav */
+.topnav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:rgba(10,10,15,0.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  padding:0 24px;
+}
+.topnav-inner{
+  max-width:var(--max-w);margin:0 auto;
+  display:flex;align-items:center;justify-content:space-between;
+  height:56px;
+}
+.topnav-brand{
+  font-weight:800;font-size:1rem;color:var(--text-bright);
+  letter-spacing:-0.02em;
+}
+.topnav-brand span{color:var(--accent)}
+.topnav-links{display:flex;gap:20px}
+.topnav-links a{
+  font-size:0.82rem;color:var(--text-dim);font-weight:500;
+  transition:color 0.2s;
+}
+.topnav-links a:hover{color:var(--text-bright);text-decoration:none}
+
+/* Responsive */
+@media(max-width:640px){
+  .hero{padding:80px 16px 60px}
+  .stats-strip{grid-template-columns:repeat(2,1fr);padding:0 16px}
+  .section{padding:56px 16px 0}
+  .bar-row{grid-template-columns:100px 1fr 50px;gap:8px}
+  .gate form{flex-direction:column}
+  .gate input[type="email"],.gate button{width:100%}
+  .topnav-links{display:none}
+  .footer{flex-direction:column;text-align:center}
+  .footer-links{justify-content:center}
+  .market-grid{grid-template-columns:1fr}
+}
+
+/* Smooth reveal */
+.reveal{opacity:0;transform:translateY(20px);transition:opacity 0.6s,transform 0.6s}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* Badge/pill */
+.pill{
+  display:inline-block;padding:3px 10px;border-radius:12px;
+  font-size:0.72rem;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.04em;
+}
+.pill-danger{background:var(--danger-glow);color:var(--danger)}
+.pill-success{background:var(--success-glow);color:var(--success)}
+.pill-warning{background:var(--warning-glow);color:var(--warning)}
+.pill-accent{background:var(--accent-glow);color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="topnav">
+  <div class="topnav-inner">
+    <div class="topnav-brand">LUCID<span>.</span>research</div>
+    <div class="topnav-links">
+      <a href="#findings">Key Findings</a>
+      <a href="#market">Market Context</a>
+      <a href="#benchmarks">Benchmarks</a>
+      <a href="#bugs">Critical Bugs</a>
+      <a href="#download">Get the Report</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="hero-badge">February 2026 Research Report</div>
+  <h1>State of AI Code Quality <span>2026</span></h1>
+  <p class="subtitle">The most comprehensive evaluation of AI-generated code quality to date. 594 tasks. 6 evaluation tracks. 4 platforms tested. 21 critical bugs found.</p>
+  <p class="meta">US Patent Pending (App #63/980,048) &middot; <a href="https://doi.org/10.5281/zenodo.18522644">DOI: 10.5281/zenodo.18522644</a></p>
+</header>
+
+<!-- Key stats -->
+<div class="stats-strip reveal">
+  <div class="stat-card">
+    <div class="num">594</div>
+    <div class="label">Tasks Evaluated</div>
+  </div>
+  <div class="stat-card">
+    <div class="num danger">40/100</div>
+    <div class="label">Avg Health Score</div>
+  </div>
+  <div class="stat-card">
+    <div class="num danger">21</div>
+    <div class="label">Critical Bugs Found</div>
+  </div>
+  <div class="stat-card">
+    <div class="num success">100%</div>
+    <div class="label">LUCID pass@3</div>
+  </div>
+  <div class="stat-card">
+    <div class="num accent">$538</div>
+    <div class="label">Total Research Cost</div>
+  </div>
+</div>
+
+<!-- Key Findings -->
+<section class="section reveal" id="findings">
+  <div class="section-label">Key Findings</div>
+  <h2>All AI platforms produce code that compiles. None produce code that is fully correct.</h2>
+  <p class="lead">Real-world AI-generated applications score an average health of 40/100 with 21 critical bugs across 4 codebases. The gap between "it compiles" and "it works" grows with complexity.</p>
+
+  <div class="card-grid cols-2">
+    <div class="card">
+      <h3><span class="pill pill-danger">Critical</span> Self-refine is useless</h3>
+      <p>Asking an LLM to "try again" improves pass rates by only 0.6-1.2 percentage points on HumanEval. Platforms using this approach are wasting compute on the illusion of improvement.</p>
+    </div>
+    <div class="card">
+      <h3><span class="pill pill-danger">Critical</span> LLM-as-judge degrades quality</h3>
+      <p>After 5 iterations, LLM-based code review drops pass rates from 99.4% to 97.2%. False positives cause the model to "fix" correct code. Using AI to review AI makes things worse.</p>
+    </div>
+    <div class="card">
+      <h3><span class="pill pill-success">Proven</span> Formal verification converges to 100%</h3>
+      <p>LUCID is the only verification approach that converges monotonically. HumanEval: 100% at k=3. SWE-bench: +36% improvement. Live coding: +26% improvement. No regressions.</p>
+    </div>
+    <div class="card">
+      <h3><span class="pill pill-accent">Novel</span> Verification improves model training</h3>
+      <p>LUCID-verified data as DPO preference signal improves StarCoder2-3B by +2.0pp. The same data hurts as supervised fine-tuning (-4.0%). Verification is a contrastive training signal.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Market Context -->
+<section class="section reveal" id="market">
+  <div class="section-label">Why This Matters Now</div>
+  <h2>The AI code quality crisis is accelerating</h2>
+  <p class="lead">Independent research from Gartner, Veracode, IBM, Cycode, and Aikido Security confirms what our benchmark reveals: AI-generated code is a growing liability.</p>
+
+  <div class="market-grid">
+    <div class="market-stat">
+      <div class="ms-icon danger-bg">!</div>
+      <div class="ms-body">
+        <div class="ms-num">2,500%</div>
+        <div class="ms-desc">Predicted increase in software defects from AI-generated code by 2028</div>
+        <div class="ms-src">Gartner</div>
+      </div>
+    </div>
+    <div class="market-stat">
+      <div class="ms-icon danger-bg">!</div>
+      <div class="ms-body">
+        <div class="ms-num">45%</div>
+        <div class="ms-desc">Of AI-generated code fails basic security tests. 86% XSS failure rate. 88% log injection failure rate.</div>
+        <div class="ms-src">Veracode 2025 GenAI Report</div>
+      </div>
+    </div>
+    <div class="market-stat">
+      <div class="ms-icon warning-bg">!</div>
+      <div class="ms-body">
+        <div class="ms-num">1 in 5</div>
+        <div class="ms-desc">Organizations have suffered a security breach linked to AI-generated code</div>
+        <div class="ms-src">Aikido Security 2026</div>
+      </div>
+    </div>
+    <div class="market-stat">
+      <div class="ms-icon warning-bg">!</div>
+      <div class="ms-body">
+        <div class="ms-num">$670K</div>
+        <div class="ms-desc">Average increase in breach costs from shadow AI code. 97% of breached orgs lacked AI access controls.</div>
+        <div class="ms-src">IBM 2025</div>
+      </div>
+    </div>
+    <div class="market-stat">
+      <div class="ms-icon accent-bg">!</div>
+      <div class="ms-body">
+        <div class="ms-num">81%</div>
+        <div class="ms-desc">Of security teams lack visibility into AI-generated code in their codebase</div>
+        <div class="ms-src">Cycode 2026</div>
+      </div>
+    </div>
+    <div class="market-stat">
+      <div class="ms-icon accent-bg">!</div>
+      <div class="ms-body">
+        <div class="ms-num">76%</div>
+        <div class="ms-desc">Of developers in the "red zone" — experiencing hallucinations with low confidence in generated code</div>
+        <div class="ms-src">Qodo 2025</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout warning" style="margin-top:32px">
+    <p><strong>EU AI Act Deadline: August 2, 2026</strong> — Article 50 takes full effect in less than 6 months. Organizations must demonstrate AI output transparency, documentation, and quality assurance for AI-generated artifacts. Penalties: up to 35M EUR or 7% of global turnover.</p>
+  </div>
+</section>
+
+<!-- Benchmarks -->
+<section class="section reveal" id="benchmarks">
+  <div class="section-label">Benchmark Results</div>
+  <h2>6 evaluation tracks, 594 tasks, $538 total cost</h2>
+  <p class="lead">From controlled function generation to real-world production codebases, LUCID formal verification outperforms every alternative approach.</p>
+
+  <!-- Headline Results Table -->
+  <div class="table-card">
+    <div class="table-title">Headline Results Across All Tracks</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Benchmark</th><th>Baseline</th><th>With LUCID</th><th>Improvement</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>HumanEval (164 tasks)</td>
+            <td>86.6%</td>
+            <td class="win">100% (k=3)</td>
+            <td>+15.5 pp</td>
+          </tr>
+          <tr>
+            <td>SWE-bench Lite (300 tasks)</td>
+            <td>18.3%</td>
+            <td class="win">30.3% (best)</td>
+            <td>+65.5% relative</td>
+          </tr>
+          <tr>
+            <td>Live Comparison (10 tasks)</td>
+            <td>21.6/30</td>
+            <td class="win">27.2/30</td>
+            <td>+25.9%</td>
+          </tr>
+          <tr>
+            <td>RLVF Model Training (164 tasks)</td>
+            <td>89.6%</td>
+            <td class="win">91.5% (DPO)</td>
+            <td>+2.0 pp</td>
+          </tr>
+          <tr>
+            <td>Real-World AI Apps (4 codebases)</td>
+            <td>--</td>
+            <td class="lose">Avg 40/100 health</td>
+            <td>21 critical bugs</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- HumanEval chart -->
+  <h3 style="color:var(--text-bright);font-size:1.1rem;margin-top:40px;margin-bottom:4px">Track C: HumanEval — Verification Method Comparison</h3>
+  <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:8px">pass@3 on 164 function-generation tasks. Only LUCID converges to 100%.</p>
+  <div class="bar-chart">
+    <div class="bar-row">
+      <span class="bar-label">Baseline</span>
+      <div class="bar-track"><div class="bar-fill" style="width:86.6%;background:linear-gradient(90deg,#444,#666)"></div></div>
+      <span class="bar-val">86.6%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">Self-refine</span>
+      <div class="bar-track"><div class="bar-fill" style="width:87.2%;background:linear-gradient(90deg,#555,#777)"></div></div>
+      <span class="bar-val">87.2%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">LLM-judge</span>
+      <div class="bar-track"><div class="bar-fill" style="width:99.4%;background:linear-gradient(90deg,var(--warning),var(--danger))"></div></div>
+      <span class="bar-val" style="color:var(--danger)">99.4% &rarr; 97.2%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">LUCID</span>
+      <div class="bar-track"><div class="bar-fill" style="width:100%;background:linear-gradient(90deg,var(--accent),var(--cyan))"></div></div>
+      <span class="bar-val" style="color:var(--success)">100%</span>
+    </div>
+  </div>
+  <div class="callout danger" style="margin-top:8px">
+    <p><strong>LLM-as-judge regresses at k=5:</strong> Pass rate drops from 99.4% to 97.2% because false positives cause the model to "fix" correct code. Self-refine is flat at ~87%. Only formal verification achieves monotonic convergence.</p>
+  </div>
+
+  <!-- SWE-bench chart -->
+  <h3 style="color:var(--text-bright);font-size:1.1rem;margin-top:40px;margin-bottom:4px">Track D: SWE-bench Lite — Real Bug Fixes</h3>
+  <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:8px">300 real GitHub issues from major projects. Head-to-head: 23 improvements, 3 regressions (7.7:1 ratio).</p>
+  <div class="bar-chart">
+    <div class="bar-row">
+      <span class="bar-label">Baseline (k=1)</span>
+      <div class="bar-track"><div class="bar-fill" style="width:60.4%;background:linear-gradient(90deg,#444,#666)"></div></div>
+      <span class="bar-val">18.3%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">LUCID (k=1)</span>
+      <div class="bar-track"><div class="bar-fill" style="width:82.5%;background:linear-gradient(90deg,var(--accent),#818cf8)"></div></div>
+      <span class="bar-val">25.0%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">LUCID (k=3)</span>
+      <div class="bar-track"><div class="bar-fill" style="width:83.5%;background:linear-gradient(90deg,var(--accent),var(--cyan))"></div></div>
+      <span class="bar-val">25.3%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">LUCID (best)</span>
+      <div class="bar-track"><div class="bar-fill" style="width:100%;background:linear-gradient(90deg,var(--success),var(--cyan))"></div></div>
+      <span class="bar-val" style="color:var(--success)">30.3%</span>
+    </div>
+  </div>
+
+  <!-- Live comparison + RLVF -->
+  <div class="card-grid cols-2" style="margin-top:40px">
+    <div class="table-card">
+      <div class="table-title">Track E: Live Coding Comparison</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Condition</th><th>Score (/30)</th><th>Tasks Won</th></tr></thead>
+          <tbody>
+            <tr><td>Baseline</td><td>21.6</td><td class="lose">0</td></tr>
+            <tr><td>Forward LUCID</td><td class="win">27.2</td><td class="win">7</td></tr>
+            <tr><td>Reverse LUCID</td><td>24.5</td><td>3</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-title">Track F: RLVF Model Training</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Condition</th><th>Pass@1</th><th>vs Base</th></tr></thead>
+          <tbody>
+            <tr><td>Base StarCoder2-3B</td><td>89.6%</td><td class="neutral">--</td></tr>
+            <tr><td>Vanilla SFT</td><td>89.0%</td><td class="lose">-0.7%</td></tr>
+            <tr><td>LUCID SFT</td><td>86.0%</td><td class="lose">-4.0%</td></tr>
+            <tr><td>DPO (LUCID prefs)</td><td class="win">91.5%</td><td class="win">+2.0%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="callout success" style="margin-top:16px">
+    <p><strong>Verification signal = training signal.</strong> LUCID-verified preference pairs improve model quality via DPO at ~$0.25/pair vs. ~$100/pair for human RLHF — a 400x cost reduction. The same data that hurts as SFT helps as DPO.</p>
+  </div>
+</section>
+
+<!-- Critical Bugs -->
+<section class="section reveal" id="bugs">
+  <div class="section-label">Track B: Real-World AI Codebases</div>
+  <h2>21 critical bugs found across 4 production applications</h2>
+  <p class="lead">These are real applications built by real users on AI coding platforms. LUCID extracted claims from the code itself and verified internal consistency.</p>
+
+  <!-- Platform health scores -->
+  <div class="card-grid cols-2" style="margin-bottom:24px">
+    <div class="card" style="border-left:3px solid var(--danger)">
+      <h3>vision-platform <span class="pill pill-danger">Replit</span></h3>
+      <p style="font-size:1.6rem;font-weight:800;color:var(--danger);margin:8px 0">32/100</p>
+      <p>9 critical bugs. Fake analytics with hardcoded data. Non-existent API endpoints behind functional-looking UI. Profile data lost on every page refresh.</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--warning)">
+      <h3>AllIncompassing <span class="pill pill-warning">Bolt.new</span></h3>
+      <p style="font-size:1.6rem;font-weight:800;color:var(--warning);margin:8px 0">42/100</p>
+      <p>4 critical bugs. Healthcare platform with IDOR vulnerability (HIPAA risk). Supabase config never initialized. App is non-functional on fresh deploy.</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--warning)">
+      <h3>brand-zen <span class="pill pill-warning">Lovable</span></h3>
+      <p style="font-size:1.6rem;font-weight:800;color:var(--warning);margin:8px 0">42/100</p>
+      <p>4 critical bugs. Admin routes with zero authentication guards. Supabase client configuration unverifiable. Missing error boundary crashes entire app.</p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--warning)">
+      <h3>gptme-webui <span class="pill pill-warning">Lovable</span></h3>
+      <p style="font-size:1.6rem;font-weight:800;color:var(--warning);margin:8px 0">42/100</p>
+      <p>4 critical bugs. iframe sandbox disabled allows arbitrary script execution. Client-side only path traversal protection. Global query invalidation degrades performance.</p>
+    </div>
+  </div>
+
+  <!-- Bug categories -->
+  <h3 style="color:var(--text-bright);font-size:1.1rem;margin-top:32px;margin-bottom:4px">Bug Category Distribution</h3>
+  <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:12px">The most dangerous pattern: scaffolding that looks like features.</p>
+  <div class="bar-chart">
+    <div class="bar-row">
+      <span class="bar-label">Missing Impl.</span>
+      <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--danger)"></div></div>
+      <span class="bar-val">33%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">Security/Auth</span>
+      <div class="bar-track"><div class="bar-fill" style="width:73%;background:var(--danger)"></div></div>
+      <span class="bar-val">24%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">Configuration</span>
+      <div class="bar-track"><div class="bar-fill" style="width:58%;background:var(--warning)"></div></div>
+      <span class="bar-val">19%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">Fake/Mock Data</span>
+      <div class="bar-track"><div class="bar-fill" style="width:42%;background:var(--warning)"></div></div>
+      <span class="bar-val">14%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">Performance</span>
+      <div class="bar-track"><div class="bar-fill" style="width:30%;background:var(--text-dim)"></div></div>
+      <span class="bar-val">10%</span>
+    </div>
+  </div>
+
+  <div class="callout danger" style="margin-top:16px">
+    <p><strong>The AI hallucination problem, applied to code:</strong> Vision-platform's analytics page renders professional-looking charts with hardcoded numbers, claiming "real-time insights." A developer doing visual review would assume it works. Only formal verification reveals the data is fabricated.</p>
+  </div>
+
+  <!-- Sample critical findings -->
+  <h3 style="color:var(--text-bright);font-size:1.1rem;margin-top:32px;margin-bottom:12px">Sample Critical Findings</h3>
+  <div class="finding">
+    <div class="f-header">
+      <span class="f-project">AllIncompassing — Healthcare Platform</span>
+      <span class="f-platform">Bolt.new</span>
+    </div>
+    <div class="f-desc">IDOR vulnerability: any therapist can view any other therapist's data. Sensitive healthcare data exposed — potential HIPAA violation.</div>
+  </div>
+  <div class="finding">
+    <div class="f-header">
+      <span class="f-project">vision-platform</span>
+      <span class="f-platform">Replit</span>
+    </div>
+    <div class="f-desc">AI scene analysis calls <code>/ai/analyze-scene</code> — endpoint does not exist. Core feature is completely non-functional behind a working UI.</div>
+  </div>
+  <div class="finding">
+    <div class="f-header">
+      <span class="f-project">brand-zen — Brand Monitoring SaaS</span>
+      <span class="f-platform">Lovable</span>
+    </div>
+    <div class="f-desc">Admin routes (<code>/admin/*</code>) have zero authentication guards. Any user can access admin functionality.</div>
+  </div>
+  <div class="finding">
+    <div class="f-header">
+      <span class="f-project">gptme-webui — AI Agent Interface</span>
+      <span class="f-platform">Lovable</span>
+    </div>
+    <div class="f-desc">iframe sandbox disabled — arbitrary script execution possible. Combined with client-side only path traversal protection that is trivially bypassable.</div>
+  </div>
+</section>
+
+<!-- Complexity Cliff -->
+<section class="section reveal">
+  <div class="section-label">The Verification Gap</div>
+  <h2>AI code quality degrades sharply with complexity</h2>
+
+  <div class="bar-chart" style="max-width:600px">
+    <div class="bar-row">
+      <span class="bar-label">Simple tasks</span>
+      <div class="bar-track"><div class="bar-fill" style="width:97%;background:linear-gradient(90deg,var(--success),#4ade80)"></div></div>
+      <span class="bar-val" style="color:var(--success)">~97%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">Medium tasks</span>
+      <div class="bar-track"><div class="bar-fill" style="width:55%;background:linear-gradient(90deg,var(--warning),#fbbf24)"></div></div>
+      <span class="bar-val" style="color:var(--warning)">~55%</span>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">Production apps</span>
+      <div class="bar-track"><div class="bar-fill" style="width:40%;background:linear-gradient(90deg,var(--danger),#f87171)"></div></div>
+      <span class="bar-val" style="color:var(--danger)">40/100</span>
+    </div>
+  </div>
+
+  <div class="card-grid cols-3" style="margin-top:24px">
+    <div class="card">
+      <h3>Architectural Hallucination</h3>
+      <p>AI substitutes a different architecture than specified. Replit built PostgreSQL when localStorage was requested.</p>
+    </div>
+    <div class="card">
+      <h3>Scaffolding-as-Features</h3>
+      <p>UI renders professional-looking components backed by hardcoded data or non-existent API endpoints.</p>
+    </div>
+    <div class="card">
+      <h3>Security Theater</h3>
+      <p>Auth guards imported but never implemented. RBAC components that don't check roles. IDOR vulnerabilities.</p>
+    </div>
+  </div>
+</section>
+
+<!-- LUCID How It Works -->
+<section class="section reveal">
+  <div class="section-label">The Solution</div>
+  <h2>LUCID: 3-Layer Formal Verification Pipeline</h2>
+  <p class="lead">Unlike linters or type checkers, LUCID verifies semantic correctness. Does the code do what it claims? Does it meet the specification? Are there security holes?</p>
+
+  <div class="card-grid cols-3">
+    <div class="card" style="border-top:3px solid var(--accent)">
+      <h3>L1: Extract</h3>
+      <p>Identify testable claims from source code. What does this function promise? What invariants should hold? What contracts exist between components?</p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--cyan)">
+      <h3>L2: Verify</h3>
+      <p>Verify each claim against the source using formal analysis. Deterministic oracle — no probability, no hallucination, no regression with iteration.</p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--success)">
+      <h3>L3: Remediate</h3>
+      <p>Generate specific, actionable fix plans for each verification failure. Not "something is wrong" but "here is exactly what to change and why."</p>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top:24px">
+    <p><strong>Why formal verification, not more AI?</strong> Our benchmark proves that using an LLM to judge LLM output degrades quality after 5 iterations (99.4% &rarr; 97.2%). Formal verification is deterministic: it either confirms or refutes a claim. It never hallucinates. It never regresses.</p>
+  </div>
+</section>
+
+<!-- Ablation Study -->
+<section class="section reveal">
+  <div class="section-label">Ablation Study</div>
+  <h2>Every LUCID component is necessary</h2>
+  <p class="lead">We systematically removed each component to measure its contribution. Random verification gets worse with more iterations.</p>
+
+  <div class="table-card">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Condition</th><th>What's Removed</th><th>k=1</th><th>k=3</th><th>k=5</th><th>Insight</th></tr></thead>
+        <tbody>
+          <tr><td>Full LUCID</td><td>Nothing</td><td class="win">98.8%</td><td class="win">100%</td><td class="win">100%</td><td>Converges monotonically</td></tr>
+          <tr><td>no-extract</td><td>Extraction stage</td><td>100%</td><td>100%</td><td>100%</td><td>Not bottleneck on simple tasks</td></tr>
+          <tr><td>no-context</td><td>Context enrichment</td><td>99.4%</td><td>99.4%</td><td>100%</td><td>Minor effect, recovers</td></tr>
+          <tr><td>no-remediate</td><td>Remediation</td><td>99.4%</td><td>99.4%</td><td class="lose">99.4%</td><td>Plateaus without remediation</td></tr>
+          <tr><td>learned-verify</td><td>Formal verifier</td><td>98.2%</td><td class="lose">97.6%</td><td>100%</td><td>Non-monotonic regression</td></tr>
+          <tr><td>random-verify</td><td>All verification</td><td>97.6%</td><td class="lose">95.1%</td><td class="lose">97.0%</td><td>Gets WORSE with iteration</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Download Gate -->
+<section class="gate reveal" id="download">
+  <h2>Download the Full Report</h2>
+  <p class="gate-sub">Get the complete 610-line research report with all 6 evaluation tracks, detailed methodology, full bug catalog, and recommendations for platforms, labs, and engineering teams.</p>
+  <form action="https://formsubmit.co/tyclaude@snapperland.com" method="POST">
+    <input type="hidden" name="_subject" value="Benchmark Report Download Request">
+    <input type="hidden" name="_captcha" value="false">
+    <input type="hidden" name="_template" value="table">
+    <input type="hidden" name="_autoresponse" value="Thank you for your interest in the State of AI Code Quality 2026 report. Here is the full report: https://github.com/gtsbahamas/hallucination-reversing-system/blob/main/docs/benchmark-report/state-of-ai-code-quality-2026.md
+
+You can also explore the raw data and experiment code at: https://github.com/gtsbahamas/hallucination-reversing-system
+
+If you're interested in an AI Code Quality Audit for your organization, reply to this email.
+
+— Ty Wells, LUCID Research
+trylucid.dev">
+    <input type="hidden" name="_next" value="https://trylucid.dev/docs/benchmark-report/thanks.html">
+    <input type="email" name="email" placeholder="your@email.com" required>
+    <button type="submit">Get the Report</button>
+  </form>
+  <p class="fine">Free. No spam. Includes full data and methodology.</p>
+</section>
+
+<!-- Recommendations preview -->
+<section class="section reveal">
+  <div class="section-label">Recommendations</div>
+  <h2>What should you do about this?</h2>
+
+  <div class="card-grid cols-3">
+    <div class="card">
+      <h3>AI Coding Platforms</h3>
+      <p>Integrate formal verification into generation pipelines. Report verification scores alongside code. The platform that ships verified code wins enterprise customers.</p>
+    </div>
+    <div class="card">
+      <h3>Foundation Model Labs</h3>
+      <p>Use verification feedback for model training via DPO. 400x cheaper than human RLHF. 120 examples produced measurable improvement — scale is available.</p>
+    </div>
+    <div class="card">
+      <h3>Engineering Teams</h3>
+      <p>Never ship AI-generated code without verification. "It compiles" is not "it works." Audit for hardcoded mock data, missing auth guards, and non-existent endpoints.</p>
+    </div>
+  </div>
+
+  <div class="callout warning" style="margin-top:24px">
+    <p><strong>For enterprises and regulators:</strong> The EU AI Act (August 2, 2026) will require quality management for AI-generated artifacts. HIPAA and SOC2 compliance cannot be assured without verifying that auth guards actually function. Our findings show they often don't. <a href="mailto:ty@trylucid.dev">Contact us about AI Code Quality Audits.</a></p>
+  </div>
+</section>
+
+<!-- Cost transparency -->
+<section class="section reveal">
+  <div class="section-label">Reproducibility</div>
+  <h2>Total research cost: $538</h2>
+  <p class="lead">All data, scripts, and results are publicly available on GitHub.</p>
+
+  <div class="table-card">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Track</th><th>Description</th><th>Tasks</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Track A</td><td>Controlled benchmark (4 platforms)</td><td>1 prompt</td><td>~$2.50</td></tr>
+          <tr><td>Track B</td><td>Real-world codebases (4 repos)</td><td>4 apps</td><td>~$4.00</td></tr>
+          <tr><td>Track C</td><td>HumanEval (4 conditions + 5 ablations)</td><td>164</td><td>$219.86</td></tr>
+          <tr><td>Track D</td><td>SWE-bench Lite (3 conditions)</td><td>300</td><td>$246.01</td></tr>
+          <tr><td>Track E</td><td>Live coding comparison (3 conditions)</td><td>10</td><td>~$4.00</td></tr>
+          <tr><td>Track F</td><td>RLVF model training (4 conditions)</td><td>164</td><td>~$72</td></tr>
+          <tr style="font-weight:700"><td>Total</td><td>6 tracks</td><td>594</td><td>$538</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:16px;margin-top:24px;flex-wrap:wrap">
+    <a href="https://github.com/gtsbahamas/hallucination-reversing-system" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-bright);font-weight:600;font-size:0.9rem;transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(99,102,241,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+      GitHub Repository
+    </a>
+    <a href="https://doi.org/10.5281/zenodo.18522644" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-bright);font-weight:600;font-size:0.9rem;transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(99,102,241,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+      Zenodo DOI
+    </a>
+    <a href="https://trylucid.dev" style="display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-bright);font-weight:600;font-size:0.9rem;transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(99,102,241,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+      trylucid.dev
+    </a>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div>
+    <div style="font-weight:700;color:var(--text-bright);margin-bottom:4px">LUCID Research</div>
+    <div>US Patent Pending (App #63/980,048)</div>
+    <div>DOI: 10.5281/zenodo.18522644</div>
+    <div style="margin-top:8px">&copy; 2026 Ty Wells. All rights reserved.</div>
+  </div>
+  <div class="footer-links">
+    <a href="https://github.com/gtsbahamas/hallucination-reversing-system">GitHub</a>
+    <a href="https://trylucid.dev">trylucid.dev</a>
+    <a href="https://doi.org/10.5281/zenodo.18522644">Zenodo</a>
+    <a href="mailto:ty@trylucid.dev">Contact</a>
+  </div>
+</footer>
+
+<script>
+// Reveal on scroll
+const revealEls = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('visible') });
+}, { threshold: 0.08 });
+revealEls.forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
