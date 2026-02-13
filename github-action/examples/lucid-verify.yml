@@ -19,17 +19,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ── Option 1: LUCID API (recommended) ──────────────────
+      # Get a free key at https://trylucid.dev
       - name: Run LUCID verification
         uses: gtsbahamas/hallucination-reversing-system/github-action@main
         id: lucid
         with:
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          lucid-api-key: ${{ secrets.LUCID_API_KEY }}
           # Optional: scan all files instead of just changed files
           # scan-mode: 'full'
           # Optional: fail the build below a compliance threshold
           # fail-threshold: '80'
-          # Optional: verify against a specific document
-          # doc-source: 'https://example.com/terms-of-service'
+
+      # ── Option 2: BYOK (Anthropic key) ─────────────────────
+      # Uncomment below and comment out Option 1 to use your own key
+      # - name: Run LUCID verification (BYOK)
+      #   uses: gtsbahamas/hallucination-reversing-system/github-action@main
+      #   id: lucid
+      #   with:
+      #     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+      #     # Optional: verify against a specific document
+      #     # doc-source: 'https://example.com/terms-of-service'
 
       - name: Print results
         if: always()

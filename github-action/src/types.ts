@@ -39,6 +39,7 @@ export interface ActionInputs {
   failThreshold: number;
   docSource: string;
   changedFilesMode: 'full' | 'changed';
+  mode: 'byok' | 'lucid-api';
 }
 
 export interface VerificationSummary {
@@ -52,4 +53,52 @@ export interface VerificationSummary {
   topIssues: ClaimVerification[];
   verifications: ClaimVerification[];
   claims: Claim[];
+}
+
+// ── LUCID API Response Types (mirrors api/lib/types.ts) ─────
+
+export interface ForwardClaim {
+  id: string;
+  category: 'correctness' | 'security' | 'performance' | 'error-handling' | 'edge-case' | 'type-safety';
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  description: string;
+  assertion: string;
+  testable: boolean;
+}
+
+export interface ForwardVerification {
+  claimId: string;
+  verdict: 'PASS' | 'PARTIAL' | 'FAIL' | 'N/A';
+  reasoning: string;
+  evidence?: string;
+}
+
+export interface ForwardRemediation {
+  claimId: string;
+  title: string;
+  description: string;
+  action: 'add' | 'modify' | 'remove';
+  severity: string;
+  codeGuidance: string;
+}
+
+export interface ForwardResponse {
+  request_id: string;
+  code: string;
+  language: string;
+  claims: { count: number; items: ForwardClaim[] };
+  verification: {
+    passed: number;
+    failed: number;
+    partial: number;
+    total: number;
+    items: ForwardVerification[];
+  };
+  remediation: { count: number; items: ForwardRemediation[] };
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    duration_ms: number;
+    pipeline_calls: number;
+  };
 }

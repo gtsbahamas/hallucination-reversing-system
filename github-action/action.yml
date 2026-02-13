@@ -7,9 +7,12 @@ branding:
   color: 'blue'
 
 inputs:
+  lucid-api-key:
+    description: 'LUCID API key (recommended). Get a free key at https://trylucid.dev'
+    required: false
   anthropic-api-key:
-    description: 'Anthropic API key for Claude (required)'
-    required: true
+    description: 'Anthropic API key for Claude (BYOK mode). Used if lucid-api-key is not set.'
+    required: false
   scan-mode:
     description: 'Scan mode: "full" analyzes entire codebase, "changed" analyzes only changed files in PR'
     required: false
@@ -19,7 +22,7 @@ inputs:
     required: false
     default: '0'
   doc-source:
-    description: 'Document source to verify against. URL to a Terms of Service, Privacy Policy, or API docs. If empty, LUCID generates a hallucinated spec.'
+    description: 'Document source to verify against (BYOK mode only). URL to a Terms of Service, Privacy Policy, or API docs. If empty, LUCID generates claims from code.'
     required: false
     default: ''
   comment-on-pr:
@@ -48,12 +51,26 @@ outputs:
     description: 'Number of claims with partial verification'
     value: ${{ steps.verify.outputs.partial-count }}
   report-path:
-    description: 'Path to the generated gap report markdown file'
+    description: 'Path to the generated JSON report artifact'
     value: ${{ steps.verify.outputs.report-path }}
 
 runs:
   using: 'composite'
   steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        LUCID_KEY: ${{ inputs.lucid-api-key }}
+        ANTHROPIC_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        if [ -z "$LUCID_KEY" ] && [ -z "$ANTHROPIC_KEY" ]; then
+          echo "::error::Either lucid-api-key or anthropic-api-key must be provided."
+          echo ""
+          echo "Option 1 (recommended): Get a free LUCID API key at https://trylucid.dev"
+          echo "Option 2: Use your own Anthropic API key (BYOK mode)"
+          exit 1
+        fi
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
@@ -88,6 +105,7 @@ runs:
       id: verify
       shell: bash
       env:
+        LUCID_API_KEY: ${{ inputs.lucid-api-key }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         LUCID_ACTION_PATH: ${{ github.action_path }}
       run: |

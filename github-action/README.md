@@ -1,32 +1,18 @@
-# LUCID Verify - GitHub Action
+# LUCID Verify — GitHub Action
 
-**Automated AI code verification for every pull request.** LUCID extracts testable claims about your codebase (security, privacy, functionality) and verifies each one against the actual code. Results are posted as a PR comment with pass/fail verdicts and evidence.
+AI-powered code verification that catches what tests miss. LUCID extracts compliance claims from your codebase (security, data privacy, functionality, operational), verifies them against the actual code, and posts a detailed report as a PR comment.
 
-## What it does
+## Quick Start
 
-1. **Extracts claims** -- LUCID generates testable compliance claims from your codebase structure (or from a document you provide, like your Terms of Service)
-2. **Verifies each claim** -- Every claim is checked against the actual source code with evidence
-3. **Posts results** -- A detailed PR comment shows pass/fail counts, critical failures, and a compliance score
+### Option 1: LUCID API (Recommended)
 
-## Quick Start (< 5 minutes)
-
-### 1. Add your Anthropic API key as a repository secret
-
-Go to **Settings > Secrets and variables > Actions** and add:
-
-- Name: `ANTHROPIC_API_KEY`
-- Value: your Anthropic API key (starts with `sk-ant-`)
-
-### 2. Create the workflow file
-
-Create `.github/workflows/lucid-verify.yml`:
+Get a free API key at [trylucid.dev](https://trylucid.dev) — 100 verifications/month free, no credit card.
 
 ```yaml
+# .github/workflows/lucid-verify.yml
 name: LUCID Verify
-
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -37,41 +23,113 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: gtsbahamas/hallucination-reversing-system/github-action@main
+        with:
+          lucid-api-key: ${{ secrets.LUCID_API_KEY }}
+```
 
+### Option 2: Bring Your Own Key (BYOK)
+
+Use your own Anthropic API key. All processing runs locally in the GitHub runner — nothing leaves your CI.
+
+```yaml
+# .github/workflows/lucid-verify.yml
+name: LUCID Verify
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - uses: gtsbahamas/hallucination-reversing-system/github-action@main
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-That's it. Every PR will now get a LUCID verification report as a comment.
+## How It Works
 
-## Configuration
+1. **Index** — Scans your codebase structure and identifies key files (auth, API routes, config)
+2. **Extract** — Generates 15-30 testable compliance claims about what the code should do
+3. **Verify** — Reads the actual source code and checks each claim against the implementation
+4. **Report** — Posts a PR comment with a compliance score, failures, and evidence
 
-### Inputs
+### LUCID API vs BYOK
+
+| | LUCID API | BYOK |
+|---|---|---|
+| **Setup** | Get key at [trylucid.dev](https://trylucid.dev) | Get key at [console.anthropic.com](https://console.anthropic.com) |
+| **Processing** | LUCID cloud | Your GitHub runner |
+| **Cost** | 100 free/month, then metered | You pay Anthropic directly (~$0.05-0.40/run) |
+| **Features** | Verification + remediation suggestions | Verification + doc-source verification |
+| **Privacy** | Code sent to LUCID API | Code stays in your runner |
+
+If both keys are provided, LUCID API takes precedence.
+
+## Inputs
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `anthropic-api-key` | Yes | -- | Anthropic API key for Claude |
+| `lucid-api-key` | No* | — | LUCID API key. Get one free at [trylucid.dev](https://trylucid.dev) |
+| `anthropic-api-key` | No* | — | Anthropic API key for BYOK mode |
 | `scan-mode` | No | `changed` | `changed` = only PR files, `full` = entire codebase |
-| `fail-threshold` | No | `0` | Minimum compliance score (0-100). Action fails below this. |
-| `doc-source` | No | -- | URL to a document to verify against (ToS, Privacy Policy) |
+| `fail-threshold` | No | `0` | Fail the action if compliance score is below this (0-100). `0` = never fail |
+| `doc-source` | No | — | URL to verify against (BYOK only). ToS, Privacy Policy, etc. |
 | `comment-on-pr` | No | `true` | Post results as a PR comment |
-| `working-directory` | No | `.` | Subdirectory to analyze |
+| `working-directory` | No | `.` | Root of the codebase to analyze |
 
-### Outputs
+*At least one of `lucid-api-key` or `anthropic-api-key` must be provided.
+
+## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `compliance-score` | Score as percentage (0-100) |
-| `total-claims` | Number of claims extracted |
-| `pass-count` | Claims that passed |
-| `fail-count` | Claims that failed |
-| `partial-count` | Claims partially passing |
-| `report-path` | Path to full JSON report |
+| `compliance-score` | Score as a percentage (0-100) |
+| `total-claims` | Total claims extracted |
+| `pass-count` | Claims that passed verification |
+| `fail-count` | Claims that failed verification |
+| `partial-count` | Claims with partial verification |
+| `report-path` | Path to the JSON report artifact |
+
+## PR Comment
+
+The action posts a comment on each PR with:
+
+- **Compliance badge** — Color-coded score (green/yellow/orange/red)
+- **Summary table** — Pass/Partial/Fail/N/A counts
+- **Critical failures** — Always visible, with evidence and reasoning
+- **Top issues** — Collapsible table of all failures and partial matches
+- **Passing claims** — Collapsible list of what's verified
+- **Category breakdown** — Score by category (security, data-privacy, etc.)
+
+Previous LUCID comments are automatically replaced to keep PR threads clean.
 
 ## Examples
 
-### Verify against your Terms of Service
+### Fail the build below 80% compliance
+
+```yaml
+- uses: gtsbahamas/hallucination-reversing-system/github-action@main
+  with:
+    lucid-api-key: ${{ secrets.LUCID_API_KEY }}
+    fail-threshold: '80'
+```
+
+### Full codebase scan
+
+```yaml
+- uses: gtsbahamas/hallucination-reversing-system/github-action@main
+  with:
+    lucid-api-key: ${{ secrets.LUCID_API_KEY }}
+    scan-mode: 'full'
+```
+
+### Verify against your Terms of Service (BYOK)
 
 ```yaml
 - uses: gtsbahamas/hallucination-reversing-system/github-action@main
@@ -80,111 +138,41 @@ That's it. Every PR will now get a LUCID verification report as a comment.
     doc-source: 'https://example.com/terms-of-service'
 ```
 
-### Fail the build below 80% compliance
-
-```yaml
-- uses: gtsbahamas/hallucination-reversing-system/github-action@main
-  with:
-    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-    fail-threshold: '80'
-```
-
-### Full codebase scan (not just changed files)
-
-```yaml
-- uses: gtsbahamas/hallucination-reversing-system/github-action@main
-  with:
-    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-    scan-mode: 'full'
-```
-
-### Use outputs in subsequent steps
+### Use the compliance score in downstream steps
 
 ```yaml
 - uses: gtsbahamas/hallucination-reversing-system/github-action@main
   id: lucid
   with:
-    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    lucid-api-key: ${{ secrets.LUCID_API_KEY }}
 
-- name: Check results
-  run: |
+- run: |
     echo "Score: ${{ steps.lucid.outputs.compliance-score }}%"
-    echo "Failed: ${{ steps.lucid.outputs.fail-count }} claims"
+    echo "Failures: ${{ steps.lucid.outputs.fail-count }}"
 ```
 
-### Monorepo -- scan a subdirectory
+### Monorepo — scan a subdirectory
 
 ```yaml
 - uses: gtsbahamas/hallucination-reversing-system/github-action@main
   with:
-    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    lucid-api-key: ${{ secrets.LUCID_API_KEY }}
     working-directory: 'packages/api'
 ```
 
-## What the PR comment looks like
+## Supported Languages
 
-The action posts a comment with:
-
-- **Compliance score badge** (color-coded: green/yellow/orange/red)
-- **Summary table** with pass/partial/fail/N/A counts
-- **Critical failures** highlighted at the top
-- **Top issues** table with severity and reasoning
-- **Passing claims** (collapsed)
-- **Category breakdown** by security, privacy, functionality, etc.
-
-Previous LUCID comments on the same PR are automatically replaced to avoid clutter.
-
-## How it works
-
-LUCID uses Claude to:
-
-1. **Analyze your codebase structure** to understand what the code does
-2. **Generate testable claims** about security, privacy, and functionality (or extract them from a document you provide)
-3. **Select relevant source files** for each claim
-4. **Verify each claim** against the actual code with evidence
-
-This is the same technology behind the [LUCID research paper](https://trylucid.dev), which achieved 100% on HumanEval (k=3) and +36% improvement on SWE-bench.
-
-## Cost
-
-The action uses Claude Sonnet for verification. Typical cost per run:
-
-| Codebase size | Claims | Approximate cost |
-|---------------|--------|------------------|
-| Small (< 50 files) | 15-20 | ~$0.05-0.10 |
-| Medium (50-200 files) | 20-30 | ~$0.10-0.25 |
-| Large (200+ files) | 25-30 | ~$0.15-0.40 |
-
-With `scan-mode: changed` (default), only PR-changed files are prioritized, keeping costs low.
-
-## Claim categories
-
-| Category | What it checks |
-|----------|---------------|
-| `security` | Auth, encryption, input validation, CSRF, XSS |
-| `data-privacy` | Data handling, storage, retention, consent |
-| `functionality` | Core features, error handling, edge cases |
-| `operational` | Logging, monitoring, rate limiting |
-| `legal` | Compliance-related code requirements |
-
-## Severity levels
-
-| Level | Meaning |
-|-------|---------|
-| `critical` | Security vulnerabilities, data exposure risks |
-| `high` | Significant gaps in claimed functionality |
-| `medium` | Partial implementations, missing edge cases |
-| `low` | Minor improvements, best practice suggestions |
+TypeScript, JavaScript, Python, Ruby, Go, Rust, Java, C#, PHP, Swift, Kotlin, Scala, Vue, Svelte, SQL, GraphQL, and Prisma.
 
 ## Troubleshooting
 
-### Action fails with "ANTHROPIC_API_KEY is not set"
+### "Either lucid-api-key or anthropic-api-key must be provided"
 
-Make sure you added the secret in **Settings > Secrets and variables > Actions**, not in environment variables.
+Add one of the keys as a repository secret: **Settings > Secrets and variables > Actions**.
 
 ### No claims extracted
 
-This usually means the codebase is too small or doesn't have recognizable patterns. Try `scan-mode: full` or provide a `doc-source`.
+The codebase may be too small or doesn't have recognizable patterns. Try `scan-mode: full` or provide a `doc-source` (BYOK mode).
 
 ### Comment not posted
 
@@ -196,9 +184,14 @@ permissions:
   pull-requests: write
 ```
 
-## License
+### LUCID API quota exceeded
 
-MIT -- see [LICENSE](../LICENSE)
+The free tier includes 100 verifications/month. Upgrade at [trylucid.dev](https://trylucid.dev) or switch to BYOK mode.
+
+## Links
+
+- [trylucid.dev](https://trylucid.dev) — Get a free API key
+- [Benchmark Report](https://trylucid.dev/report) — LUCID achieves 100% on HumanEval and +36% on SWE-bench
 
 ---
 
