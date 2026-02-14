@@ -1,0 +1,150 @@
+name: 'LUCID Verify'
+description: 'Run LUCID verification on your codebase — detect hallucinated claims, verify code compliance, and post results to PRs.'
+author: 'FrankLabs'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  lucid-api-key:
+    description: 'LUCID API key (recommended). Get a free key at https://trylucid.dev'
+    required: false
+  anthropic-api-key:
+    description: 'Anthropic API key for Claude (BYOK mode). Used if lucid-api-key is not set.'
+    required: false
+  scan-mode:
+    description: 'Scan mode: "full" analyzes entire codebase, "changed" analyzes only changed files in PR'
+    required: false
+    default: 'changed'
+  fail-threshold:
+    description: 'Compliance score threshold (0-100). Action fails if score is below this value. Set to 0 to never fail.'
+    required: false
+    default: '0'
+  doc-source:
+    description: 'Document source to verify against (BYOK mode only). URL to a Terms of Service, Privacy Policy, or API docs. If empty, LUCID generates claims from code.'
+    required: false
+    default: ''
+  comment-on-pr:
+    description: 'Post results as a PR comment (true/false)'
+    required: false
+    default: 'true'
+  working-directory:
+    description: 'Working directory for the codebase to analyze'
+    required: false
+    default: '.'
+
+outputs:
+  compliance-score:
+    description: 'Compliance score as a percentage (0-100)'
+    value: ${{ steps.verify.outputs.compliance-score }}
+  total-claims:
+    description: 'Total number of claims extracted'
+    value: ${{ steps.verify.outputs.total-claims }}
+  pass-count:
+    description: 'Number of claims that passed verification'
+    value: ${{ steps.verify.outputs.pass-count }}
+  fail-count:
+    description: 'Number of claims that failed verification'
+    value: ${{ steps.verify.outputs.fail-count }}
+  partial-count:
+    description: 'Number of claims with partial verification'
+    value: ${{ steps.verify.outputs.partial-count }}
+  report-path:
+    description: 'Path to the generated JSON report artifact'
+    value: ${{ steps.verify.outputs.report-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        LUCID_KEY: ${{ inputs.lucid-api-key }}
+        ANTHROPIC_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        if [ -z "$LUCID_KEY" ] && [ -z "$ANTHROPIC_KEY" ]; then
+          echo "::error::Either lucid-api-key or anthropic-api-key must be provided."
+          echo ""
+          echo "Option 1 (recommended): Get a free LUCID API key at https://trylucid.dev"
+          echo "Option 2: Use your own Anthropic API key (BYOK mode)"
+          exit 1
+        fi
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install LUCID CLI
+      shell: bash
+      run: |
+        cd "${{ github.action_path }}"
+        npm ci --production
+
+    - name: Get changed files
+      if: inputs.scan-mode == 'changed' && github.event_name == 'pull_request'
+      id: changed-files
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        cd "${{ inputs.working-directory }}"
+        # Get list of changed files in the PR
+        CHANGED_FILES=$(gh pr view "${{ github.event.pull_request.number }}" --json files --jq '.files[].path' 2>/dev/null || echo "")
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "No changed files found or not in PR context. Falling back to full scan."
+          echo "mode=full" >> "$GITHUB_OUTPUT"
+        else
+          echo "$CHANGED_FILES" > /tmp/lucid-changed-files.txt
+          echo "mode=changed" >> "$GITHUB_OUTPUT"
+          echo "Found $(echo "$CHANGED_FILES" | wc -l | tr -d ' ') changed files"
+        fi
+
+    - name: Run LUCID verification
+      id: verify
+      shell: bash
+      env:
+        LUCID_API_KEY: ${{ inputs.lucid-api-key }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        LUCID_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        node "${{ github.action_path }}/dist/run-action.js" \
+          --working-directory "${{ inputs.working-directory }}" \
+          --scan-mode "${{ inputs.scan-mode }}" \
+          --fail-threshold "${{ inputs.fail-threshold }}" \
+          --doc-source "${{ inputs.doc-source }}" \
+          --changed-files-mode "${{ steps.changed-files.outputs.mode || 'full' }}"
+
+    - name: Post PR comment
+      if: inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' && always()
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        REPORT_FILE="/tmp/lucid-pr-comment.md"
+        if [ -f "$REPORT_FILE" ]; then
+          # Delete previous LUCID comments to avoid clutter
+          EXISTING=$(gh api \
+            "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --jq '.[] | select(.body | startswith("## LUCID Verification Report")) | .id' 2>/dev/null || echo "")
+          for COMMENT_ID in $EXISTING; do
+            gh api -X DELETE "repos/${{ github.repository }}/issues/comments/$COMMENT_ID" 2>/dev/null || true
+          done
+          # Post new comment
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file "$REPORT_FILE"
+          echo "Posted LUCID verification results to PR #${{ github.event.pull_request.number }}"
+        else
+          echo "No report file found at $REPORT_FILE — skipping PR comment."
+        fi
+
+    - name: Check threshold
+      if: inputs.fail-threshold != '0'
+      shell: bash
+      run: |
+        SCORE="${{ steps.verify.outputs.compliance-score }}"
+        THRESHOLD="${{ inputs.fail-threshold }}"
+        if [ -n "$SCORE" ] && [ "$(echo "$SCORE < $THRESHOLD" | bc -l)" = "1" ]; then
+          echo "::error::LUCID compliance score ${SCORE}% is below threshold ${THRESHOLD}%"
+          exit 1
+        fi

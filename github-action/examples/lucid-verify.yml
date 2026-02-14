@@ -1,0 +1,51 @@
+# .github/workflows/lucid-verify.yml
+# Copy this file to your repository's .github/workflows/ directory
+
+name: LUCID Verify
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    name: LUCID Compliance Check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Option 1: LUCID API (recommended) ──────────────────
+      # Get a free key at https://trylucid.dev
+      - name: Run LUCID verification
+        uses: gtsbahamas/hallucination-reversing-system/github-action@main
+        id: lucid
+        with:
+          lucid-api-key: ${{ secrets.LUCID_API_KEY }}
+          # Optional: scan all files instead of just changed files
+          # scan-mode: 'full'
+          # Optional: fail the build below a compliance threshold
+          # fail-threshold: '80'
+
+      # ── Option 2: BYOK (Anthropic key) ─────────────────────
+      # Uncomment below and comment out Option 1 to use your own key
+      # - name: Run LUCID verification (BYOK)
+      #   uses: gtsbahamas/hallucination-reversing-system/github-action@main
+      #   id: lucid
+      #   with:
+      #     anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+      #     # Optional: verify against a specific document
+      #     # doc-source: 'https://example.com/terms-of-service'
+
+      - name: Print results
+        if: always()
+        run: |
+          echo "Compliance score: ${{ steps.lucid.outputs.compliance-score }}%"
+          echo "Total claims: ${{ steps.lucid.outputs.total-claims }}"
+          echo "Pass: ${{ steps.lucid.outputs.pass-count }}"
+          echo "Fail: ${{ steps.lucid.outputs.fail-count }}"
+          echo "Partial: ${{ steps.lucid.outputs.partial-count }}"
