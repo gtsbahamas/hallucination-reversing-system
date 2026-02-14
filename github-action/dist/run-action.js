@@ -52,7 +52,7 @@ function setOutput(name, value) {
     if (outputFile) {
         appendFileSync(outputFile, `${name}=${value}\n`);
     }
-    console.log(`::set-output name=${name}::${value}`);
+    console.log(`[LUCID] Output: ${name}=${value}`);
 }
 function log(msg) {
     console.log(`[LUCID] ${msg}`);
