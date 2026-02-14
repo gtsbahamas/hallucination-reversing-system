@@ -211,6 +211,49 @@ Each iteration stores artifacts in `.lucid/iterations/{N}/`, maintaining a compl
 
 ---
 
+## MCP Server (Claude Code, Cursor, Windsurf)
+
+Add LUCID verification as a native tool in your AI editor with one config block.
+
+```bash
+npm install -g lucid-mcp
+```
+
+**Claude Code** (`~/.claude/settings.json`):
+```json
+{
+  "mcpServers": {
+    "lucid": {
+      "command": "npx",
+      "args": ["-y", "lucid-mcp"],
+      "env": { "LUCID_API_KEY": "lk_live_your_key_here" }
+    }
+  }
+}
+```
+
+Then ask your AI assistant: *"Verify this file with LUCID"* or *"Generate a verified function that parses CSV"*
+
+LUCID catches what the AI missed and shows you exactly what would have shipped without verification.
+
+Get a free API key at [trylucid.dev](https://trylucid.dev). See [mcp-server/README.md](mcp-server/README.md) for full docs.
+
+---
+
+## GitHub Action
+
+Add LUCID verification to your CI/CD pipeline. Every PR gets a verification report as a comment.
+
+```yaml
+- uses: gtsbahamas/hallucination-reversing-system/github-action@main
+  with:
+    lucid-api-key: ${{ secrets.LUCID_API_KEY }}
+```
+
+Two modes: **LUCID API** (recommended, uses your LUCID key) or **BYOK** (bring your own Anthropic key for self-hosted verification). See [github-action/README.md](github-action/README.md) for full docs.
+
+---
+
 ## CLI Reference
 
 | Command | Phase | Description |
