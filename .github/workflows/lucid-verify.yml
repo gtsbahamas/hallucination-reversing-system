@@ -1,0 +1,33 @@
+name: LUCID Verify
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    name: LUCID Compliance Check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run LUCID verification (BYOK)
+        uses: ./github-action
+        id: lucid
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          scan-mode: 'changed'
+
+      - name: Print results
+        if: always()
+        run: |
+          echo "Compliance score: ${{ steps.lucid.outputs.compliance-score }}%"
+          echo "Total claims: ${{ steps.lucid.outputs.total-claims }}"
+          echo "Pass: ${{ steps.lucid.outputs.pass-count }}"
+          echo "Fail: ${{ steps.lucid.outputs.fail-count }}"
+          echo "Partial: ${{ steps.lucid.outputs.partial-count }}"
