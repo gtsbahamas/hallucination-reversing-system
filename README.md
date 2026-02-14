@@ -14,10 +14,29 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Paper](https://img.shields.io/badge/Paper-PDF-red?logo=arxiv)](arxiv-submission/main.pdf)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.18522644-blue)](https://doi.org/10.5281/zenodo.18522644)
+[![HumanEval](https://img.shields.io/badge/HumanEval-100%25%20pass%405-brightgreen)](results/)
+[![SWE--bench](https://img.shields.io/badge/SWE--bench-30.3%25%20(%2B65%25)-brightgreen)](results/)
 
-[Website](https://gtsbahamas.github.io/hallucination-reversing-system/) | [Paper](docs/paper.md) | [Methodology Guide](docs/methodology.md) | [Prior Art](docs/prior-art.md) | [CLI Reference](#cli-reference)
+[Dashboard](https://trylucid.dev) | [Paper](docs/paper.md) | [Methodology Guide](docs/methodology.md) | [Prior Art](docs/prior-art.md) | [CLI Reference](#cli-reference)
 
 </div>
+
+---
+
+## Benchmark Results
+
+LUCID was evaluated on two standard code generation benchmarks. All results validated by running real test suites, not LLM judgment.
+
+| Benchmark | Baseline | LUCID | Improvement |
+|-----------|----------|-------|-------------|
+| **HumanEval** pass@1 | 86.6% | **98.8%** | +14.1% |
+| **HumanEval** pass@5 | -- | **100%** (164/164) | All problems solved |
+| **SWE-bench** resolve@1 | 18.3% | **25.0%** | +36.4% |
+| **SWE-bench** best-of-5 | -- | **30.3%** (91/300) | +65.5% |
+
+Key finding: LLM-as-judge verification actually **performs worse** at higher k values (97.2% vs 100% for LUCID at k=5) because it hallucinates false positives. Structured claim extraction avoids this failure mode.
+
+Full benchmark data: [`results/`](results/) | [Benchmark report](https://trylucid.dev/report)
 
 ---
 
@@ -245,12 +264,12 @@ Get a free API key at [trylucid.dev](https://trylucid.dev). See [mcp-server/READ
 Add LUCID verification to your CI/CD pipeline. Every PR gets a verification report as a comment.
 
 ```yaml
-- uses: gtsbahamas/hallucination-reversing-system/github-action@main
+- uses: gtsbahamas/hallucination-reversing-system/github-action@v0.1.1
   with:
     lucid-api-key: ${{ secrets.LUCID_API_KEY }}
 ```
 
-Two modes: **LUCID API** (recommended, uses your LUCID key) or **BYOK** (bring your own Anthropic key for self-hosted verification). See [github-action/README.md](github-action/README.md) for full docs.
+Two modes: **LUCID API** (recommended, uses your LUCID key) or **BYOK** (bring your own Anthropic key for self-hosted verification). Available on [GitHub Marketplace](https://github.com/marketplace/actions/lucid-verify). See [github-action/README.md](github-action/README.md) for full docs.
 
 ---
 
