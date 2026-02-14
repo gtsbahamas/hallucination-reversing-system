@@ -29,7 +29,7 @@ I call it the "verification gap" — the space between code that *looks right* a
 - **ESLint?** Style is clean. Features are missing.
 - **Visual review?** The charts render beautifully. The data is fake.
 
-So I built LUCID — a formal verification system that extracts every testable claim from a codebase and verifies whether it's actually true.
+So I built LUCID — an adversarial verification system that extracts every testable claim from a codebase and verifies whether it's actually true.
 
 ### The benchmark journey
 
@@ -44,7 +44,7 @@ The interesting part: I also tested the approaches everyone else uses.
 - "Self-refine" (just ask the AI to try again): 87.2%. Barely moves.
 - "LLM-as-judge" (ask another model to review): Starts at 98.2%, then **drops to 97.2% at k=5**. More review = worse code. The judge introduces false positives, and the generator "fixes" working code.
 
-Only formal verification converges monotonically. Every iteration makes it better, never worse.
+Only adversarial verification converges monotonically. Every iteration makes it better, never worse.
 
 **Phase 2: SWE-bench** (300 real GitHub bug-fix tasks)
 - Cost: $246 (ran on EC2 — c5.9xlarge, 36 vCPUs)
@@ -68,7 +68,7 @@ Only formal verification converges monotonically. Every iteration makes it bette
 
 3. **More AI review makes things worse.** This was the biggest surprise. LLM-as-judge *regresses* after 5 iterations. The industry's main approach to code quality actually degrades it.
 
-4. **Formal verification is the only thing that converges.** Not because it's fancy — because it's deterministic. Same code, same spec, same result. No model drift, no false positives.
+4. **Adversarial verification is the only thing that converges.** Not because it's fancy — because the verifier is a separate AI that systematically checks the generator's output against extracted specifications. The adversarial loop catches errors that self-review misses, and empirically it converges where other approaches regress.
 
 ### Where it stands now
 

@@ -8,7 +8,7 @@
 
 ## Tagline (60 chars max)
 
-**Formal verification for AI-generated code** (44 chars)
+**Adversarial verification for AI-generated code** (50 chars)
 
 Alternates:
 - "Catch the bugs AI coding tools miss" (37 chars)
@@ -18,7 +18,7 @@ Alternates:
 
 ## Short Description (260 chars max)
 
-LUCID verifies AI-generated code using formal methods — not another LLM review. It extracts testable claims from code, verifies them against formal specifications, and generates fix plans. 100% pass rate on HumanEval. 21 critical bugs found across 4 production apps.
+LUCID verifies AI-generated code using iterative adversarial verification — a second AI systematically checks the first AI's output against extracted specifications. It extracts testable claims from code, verifies them adversarially, and generates fix plans. 100% pass rate on HumanEval. 21 critical bugs found across 4 production apps.
 
 ---
 
@@ -28,16 +28,16 @@ LUCID verifies AI-generated code using formal methods — not another LLM review
 
 AI coding tools generate code that compiles, looks right, and passes visual review. But does it actually work?
 
-We ran formal verification on real-world apps built with Bolt.new, Lovable, v0, and Replit. Average production-readiness score: **40/100**. We found **21 critical bugs** — including unprotected admin routes, fake analytics backed by hardcoded data, and API endpoints that don't exist.
+We ran adversarial verification on real-world apps built with Bolt.new, Lovable, v0, and Replit. Average production-readiness score: **40/100**. We found **21 critical bugs** — including unprotected admin routes, fake analytics backed by hardcoded data, and API endpoints that don't exist.
 
 The gap between "it builds" and "it works" is the **verification gap**. Traditional tools (linters, type checkers, unit tests) don't catch it. LLM-based review doesn't either — our benchmarks show it actually makes code *worse* after enough iterations.
 
 ### What LUCID does
 
-LUCID is a 3-layer formal verification pipeline:
+LUCID is a 3-layer adversarial verification pipeline:
 
 1. **Extract** — Identifies every testable claim in the code ("this route is protected," "this data persists," "this API returns real data")
-2. **Verify** — Tests each claim against formal specifications. Deterministic. Same input = same result.
+2. **Verify** — Tests each claim against extracted specifications using a separate AI verifier that adversarially checks the generator's output.
 3. **Remediate** — Generates specific fix plans for every failure, with code references and priority.
 
 ### Results
@@ -86,7 +86,7 @@ I started building verification tooling to catch these issues. The deeper I went
 
 - **Self-refine** ("try again") barely helps — flat at ~87% on HumanEval
 - **LLM-as-judge** ("ask another model") actually makes code WORSE after 5 iterations (99.4% drops to 97.2%)
-- **Formal verification** is the only approach that converges to 100% and never regresses
+- **Adversarial verification** is the only approach that converges to 100% and never regresses
 
 We spent $466 running the full benchmark suite across HumanEval and SWE-bench to prove this. The math works. The data is public. The methodology is peer-reviewed.
 
@@ -101,7 +101,7 @@ Research paper: https://doi.org/10.5281/zenodo.18522644
 
 ## Key Features List
 
-- **Formal verification, not LLM review** — deterministic, reproducible, no false positives from model drift
+- **Adversarial verification** — a second AI systematically checks the first, catching errors that self-review misses
 - **3-layer pipeline** — Extract claims, Verify against specs, Remediate with fix plans
 - **100% HumanEval pass rate** at k=3 (only system to achieve monotonic convergence)
 - **+65.5% improvement** on SWE-bench Lite (300 real-world bug fixes)

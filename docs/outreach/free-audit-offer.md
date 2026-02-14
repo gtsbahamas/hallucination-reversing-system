@@ -8,7 +8,7 @@
 
 ## Short Version (for comments, replies, Twitter/X)
 
-I'll verify your AI-built app for free. Send me a GitHub link and I'll run formal verification on it — you get a report showing which features actually work vs. which are scaffolding. Takes ~5 min. DM me or submit at https://trylucid.dev
+I'll verify your AI-built app for free. Send me a GitHub link and I'll run adversarial verification on it — you get a report showing which features actually work vs. which are scaffolding. Takes ~5 min. DM me or submit at https://trylucid.dev
 
 ---
 
@@ -16,7 +16,7 @@ I'll verify your AI-built app for free. Send me a GitHub link and I'll run forma
 
 ### Title: Send me your AI-built app. I'll tell you what's actually broken.
 
-I built a formal verification system for AI-generated code. It doesn't lint your code or check types — it checks whether your features actually *work*.
+I built an adversarial verification system for AI-generated code. It doesn't lint your code or check types — it checks whether your features actually *work*.
 
 Does your auth actually block unauthorized users? Does your data persist, or is it local state that dies on refresh? Is your analytics dashboard showing real data, or hardcoded arrays?
 

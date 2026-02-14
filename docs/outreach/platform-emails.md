@@ -67,13 +67,13 @@
 
 Hi Sualeh,
 
-We've been running formal verification on code that users build with AI coding platforms — testing what actually ships to production for security vulnerabilities, correctness, and production readiness.
+We've been running adversarial verification on code that users build with AI coding platforms — testing what actually ships to production for security vulnerabilities, correctness, and production readiness.
 
 Across platforms, we're finding a consistent pattern: AI-generated code compiles and looks right, but has structural issues that traditional tooling misses — unprotected admin routes, missing API endpoints, scaffolding that looks like features but doesn't function. Average health score across the apps we've analyzed: 39/100.
 
 We haven't included Cursor-assisted code yet. Given your focus on professional developer workflows, we'd expect a different profile — and we'd like to find out.
 
-Our verification system (LUCID) uses formal methods, not LLM-based review. On HumanEval it achieves 100% correctness at k=3 iterations, compared to 87% for self-refine approaches. Peer-reviewed methodology: DOI 10.5281/zenodo.18522644.
+Our verification system (LUCID) uses iterative adversarial verification — a second AI systematically checks the first AI's output against extracted specifications, catching errors that self-review and single-pass review miss. On HumanEval it achieves 100% correctness at k=3 iterations, compared to 87% for self-refine approaches. Peer-reviewed methodology: DOI 10.5281/zenodo.18522644.
 
 **Would you be open to a collaborative benchmark?** We'd run Cursor-assisted code through our verification pipeline and share the full results with your team before any publication. If Cursor users ship cleaner code (which we'd expect), that's a powerful differentiator for you.
 
@@ -109,7 +109,7 @@ Ty Wells
 
 Hi Albert,
 
-We've been running formal verification on code that users build with AI coding platforms — not to grade the platforms, but to understand what's actually shipping to production.
+We've been running adversarial verification on code that users build with AI coding platforms — not to grade the platforms, but to understand what's actually shipping to production.
 
 We analyzed a healthcare scheduling app built with Bolt.new (identified by `.bolt/` directory, 437 source files, public GitHub repo). It scored 42/100 on our production-readiness analysis. The bugs we found aren't about code style — they're structural issues that compilers and linters can't catch:
 
@@ -120,7 +120,7 @@ We analyzed a healthcare scheduling app built with Bolt.new (identified by `.bol
 
 To be clear: we can't know which of these bugs came from Bolt.new's generation vs. user modifications afterward. That's actually the point — **users need a verification layer regardless of where bugs originate**, and that layer doesn't exist in most workflows today.
 
-On the positive side: the app had solid query configuration, accessibility testing, and good UX patterns. The gap is between "code that looks right" and "code that works right" — and that's exactly what formal verification closes.
+On the positive side: the app had solid query configuration, accessibility testing, and good UX patterns. The gap is between "code that looks right" and "code that works right" — and that's exactly what adversarial verification closes.
 
 Our system (LUCID) achieves 100% HumanEval pass rate (k=3) and +36.4% on SWE-bench. US patent pending (App #63/980,048). It can run as a post-generation verification step — catching these issues before users deploy.
 
@@ -151,7 +151,7 @@ Ty Wells
 **DRAFT — REQUIRES HUMAN APPROVAL BEFORE SENDING**
 
 **Subject line options:**
-1. What Lovable users are shipping — formal verification findings
+1. What Lovable users are shipping — verification findings
 2. Code quality as a differentiator — verification data from Lovable-built apps
 3. Helping Lovable users ship production-ready code
 
@@ -161,7 +161,7 @@ Hi Fabian,
 
 Congratulations on the recent raise. As you scale, code quality becomes a differentiator — and we have data that might be useful.
 
-We've been running formal verification on code that users build with AI coding platforms, analyzing real-world apps from public GitHub repos. We looked at two Lovable-built codebases (identified by `lovable-tagger` in package.json) — a brand monitoring SaaS (152 files) and an AI agent interface (86 files). Both scored 42/100 on production readiness.
+We've been running adversarial verification on code that users build with AI coding platforms, analyzing real-world apps from public GitHub repos. We looked at two Lovable-built codebases (identified by `lovable-tagger` in package.json) — a brand monitoring SaaS (152 files) and an AI agent interface (86 files). Both scored 42/100 on production readiness.
 
 The patterns we found across both apps:
 
@@ -176,7 +176,7 @@ From the AI agent interface:
 
 We can't attribute these bugs specifically to Lovable's generation vs. user edits — and that's actually the insight. **Your users need a verification step between "it builds" and "it's production-ready,"** and that step doesn't exist today. Whoever provides it first wins the quality reputation.
 
-Across all platforms we've tested, Lovable-built apps are tied for the highest score (42/100 vs. 32/100 for Replit-built). You're already ahead — formal verification could widen that gap.
+Across all platforms we've tested, Lovable-built apps are tied for the highest score (42/100 vs. 32/100 for Replit-built). You're already ahead — adversarial verification could widen that gap.
 
 LUCID achieves 100% HumanEval correctness (k=3), +36.4% on SWE-bench. US patent pending (App #63/980,048). It can integrate as a post-generation verification layer.
 
@@ -209,8 +209,8 @@ Ty Wells
 
 **Subject line options:**
 1. The verification gap in deploy-from-IDE workflows — research data
-2. What Replit users are shipping to production — formal verification findings
-3. Formal verification for the Agent era — collaborative research proposal
+2. What Replit users are shipping to production — verification findings
+3. AI-based verification for the Agent era — collaborative research proposal
 
 **Body:**
 
@@ -218,7 +218,7 @@ Hi Michele,
 
 Replit Agent changes the deployment model — users generate and deploy from the same environment, often without a separate code review step. That makes the gap between "it builds" and "it works" a more urgent problem than it is in traditional workflows.
 
-We've been running formal verification on code that users build with AI coding platforms. A Replit-built computer vision app (275 files, identified by `.replit` config, public GitHub repo) scored 32/100 on production readiness — with 9 critical bugs. The patterns are worth examining:
+We've been running adversarial verification on code that users build with AI coding platforms. A Replit-built computer vision app (275 files, identified by `.replit` config, public GitHub repo) scored 32/100 on production readiness — with 9 critical bugs. The patterns are worth examining:
 
 **Non-existent backends:**
 - Scene analysis calls `/ai/analyze-scene` and translation calls `/ai/translate` — neither endpoint exists. Both features silently fall back to mock data, so the app *appears* to work while core functionality is fake.
@@ -234,11 +234,11 @@ We've been running formal verification on code that users build with AI coding p
 
 We can't know which of these issues came from Agent's generation vs. user modifications — that's inherent to analyzing shipped code. But the pattern itself is the finding: **AI-generated code that compiles and looks polished can have fundamentally broken functionality that no linter, type checker, or visual review will catch.**
 
-This is what we call the verification gap, and it matters most in deploy-from-IDE workflows where there's no separate review step. Formal verification closes it.
+This is what we call the verification gap, and it matters most in deploy-from-IDE workflows where there's no separate review step. Adversarial verification closes it.
 
-Our system (LUCID) achieves 100% HumanEval (k=3) and +36.4% on SWE-bench using formal methods, not LLM-based review. US patent pending (App #63/980,048).
+Our system (LUCID) achieves 100% HumanEval (k=3) and +36.4% on SWE-bench using iterative adversarial verification — a second AI systematically checks the first AI's output, catching errors that self-review and single-pass review miss. US patent pending (App #63/980,048).
 
-**Would you be interested in a collaborative study?** Given your academic background, I think there's a research angle here — the verification gap in AI-assisted development is an open problem. We'd generate fresh apps with Replit Agent, run formal verification, and share results with your team. If you're already working on output quality internally, we'd welcome comparing approaches.
+**Would you be interested in a collaborative study?** Given your academic background, I think there's a research angle here — the verification gap in AI-assisted development is an open problem. We'd generate fresh apps with Replit Agent, run adversarial verification, and share results with your team. If you're already working on output quality internally, we'd welcome comparing approaches.
 
 Report: https://trylucid.dev/report
 API: https://trylucid.dev/docs

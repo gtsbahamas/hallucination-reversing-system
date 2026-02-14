@@ -1,7 +1,7 @@
 # Your AI Writes Code. LUCID Proves It Works.
 
 **Verification infrastructure for AI coding platforms.**
-Deterministic. Model-agnostic. The only system proven to converge monotonically to 100% correctness.
+Systematic. Model-agnostic. The only system empirically shown to converge monotonically to 100% correctness.
 
 [Schedule a Technical Demo](mailto:ty@trylucid.dev?subject=LUCID%20Technical%20Demo%20Request)
 
@@ -33,15 +33,15 @@ Starts at 97.6% (k=1), then degrades: 95.1% at k=3, 97.0% at k=5. Without system
 
 ### Self-refine + chain-of-thought, constitutional AI, RLHF-tuned review
 
-These are variations of the same approaches above. They share the fundamental limitation: a learned system verifying a learned system. The verifier is subject to the same failure modes as the generator.
+These are variations of the same approaches above. They share a fundamental limitation: the verifier is not structured to adversarially challenge the generator. Without systematic specification extraction and targeted remediation, additional review rounds introduce noise rather than convergence.
 
 **Source:** Independent benchmark, 464 tasks, reproducible. DOI [10.5281/zenodo.18522644](https://doi.org/10.5281/zenodo.18522644). Full methodology and raw data available.
 
 ---
 
-## LUCID: Formal Verification for AI-Generated Code
+## LUCID: Adversarial Verification for AI-Generated Code
 
-LUCID replaces learned verification with deterministic formal methods. Same input, same result, every time. No drift, no regression, no false confidence.
+LUCID uses iterative adversarial verification — a second AI systematically checks the first AI's output against extracted specifications. The adversarial loop catches errors that self-review and single-pass review miss, and empirically converges where other approaches regress.
 
 Two products. One loop.
 
@@ -50,17 +50,17 @@ Two products. One loop.
 Post-generation verification. Integrate after your model generates code.
 
 1. **Extract** testable claims from generated code --- function contracts, type invariants, behavioral assertions
-2. **Verify** each claim against formal specifications using deterministic checkers (type systems, test execution, static analysis) --- not another LLM
+2. **Verify** each claim against extracted specifications using a separate AI that adversarially checks the generator's output --- not the same model reviewing itself
 3. **Generate** specific remediation plans with exact code references, line numbers, and fix patterns
 4. **Return** a structured verification report: what passed, what failed, and precisely how to fix each failure
 
-Verify does not guess. It does not "think the code looks right." It mechanically checks whether the code satisfies its own stated contracts. The verifier cannot be fooled because it is not a neural network.
+Verify does not guess. It does not rubber-stamp the code as "looks right." The verifier is a separate AI used adversarially --- its job is to find failures, not to agree. This separation of generator and verifier is what makes the loop converge where self-review and single-pass review fail.
 
 ### LUCID Generate (Reverse Path)
 
 Pre-generation specification synthesis. Integrate before your model generates code.
 
-1. **Synthesize** 10--30 formal specifications from the task description, covering type contracts, edge cases, error handling, and security properties
+1. **Synthesize** 10--30 behavioral specifications from the task description, covering type contracts, edge cases, error handling, and security properties
 2. **Apply** 18 embedded failure patterns derived from benchmark analysis (the specific ways AI-generated code fails in production)
 3. **Constrain** your model's generation to satisfy the synthesized specs --- the model generates freely within verified boundaries
 4. **Self-verify** the output before returning it to the user
@@ -69,11 +69,11 @@ Generate prevents hallucinations at generation time. Instead of letting the mode
 
 ### The Full Loop: Reverse + Forward
 
-Specification synthesis (Reverse) feeds constrained generation, which feeds formal verification (Forward), which feeds targeted remediation, which feeds regeneration.
+Specification synthesis (Reverse) feeds constrained generation, which feeds adversarial verification (Forward), which feeds targeted remediation, which feeds regeneration.
 
-This is the only approach that **converges monotonically**. Every iteration is at least as good as the previous one. No regression. No degradation. No ceiling.
+This is the only approach that **converges monotonically** in our benchmarks. Every iteration is at least as good as the previous one. No regression. No degradation. No ceiling.
 
-Why? Because the verifier is deterministic. A formally correct result stays correct. A formally incorrect result gets a specific fix. There is no path by which correct code becomes incorrect through additional verification --- unlike every LLM-based approach, where the judge can introduce new errors.
+Why? Because the verifier operates adversarially against the generator, not collaboratively. When the verifier finds a failure, it produces a specific fix plan. Correct code is not touched. Incorrect code gets targeted remediation. This asymmetry --- only fixing what fails --- is what drives convergence. In contrast, LLM-as-judge approaches can introduce new errors by "fixing" correct code, causing regression.
 
 ---
 
@@ -102,7 +102,7 @@ At k=3 iterations, LUCID achieves 100% --- every single function correct. LLM-as
 | Learned verifier | 98.2% | 97.6% | 100% | Learned verifier is unreliable at k=3 |
 | Random verifier | 97.6% | 95.1% | 97.0% | Random verification actively degrades |
 
-The remediation component contributes the final 0.6% and prevents plateauing. The formal verifier is what separates LUCID from every other approach --- replacing it with a learned verifier drops k=3 performance from 100% to 97.6%.
+The remediation component contributes the final 0.6% and prevents plateauing. The adversarial verifier is what separates LUCID from every other approach --- replacing it with a naive learned verifier (LLM-as-judge) drops k=3 performance from 100% to 97.6%.
 
 ### SWE-bench Lite (300 real-world GitHub issues)
 
@@ -159,9 +159,9 @@ POST /v1/verify
 
 Works with any LLM's output. GPT-4o, Claude, Gemini, Llama, Mistral, your fine-tuned model, or any future model. LUCID verifies code, not models.
 
-### Deterministic
+### Systematic
 
-Same input produces the same verification result. Always. Unlike LLM-based review, where results vary between runs, LUCID's formal verification is reproducible. This matters for debugging, for auditing, and for user trust.
+LUCID's adversarial verification is structured and repeatable. The same extraction and verification process runs every time, against the same specifications. While the AI verifier may have minor variations between runs (as any LLM does), the structured adversarial loop produces consistent, high-confidence results. This matters for debugging, for auditing, and for user trust.
 
 ### Streaming Support
 
@@ -197,27 +197,27 @@ For technical leaders thinking beyond the current generation cycle.
 
 ### RLVF: Reinforcement Learning from Verified Feedback
 
-Today, model training uses human feedback (RLHF) or AI feedback (RLAIF). Both are subjective, expensive, and noisy. LUCID's verification signal is deterministic and cheap.
+Today, model training uses human feedback (RLHF) or AI feedback (RLAIF). Both are subjective, expensive, and noisy. LUCID's verification signal is systematic and cheap.
 
-Every verification run produces a labeled dataset: this code is correct (formally verified) or incorrect (with specific failure reasons). This is the highest-quality training signal available for code generation models.
+Every verification run produces a labeled dataset: this code is correct (verified) or incorrect (with specific failure reasons). This is the highest-quality training signal available for code generation models.
 
 Platforms that integrate LUCID verification can use the signal to fine-tune their own models. The result: each generation cycle produces better code, which produces cleaner verification results, which produces better training data. A flywheel that no amount of human labeling can match.
 
 ### Verified Code Corpora
 
-The verified code that passes LUCID's formal checks is, by definition, higher quality than unverified code. Over time, this creates a corpus of formally verified code that can be used for pre-training, fine-tuning, or retrieval-augmented generation.
+The verified code that passes LUCID's adversarial checks is, by definition, higher quality than unverified code. Over time, this creates a corpus of verified code that can be used for pre-training, fine-tuning, or retrieval-augmented generation.
 
 Platforms running LUCID at scale will accumulate the largest verified code corpus in existence. That corpus is a competitive asset.
 
-### Monotonic Convergence (Formally Proven)
+### Monotonic Convergence (Empirically Demonstrated)
 
-LUCID is the only verification system with a formal proof of monotonic convergence. Each iteration is guaranteed to be at least as good as the previous one. This is not an empirical observation --- it is a mathematical property of deterministic verification with targeted remediation.
+LUCID is the only verification system that empirically demonstrates monotonic convergence across our benchmarks. Each iteration produces results at least as good as the previous one. This is a consistent empirical finding across HumanEval (164 tasks) and SWE-bench (300 tasks), driven by the adversarial loop's asymmetric design: only failing code is modified, so correct code is preserved.
 
-No LLM-based approach can make this guarantee. The HumanEval and SWE-bench results confirm it empirically: LUCID never regresses. LLM-as-judge does.
+No other approach achieves this in our benchmarks. LLM-as-judge regresses at k=5. Self-refine plateaus. LUCID never regresses.
 
 ### Patent Protection
 
-US Provisional Patent Application #63/980,048 (filed February 11, 2026). Covers the iterative formal verification loop, specification extraction from AI-generated code, and the hallucination-verification architecture.
+US Provisional Patent Application #63/980,048 (filed February 11, 2026). Covers the iterative adversarial verification loop, specification extraction from AI-generated code, and the hallucination-verification architecture.
 
 ---
 

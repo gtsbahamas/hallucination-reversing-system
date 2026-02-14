@@ -58,7 +58,7 @@ Health score: 42/100
 3 critical issues found. Generating fix plans...
 ```
 
-**VO:** "LUCID extracts every testable claim from your code. Then it verifies each one using formal methods — not another LLM guessing. It finds the bugs that compilers, linters, and code review miss. Then it tells you exactly how to fix them."
+**VO:** "LUCID extracts every testable claim from your code. Then it verifies each one using adversarial AI-based verification — a second AI trained to break code, not rubber-stamp it. It finds the bugs that compilers, linters, and code review miss. Then it tells you exactly how to fix them."
 
 ---
 
