@@ -35,7 +35,7 @@ Results on standard benchmarks:
 HumanEval: 86.6% → 100% (164/164 problems — perfect score)
 SWE-bench: 18.3% → 30.3% (+65% more real-world bugs fixed)
 
-LLM-as-judge actually gets WORSE at higher attempts. It hallucinates false positives. Formal verification doesn't.
+LLM-as-judge actually gets WORSE at higher attempts — it hallucinates false positives. Structured adversarial verification catches what single-pass generation misses.
 
 **Tweet 5 (Dogfooding):**
 
@@ -75,6 +75,7 @@ Results on standard coding benchmarks:
 - HumanEval: 86.6% baseline → 100% with LUCID (164/164 — perfect score)
 - SWE-bench: 18.3% → 30.3% (+65% more real-world bugs fixed)
 - LLM-as-judge actually performs worse at higher attempts — it hallucinates false positives
+- All benchmark results validated by running real test suites, not by trusting LUCID's own judgment
 
 But the real proof came from dogfooding.
 
@@ -114,7 +115,7 @@ If you've used ChatGPT, Claude, or Copilot to help write code, you've probably n
 
 That got me thinking: if you can't stop AI from making things up, can you at least catch it?
 
-That's what LUCID does. It's a verification layer that sits between AI-generated code and production. Instead of asking "is this code correct?" (which another AI would just hallucinate an answer to), LUCID extracts every implicit claim the code makes — things like "this function handles empty input" or "this query is safe from injection attacks" — and formally verifies each one.
+That's what LUCID does. It's a verification layer that sits between AI-generated code and production. Instead of asking "is this code correct?" (which another AI would just hallucinate an answer to), LUCID extracts every implicit claim the code makes — things like "this function handles empty input" or "this query is safe from injection attacks" — and uses a second, adversarial AI pass to verify each claim against the actual implementation.
 
 I tested it on two standard coding benchmarks:
 - HumanEval: improved from 86.6% to a perfect 100% (164 out of 164 problems)
